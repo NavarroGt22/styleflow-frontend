@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { Scissors, Clock, Users, AlertCircle, Instagram, Calendar, Check, CheckCircle } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { Scissors, Clock, Users, AlertCircle, Instagram, Calendar, Check, CheckCircle, Sun, Moon } from 'lucide-react';
 import { secureFetch as fetch } from '../utils/api';
+import { useTenantBranding, type TenantBranding } from '../hooks/useTenant';
+import { apiUrl, wsUrl } from '../config/api';
+import { isCustomDomainHost } from '../config/domains';
 
 function ActiveTimer({ startTime }: { startTime: string }) {
   const [elapsed, setElapsed] = useState('');
@@ -85,12 +88,30 @@ const generateTimeSlots = (professional: any, selectedDate: string, serviceDurat
   return slots;
 };
 
+const isCustomDomain = isCustomDomainHost();
+
 export default function PublicQueue() {
+  const todayStr = new Date().toISOString().split('T')[0];
   const { salonSlug } = useParams<{ salonSlug: string }>();
+  const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('bg-slate-900', 'text-white');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('bg-slate-900', 'text-white');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
 
   // States para Agendamento Comercial
   const [services, setServices] = useState<any[]>([]);
@@ -121,6 +142,8 @@ export default function PublicQueue() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<any>(null);
 
+  const { brandName, primaryColor, logoUrl } = useTenantBranding(data?.tenant);
+
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem('client_user');
@@ -146,9 +169,42 @@ export default function PublicQueue() {
     setBookingSuccess(null);
   };
 
+  const getServiceDisplayInfo = () => {
+    if (!selectedService) return null;
+    if (!selectedProfessional || !selectedProfessional.services) {
+      return {
+        name: selectedService.name,
+        price: selectedService.price,
+        duration: selectedService.duration
+      };
+    }
+    const custom = selectedProfessional.services.find((ps: any) => ps.serviceId === selectedService.id);
+    if (custom && custom.isActive) {
+      return {
+        name: custom.customName || selectedService.name,
+        price: (custom.customPrice !== null && custom.customPrice !== undefined) ? custom.customPrice : selectedService.price,
+        duration: (custom.customDuration !== null && custom.customDuration !== undefined) ? custom.customDuration : selectedService.duration
+      };
+    }
+    return {
+      name: selectedService.name,
+      price: selectedService.price,
+      duration: selectedService.duration
+    };
+  };
+
+  const displayService = getServiceDisplayInfo();
+
   const fetchPublicQueue = async () => {
     try {
-      const res = await fetch(`http://localhost:3333/api/v1/queue/public/${salonSlug}`);
+      const fetchUrl = salonSlug
+        ? apiUrl(`/queue/public/${salonSlug}`)
+        : apiUrl('/queue/public');
+      const res = await fetch(fetchUrl, {
+        headers: {
+          'X-Custom-Host': window.location.host
+        }
+      });
       if (!res.ok) {
         if (res.status === 404) {
           throw new Error('Fila pública ou estabelecimento não disponível.');
@@ -170,19 +226,28 @@ export default function PublicQueue() {
     fetchPublicQueue();
   }, [salonSlug]);
 
+  useEffect(() => {
+    const tenant = data?.tenant as TenantBranding | undefined;
+    const salon = data?.salon;
+    if (tenant || salon) {
+      const brandName = tenant?.customBrandName || tenant?.name || salon?.name;
+      document.title = `Agendamento - ${brandName}`;
+    }
+  }, [data?.tenant, data?.salon]);
+
   // Carregar dados adicionais de agendamento (serviços) se o salão estiver carregado
   useEffect(() => {
     if (data?.salon) {
       const fetchBookingData = async () => {
         setLoadingBookingData(true);
         try {
-          const sRes = await fetch(`http://localhost:3333/api/v1/services/${data.salon.id}`);
+          const sRes = await fetch(apiUrl(`/services/${data.salon.id}`));
           let sJson = [];
           if (sRes.ok) sJson = await sRes.json();
           setServices(sJson);
 
           if (!data.salon.queueMode && currentUser) {
-            const pRes = await fetch(`http://localhost:3333/api/v1/professionals/${data.salon.id}`);
+            const pRes = await fetch(apiUrl(`/professionals/${data.salon.id}`));
             let pJson = [];
             if (pRes.ok) pJson = await pRes.json();
             setProfessionals(pJson);
@@ -205,7 +270,7 @@ export default function PublicQueue() {
       const fetchBusySlots = async () => {
         setLoadingSlots(true);
         try {
-          const res = await fetch(`http://localhost:3333/api/v1/appointments/busy-slots?salonId=${data.salon.id}&professionalId=${selectedProfessional.id}&date=${selectedDate}`);
+          const res = await fetch(apiUrl(`/appointments/busy-slots?salonId=${data.salon.id}&professionalId=${selectedProfessional.id}&date=${selectedDate}`));
           if (res.ok) {
             const json = await res.json();
             setBusySlots(json);
@@ -243,7 +308,11 @@ export default function PublicQueue() {
     }
 
     const start = new Date(`${selectedDate}T${selectedTime}:00`);
-    const end = new Date(start.getTime() + selectedService.duration * 60000);
+    const custom = selectedProfessional?.services?.find((ps: any) => ps.serviceId === selectedService.id);
+    const duration = (custom && custom.customDuration !== null && custom.customDuration !== undefined)
+      ? custom.customDuration
+      : selectedService.duration;
+    const end = new Date(start.getTime() + duration * 60000);
 
     const payload = {
       salonId: data.salon.id,
@@ -254,7 +323,7 @@ export default function PublicQueue() {
     };
 
     try {
-      const res = await fetch('http://localhost:3333/api/v1/appointments', {
+      const res = await fetch(apiUrl('/appointments'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -308,7 +377,7 @@ export default function PublicQueue() {
     }
 
     try {
-      const res = await fetch(`http://localhost:3333/api/v1/queue/${activeQueueSession.sessionId}/join`, {
+      const res = await fetch(apiUrl(`/queue/${activeQueueSession.sessionId}/join`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -352,7 +421,7 @@ export default function PublicQueue() {
     if (!token) return;
 
     try {
-      const res = await fetch(`http://localhost:3333/api/v1/queue/${sessionId}/leave`, {
+      const res = await fetch(apiUrl(`/queue/${sessionId}/leave`), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -376,7 +445,7 @@ export default function PublicQueue() {
   useEffect(() => {
 
     if (data?.salon?.id) {
-      const ws = new WebSocket(`ws://localhost:3333/ws/queue?salonId=${data.salon.id}`);
+      const ws = new WebSocket(wsUrl(`/ws/queue?salonId=${data.salon.id}`));
       
       ws.onmessage = (event) => {
         try {
@@ -431,18 +500,77 @@ export default function PublicQueue() {
   }
 
   const { salon, queues } = data;
+  const tenantSalons: Array<{ id: string; name: string; slug: string }> = data?.tenantSalons ?? [];
+
+  const unitPicker = tenantSalons.length > 1 && (
+    <div className="max-w-lg mx-auto mb-6 px-4">
+      <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400 mb-2">
+        Escolha a unidade
+      </label>
+      <select
+        value={salon.slug}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (isCustomDomain) {
+            navigate(`/${next}`);
+          } else {
+            navigate(`/app/${next}`);
+          }
+        }}
+        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-900 dark:text-white text-sm font-medium"
+      >
+        {tenantSalons.map((unit) => (
+          <option key={unit.id} value={unit.slug}>{unit.name}</option>
+        ))}
+      </select>
+    </div>
+  );
 
   if (!salon.queueMode) {
-    const todayStr = new Date().toISOString().split('T')[0];
     const timeSlots = generateTimeSlots(
       selectedProfessional,
       selectedDate,
-      selectedService?.duration || 30,
+      displayService?.duration || 30,
       busySlots
     );
 
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 transition-colors duration-300">
+        {unitPicker}
+        {primaryColor && (
+          <style>{`
+            :root {
+              --brand-primary: ${primaryColor};
+            }
+            .bg-indigo-600 {
+              background-color: var(--brand-primary) !important;
+            }
+            .text-indigo-600 {
+              color: var(--brand-primary) !important;
+            }
+            .border-indigo-600 {
+              border-color: var(--brand-primary) !important;
+            }
+            .bg-indigo-50 {
+              background-color: var(--brand-primary)15 !important;
+            }
+            .text-indigo-500 {
+              color: var(--brand-primary) !important;
+            }
+            .bg-indigo-500 {
+              background-color: var(--brand-primary) !important;
+            }
+            .bg-indigo-50\\/50 {
+              background-color: var(--brand-primary)10 !important;
+            }
+            .focus\\:ring-indigo-500:focus {
+              --tw-ring-color: var(--brand-primary) !important;
+            }
+            .hover\\:bg-indigo-700:hover {
+              filter: brightness(0.9) !important;
+            }
+          `}</style>
+        )}
         <div className="max-w-5xl mx-auto">
           
           {/* BARRA DE LOGIN DO CLIENTE */}
@@ -453,7 +581,16 @@ export default function PublicQueue() {
                 {currentUser ? `Cliente: ${currentUser.name}` : 'Acesso de Visitante'}
               </span>
             </div>
-            <div>
+            <div className="flex items-center gap-4">
+              <button 
+                type="button"
+                onClick={() => setIsDark(!isDark)}
+                className="p-2 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-600 transition-all cursor-pointer border-none flex items-center justify-center"
+                title="Mudar Tema"
+              >
+                {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              </button>
+
               {currentUser ? (
                 <button 
                   onClick={handleLogout}
@@ -463,7 +600,7 @@ export default function PublicQueue() {
                 </button>
               ) : (
                 <Link 
-                  to={`/app/${salonSlug}/login`}
+                  to={isCustomDomain ? `/login` : `/app/${salonSlug}/login`}
                   className="text-xs font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
                 >
                   Entrar / Cadastrar
@@ -474,16 +611,20 @@ export default function PublicQueue() {
 
           {/* HEADER DO ESTABELECIMENTO */}
           <header className="flex flex-col items-center justify-center text-center mb-8 pb-6 border-b border-gray-200 dark:border-slate-800">
-            <div className="p-3 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl text-white shadow-xl shadow-indigo-500/20 mb-4 hover:scale-105 transition-all duration-300">
-              <Scissors size={32} />
-            </div>
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="w-20 h-20 object-cover rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-none mb-4 hover:scale-105 transition-all duration-300" />
+            ) : (
+              <div className="p-3 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl text-white shadow-xl shadow-indigo-500/20 mb-4 hover:scale-105 transition-all duration-300">
+                <Scissors size={32} />
+              </div>
+            )}
             <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded-md mb-2">
-              STYLEFLOW • AGENDA ONLINE
+              {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} • AGENDA ONLINE
             </span>
             <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white transition-colors">
               {salon.name}
             </h1>
-            <p className="text-sm text-gray-500 dark:text-slate-400 mt-2">
+            <p className="text-sm text-gray-550 dark:text-slate-400 mt-2">
               Escolha seu serviço, profissional e reserve seu horário em poucos cliques.
             </p>
           </header>
@@ -621,6 +762,25 @@ export default function PublicQueue() {
                               <Clock size={12} className="text-indigo-500" />
                               <span>Horário: {p.workStart} às {p.workEnd}</span>
                             </div>
+                            {(() => {
+                              if (!selectedService || !p.services) return null;
+                              const custom = p.services.find((ps: any) => ps.serviceId === selectedService.id);
+                              if (!custom || !custom.isActive) return null;
+                              
+                              const hasCustomPrice = custom.customPrice !== null && custom.customPrice !== selectedService.price;
+                              const hasCustomDuration = custom.customDuration !== null && custom.customDuration !== selectedService.duration;
+                              const hasCustomName = custom.customName && custom.customName !== selectedService.name;
+
+                              if (!hasCustomPrice && !hasCustomDuration && !hasCustomName) return null;
+
+                              return (
+                                <div className="mt-2 bg-indigo-50/50 dark:bg-indigo-950/20 p-2 rounded-lg border border-indigo-100/40 dark:border-indigo-950/30 flex flex-wrap gap-2 text-[10px] text-indigo-655 dark:text-indigo-400 font-bold items-center">
+                                  <span>✨ Customizado:</span>
+                                  {hasCustomPrice && <span>R$ {custom.customPrice.toFixed(2)}</span>}
+                                  {hasCustomDuration && <span>⏱️ {custom.customDuration} min</span>}
+                                </div>
+                              );
+                            })()}
                           </div>
                         ))}
                       </div>
@@ -659,7 +819,7 @@ export default function PublicQueue() {
                             <p className="text-sm text-gray-550 dark:text-slate-400 italic">Fora do horário de expediente deste profissional.</p>
                           ) : (
                             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                              {timeSlots.map((slot) => (
+                              {timeSlots.map((slot: any) => (
                                 <button
                                   key={slot.time}
                                   type="button"
@@ -700,31 +860,31 @@ export default function PublicQueue() {
 
                     <div className="space-y-4 text-xs font-bold mb-6">
                       <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider shrink-0">Serviço</span>
-                        <span className="text-gray-800 dark:text-slate-200 text-right">{selectedService ? selectedService.name : 'Não selecionado'}</span>
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Serviço</span>
+                        <span className="text-gray-800 dark:text-slate-200 text-right">{displayService ? displayService.name : 'Não selecionado'}</span>
                       </div>
                       <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider shrink-0">Duração</span>
-                        <span className="text-gray-800 dark:text-slate-200 text-right">{selectedService ? `${selectedService.duration} min` : '-'}</span>
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Duração</span>
+                        <span className="text-gray-800 dark:text-slate-200 text-right">{displayService ? `${displayService.duration} min` : '-'}</span>
                       </div>
                       <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider shrink-0">Profissional</span>
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Profissional</span>
                         <span className="text-gray-800 dark:text-slate-200 text-right">{selectedProfessional ? selectedProfessional.user.name : 'Não selecionado'}</span>
                       </div>
                       <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider shrink-0">Data</span>
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Data</span>
                         <span className="text-gray-800 dark:text-slate-200 text-right">
                           {selectedDate ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR') : 'Não selecionada'}
                         </span>
                       </div>
                       <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider shrink-0">Horário</span>
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Horário</span>
                         <span className="text-indigo-600 dark:text-indigo-400 text-sm font-black">{selectedTime || 'Não selecionado'}</span>
                       </div>
                       <div className="flex justify-between items-start gap-4 border-t border-gray-100 dark:border-slate-700/60 pt-4 text-sm">
                         <span className="text-gray-900 dark:text-white uppercase tracking-wider">Total</span>
                         <span className="text-emerald-600 dark:text-emerald-400 font-black text-lg">
-                          R$ {selectedService ? selectedService.price.toFixed(2) : '0,00'}
+                          R$ {displayService ? displayService.price.toFixed(2) : '0,00'}
                         </span>
                       </div>
                     </div>
@@ -839,6 +999,44 @@ export default function PublicQueue() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 transition-colors duration-300">
+      {unitPicker}
+      {primaryColor && (
+        <style>{`
+          :root {
+            --brand-primary: ${primaryColor};
+          }
+          .bg-indigo-600 {
+            background-color: var(--brand-primary) !important;
+          }
+          .text-indigo-600 {
+            color: var(--brand-primary) !important;
+          }
+          .border-indigo-600 {
+            border-color: var(--brand-primary) !important;
+          }
+          .bg-indigo-50 {
+            background-color: var(--brand-primary)15 !important;
+          }
+          .text-indigo-500 {
+            color: var(--brand-primary) !important;
+          }
+          .bg-indigo-5050 {
+            background-color: var(--brand-primary)10 !important;
+          }
+          .bg-indigo-50\\/50 {
+            background-color: var(--brand-primary)10 !important;
+          }
+          .bg-indigo-500 {
+            background-color: var(--brand-primary) !important;
+          }
+          .focus\\:ring-indigo-500:focus {
+            --tw-ring-color: var(--brand-primary) !important;
+          }
+          .hover\\:bg-indigo-700:hover {
+            filter: brightness(0.9) !important;
+          }
+        `}</style>
+      )}
       <div className="max-w-4xl mx-auto">
         
         {/* BARRA DE LOGIN DO CLIENTE */}
@@ -849,7 +1047,16 @@ export default function PublicQueue() {
               {currentUser ? `Cliente: ${currentUser.name}` : 'Acesso de Visitante'}
             </span>
           </div>
-          <div>
+          <div className="flex items-center gap-4">
+            <button 
+              type="button"
+              onClick={() => setIsDark(!isDark)}
+              className="p-2 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-600 transition-all cursor-pointer border-none flex items-center justify-center"
+              title="Mudar Tema"
+            >
+              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
             {currentUser ? (
               <button 
                 onClick={handleLogout}
@@ -859,7 +1066,7 @@ export default function PublicQueue() {
               </button>
             ) : (
               <Link 
-                to={`/app/${salonSlug}/login`}
+                to={isCustomDomain ? `/login` : `/app/${salonSlug}/login`}
                 className="text-xs font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
               >
                 Entrar / Cadastrar
@@ -870,16 +1077,20 @@ export default function PublicQueue() {
 
         {/* HEADER */}
         <header className="flex flex-col items-center justify-center text-center mb-10 pb-6 border-b border-gray-200 dark:border-slate-800">
-          <div className="p-3 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl text-white shadow-xl shadow-indigo-500/20 mb-4 hover:scale-105 hover:rotate-6 transition-all duration-300">
-            <Scissors size={32} />
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt={brandName} className="w-20 h-20 object-cover rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-none mb-4 hover:scale-105 transition-all duration-300" />
+          ) : (
+            <div className="p-3 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl text-white shadow-xl shadow-indigo-500/20 mb-4 hover:scale-105 hover:rotate-6 transition-all duration-300">
+              <Scissors size={32} />
+            </div>
+          )}
           <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded-md mb-2">
-            STYLEFLOW • FILA DINÂMICA
+            {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} • FILA DINÂMICA
           </span>
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white transition-colors">
             {salon.name}
           </h1>
-          <p className="text-sm text-gray-550 dark:text-slate-400 mt-2">
+          <p className="text-sm text-gray-555 dark:text-slate-400 mt-2">
             Acompanhe a fila de hoje em tempo real. Os tempos são estimados de forma inteligente.
           </p>
 
@@ -983,7 +1194,7 @@ export default function PublicQueue() {
                           </button>
                         ) : (
                           <Link
-                            to={`/app/${salonSlug}/login`}
+                            to={isCustomDomain ? `/login` : `/app/${salonSlug}/login`}
                             className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 shadow-md shadow-indigo-500/20 hover:scale-105 active:scale-95 text-center flex items-center justify-center decoration-none no-underline"
                           >
                             Entrar na Fila
