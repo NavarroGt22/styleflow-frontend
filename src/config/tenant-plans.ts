@@ -1,4 +1,4 @@
-import { TenantLevel } from '@prisma/client';
+export type TenantLevel = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE';
 
 export const TENANT_LEVEL_LABELS: Record<TenantLevel, string> = {
   FREE: 'Grátis',

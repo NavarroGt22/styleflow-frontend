@@ -16,6 +16,7 @@ import {
   TENANT_LEVEL_COLORS,
   TENANT_LEVEL_FEES,
   TENANT_LEVEL_LABELS,
+  type TenantLevel,
 } from '../config/tenant-plans';
 
 type TenantRow = {
@@ -57,7 +58,7 @@ const emptyForm = {
   customDomain: '',
   clientDomain: '',
   adminDomain: '',
-  level: 'BASIC' as const,
+  level: 'BASIC' as TenantLevel,
   monthlyFee: '',
   ownerName: '',
   ownerEmail: '',
@@ -421,7 +422,7 @@ export default function SuperAdminDashboard() {
               <div>
                 <label className="text-xs text-slate-400">Plano *</label>
                 <select value={form.level} onChange={(e) => {
-                  const level = e.target.value as keyof typeof TENANT_LEVEL_FEES;
+                  const level = e.target.value as TenantLevel;
                   setForm({ ...form, level, monthlyFee: String(TENANT_LEVEL_FEES[level]) });
                 }} className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700">
                   {Object.entries(TENANT_LEVEL_LABELS).map(([k, v]) => (
