@@ -11,6 +11,7 @@ export type TenantBranding = {
   slug: string;
   subdomain: string;
   logoUrl?: string | null;
+  faviconUrl?: string | null;
   primaryColor?: string;
   secondaryColor?: string | null;
   customBrandName?: string | null;
@@ -29,6 +30,7 @@ export function useTenantBranding(tenant?: TenantBranding | null) {
         brandName: 'StyleFlow',
         primaryColor: undefined as string | undefined,
         logoUrl: undefined as string | undefined,
+        faviconUrl: undefined as string | undefined,
       };
     }
 
@@ -36,6 +38,7 @@ export function useTenantBranding(tenant?: TenantBranding | null) {
       brandName: tenant.customBrandName || tenant.name,
       primaryColor: tenant.primaryColor,
       logoUrl: tenant.logoUrl || undefined,
+      faviconUrl: tenant.faviconUrl || undefined,
     };
   }, [tenant]);
 }

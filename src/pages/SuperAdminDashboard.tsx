@@ -94,6 +94,10 @@ export default function SuperAdminDashboard() {
   const [paymentModal, setPaymentModal] = useState<TenantRow | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [planModal, setPlanModal] = useState<TenantRow | null>(null);
+  const [planLevel, setPlanLevel] = useState<TenantLevel>('BASIC');
+  const [planMonthlyFee, setPlanMonthlyFee] = useState('');
+  const [savingPlan, setSavingPlan] = useState(false);
 
   const token = sessionStorage.getItem('token');
   const user = (() => {
@@ -223,6 +227,36 @@ export default function SuperAdminDashboard() {
       body: JSON.stringify({ isActive: !tenant.isActive }),
     });
     if (res.ok) loadDashboard();
+  };
+
+  const openPlanModal = (tenant: TenantRow) => {
+    setPlanModal(tenant);
+    setPlanLevel(tenant.level as TenantLevel);
+    setPlanMonthlyFee(String(tenant.monthlyFee));
+  };
+
+  const handleSavePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!planModal) return;
+    setSavingPlan(true);
+    try {
+      const res = await fetch(apiUrl(`/admin/tenants/${planModal.id}`), {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          level: planLevel,
+          monthlyFee: Number(planMonthlyFee.replace(',', '.')),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erro ao atualizar plano');
+      setPlanModal(null);
+      await loadDashboard();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSavingPlan(false);
+    }
   };
 
   if (loading && !data) {
@@ -365,6 +399,12 @@ export default function SuperAdminDashboard() {
                               Registrar pagamento
                             </button>
                             <button
+                              onClick={() => openPlanModal(t)}
+                              className="text-xs px-2 py-1 rounded bg-violet-600/20 text-violet-400 hover:bg-violet-600/30"
+                            >
+                              Alterar plano
+                            </button>
+                            <button
                               onClick={() => toggleActive(t)}
                               className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600"
                             >
@@ -492,6 +532,53 @@ export default function SuperAdminDashboard() {
                 <button type="button" onClick={() => setShowCreate(false)} className="flex-1 py-2.5 rounded-lg border border-slate-700">Cancelar</button>
                 <button type="submit" disabled={creating} className="flex-1 py-2.5 rounded-lg bg-indigo-600 font-bold disabled:opacity-50">
                   {creating ? 'Criando...' : 'Criar barbearia'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {planModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold mb-1">Alterar plano</h2>
+            <p className="text-sm text-slate-400 mb-4">{planModal.name}</p>
+            <form onSubmit={handleSavePlan} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400">Plano</label>
+                <select
+                  value={planLevel}
+                  onChange={(e) => {
+                    const level = e.target.value as TenantLevel;
+                    setPlanLevel(level);
+                    setPlanMonthlyFee(String(TENANT_LEVEL_FEES[level]));
+                  }}
+                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700"
+                >
+                  {Object.entries(TENANT_LEVEL_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v} — {formatMoney(TENANT_LEVEL_FEES[k as TenantLevel])}/mês
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Mensalidade (R$)</label>
+                <input
+                  required
+                  value={planMonthlyFee}
+                  onChange={(e) => setPlanMonthlyFee(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Você pode ajustar o valor manualmente (desconto, promoção, etc.).</p>
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setPlanModal(null)} className="flex-1 py-2 rounded-lg border border-slate-700">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={savingPlan} className="flex-1 py-2 rounded-lg bg-violet-600 font-bold disabled:opacity-50">
+                  {savingPlan ? 'Salvando...' : 'Salvar plano'}
                 </button>
               </div>
             </form>

@@ -144,19 +144,22 @@ export default function PublicQueue() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<any>(null);
 
-  const { brandName, primaryColor, logoUrl } = useTenantBranding(data?.tenant);
+  const { brandName, primaryColor, logoUrl, faviconUrl } = useTenantBranding(data?.tenant);
 
   useEffect(() => {
     const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!link) return;
-    if (logoUrl) {
-      link.href = logoUrl;
-      link.type = logoUrl.startsWith('data:image/svg') ? 'image/svg+xml' : 'image/png';
+    const icon = faviconUrl || logoUrl;
+    if (icon) {
+      link.href = icon;
+      if (icon.includes('svg')) link.type = 'image/svg+xml';
+      else if (icon.includes('png')) link.type = 'image/png';
+      else link.type = 'image/x-icon';
     } else {
       link.href = '/favicon.svg';
       link.type = 'image/svg+xml';
     }
-  }, [logoUrl]);
+  }, [faviconUrl, logoUrl]);
 
   useEffect(() => {
     try {

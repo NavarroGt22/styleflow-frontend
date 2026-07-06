@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { secureFetch as fetch } from '../utils/api';
 import { getClientPublicUrl } from '../config/dev-ports';
 import { apiUrl, wsUrl } from '../config/api';
-import { ImageUrlUpload } from '../components/ImageUrlUpload';
+import { ImageFileUpload } from '../components/ImageFileUpload';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -166,7 +166,7 @@ export default function Dashboard() {
   const [isOwner] = useState(user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN');
 
   const [activeTab, setActiveTab] = useState<'services' | 'agenda' | 'financials' | 'team' | 'settings' | 'estoque' | 'queue'>('services');
-  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'marca' | 'expediente' | 'comissao' | 'fila'>('general');
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'temas' | 'expediente' | 'comissao' | 'fila'>('general');
   const [agendaFilter, setAgendaFilter] = useState<'PENDING' | 'COMPLETED'>('PENDING');
   const [appointments, setAppointments] = useState<any[]>([]);
   const [financials, setFinancials] = useState<any>(null);
@@ -304,6 +304,7 @@ export default function Dashboard() {
     tenantName: salon?.tenant?.name || salon?.name || '',
     customBrandName: salon?.tenant?.customBrandName || '',
     logoUrl: salon?.tenant?.logoUrl || '',
+    faviconUrl: salon?.tenant?.faviconUrl || '',
     primaryColor: salon?.tenant?.primaryColor || '#4f46e5',
     secondaryColor: salon?.tenant?.secondaryColor || '',
   });
@@ -827,6 +828,7 @@ export default function Dashboard() {
         tenantName: salon.tenant?.name || salon.name || '',
         customBrandName: salon.tenant?.customBrandName || '',
         logoUrl: salon.tenant?.logoUrl || '',
+        faviconUrl: salon.tenant?.faviconUrl || '',
         primaryColor: salon.tenant?.primaryColor || '#4f46e5',
         secondaryColor: salon.tenant?.secondaryColor || '',
       });
@@ -1419,6 +1421,7 @@ export default function Dashboard() {
           tenantName: salonForm.tenantName || undefined,
           customBrandName: salonForm.customBrandName || null,
           logoUrl: salonForm.logoUrl || null,
+          faviconUrl: salonForm.faviconUrl || null,
           primaryColor: salonForm.primaryColor || undefined,
           secondaryColor: salonForm.secondaryColor || null,
         })
@@ -3350,15 +3353,15 @@ export default function Dashboard() {
 
                   <button
                     type="button"
-                    onClick={() => setSettingsSubTab('marca')}
+                    onClick={() => setSettingsSubTab('temas')}
                     className={`flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl text-xs sm:text-sm font-bold tracking-tight transition-all duration-300 select-none whitespace-nowrap ${
-                      settingsSubTab === 'marca'
+                      settingsSubTab === 'temas'
                         ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 scale-100'
                         : 'text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/50 dark:hover:bg-slate-800/50 scale-100 active:scale-98'
                     }`}
                   >
                     <Palette size={16} />
-                    Marca / White Label
+                    Cores / Temas
                   </button>
 
                   <button
@@ -3570,10 +3573,10 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {settingsSubTab === 'marca' && (
+                {settingsSubTab === 'temas' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <p className="text-sm text-gray-500 dark:text-slate-400">
-                      Identidade visual da <strong>conta</strong> (Tenant). Vale para todas as unidades/franquias do mesmo subdomínio.
+                      Personalize as <strong>cores, logo e ícone</strong> da sua barbearia na página dos clientes. Vale para todas as unidades da mesma conta.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
@@ -3595,11 +3598,24 @@ export default function Dashboard() {
                           className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
                         />
                       </div>
-                      <ImageUrlUpload
+                      <ImageFileUpload
                         label="Logotipo da Barbearia"
                         value={salonForm.logoUrl}
                         onChange={(logoUrl) => setSalonForm({ ...salonForm, logoUrl })}
                         hint="Aparece na página de agendamento dos seus clientes."
+                        maxMb={2}
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                        allowedLabel="PNG, JPG, SVG ou WebP"
+                      />
+                      <ImageFileUpload
+                        label="Favicon (ícone da aba do navegador)"
+                        value={salonForm.faviconUrl}
+                        onChange={(faviconUrl) => setSalonForm({ ...salonForm, faviconUrl })}
+                        hint="Ícone pequeno que aparece na aba do navegador dos clientes."
+                        maxMb={1}
+                        accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico"
+                        allowedLabel="ICO ou PNG"
+                        previewClassName="object-contain p-2"
                       />
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Cor Primária</label>
