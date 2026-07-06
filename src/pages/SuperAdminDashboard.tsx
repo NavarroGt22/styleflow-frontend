@@ -319,7 +319,7 @@ export default function SuperAdminDashboard() {
                   <DollarSign size={14} /> A receber (total)
                 </div>
                 <p className="text-3xl font-black text-amber-400">{formatMoney(data.summary.totalBalance)}</p>
-                <p className="text-xs text-slate-500 mt-1">período {data.periodMonth}</p>
+                <p className="text-xs text-slate-500 mt-1">período {data.periodMonth} · só contas ativas</p>
               </div>
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
                 <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase mb-2">
@@ -360,6 +360,11 @@ export default function SuperAdminDashboard() {
                       <tr key={t.id} className="border-b border-slate-800/80 hover:bg-slate-800/30">
                         <td className="px-5 py-4">
                           <p className="font-semibold">{t.name}</p>
+                          {!t.isActive && (
+                            <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">
+                              Inativa
+                            </span>
+                          )}
                           <p className="text-xs text-slate-500">{t.owner?.email}</p>
                           <p className="text-xs text-slate-600">{t.salonsCount} unidade(s)</p>
                         </td>
@@ -375,7 +380,9 @@ export default function SuperAdminDashboard() {
                           <span className="text-emerald-400">{formatMoney(t.billing.currentPaid)}</span>
                         </td>
                         <td className="px-5 py-4 text-emerald-400">{formatMoney(t.billing.totalPaid)}</td>
-                        <td className="px-5 py-4 text-amber-400">{formatMoney(t.billing.balance)}</td>
+                        <td className="px-5 py-4 text-amber-400">
+                          {t.isActive ? formatMoney(t.billing.balance) : <span className="text-slate-600">—</span>}
+                        </td>
                         <td className="px-5 py-4 text-xs space-y-1">
                           <a href={resolveClientLink(linkSlug(t), t.clientDomain)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-400 hover:underline">
                             Cliente <ExternalLink size={10} />
