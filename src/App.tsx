@@ -46,6 +46,7 @@ export default function App() {
           <>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/admin" element={<Navigate to="/login" replace />} />
             <Route path="/admin/super" element={<SuperAdminDashboard />} />
             <Route path="/admin/novo" element={<Dashboard />} />
             <Route path="/admin/:salonSlug" element={<Dashboard />} />

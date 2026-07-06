@@ -1,15 +1,26 @@
 import { BASE_DOMAIN } from './env';
 
+const EXTRA_PLATFORM_HOSTS = (import.meta.env.VITE_PLATFORM_HOSTS ?? '')
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+
 export function isLocalhostHost(hostname = window.location.hostname): boolean {
   const host = hostname.toLowerCase();
   return host === 'localhost' || host === '127.0.0.1';
 }
 
-/** Domínio principal da plataforma (ex.: app.styleflow.com ou styleflow.com). */
+/** Domínio principal da plataforma (ex.: app.styleflow.com ou *.vercel.app). */
 export function isPlatformHost(hostname = window.location.hostname): boolean {
   const host = hostname.toLowerCase();
+  const base = BASE_DOMAIN.toLowerCase();
+
   if (isLocalhostHost(host)) return true;
-  return host === BASE_DOMAIN || host.endsWith(`.${BASE_DOMAIN}`);
+  // Deploys Vercel/Netlify etc. são sempre a plataforma principal, não tenant white-label
+  if (host.endsWith('.vercel.app') || host.endsWith('.netlify.app')) return true;
+  if (EXTRA_PLATFORM_HOSTS.includes(host)) return true;
+
+  return host === base || host.endsWith(`.${base}`);
 }
 
 /** Domínio customizado do tenant (white-label), fora da plataforma. */

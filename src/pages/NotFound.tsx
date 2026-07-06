@@ -59,6 +59,15 @@ export default function NotFound() {
               </li>
               <li className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
                 <span className="font-bold text-gray-800 dark:text-slate-200 min-w-[130px] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                  Admin da Plataforma:
+                </span>
+                <code className="px-2 py-0.5 bg-slate-200/50 dark:bg-slate-800/80 rounded font-mono text-[11px] sm:text-xs text-indigo-600 dark:text-indigo-400 select-all">
+                  /admin/super
+                </code>
+              </li>
+              <li className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
+                <span className="font-bold text-gray-800 dark:text-slate-200 min-w-[130px] flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
                   Painel da Equipe:
                 </span>
