@@ -51,3 +51,33 @@ export function suggestTenantAdminPath(tenantSlug: string): string {
 export function suggestTenantSubdomain(tenantSlug: string): string {
   return `${tenantSlug}.${BASE_DOMAIN}`;
 }
+
+const PLACEHOLDER_DOMAIN_MARKERS = [
+  'meusite.com',
+  'seudominio.com',
+  'styleflow.com',
+  'styleflow.com.br',
+];
+
+/** Domínio real com DNS/SSL — não placeholder nem subdomínio auto-gerado falso */
+export function isRealCustomDomain(domain?: string | null): boolean {
+  if (!domain?.trim()) return false;
+  const d = domain.trim().toLowerCase();
+  if (d.startsWith('/') || d.startsWith('http')) return false;
+  if (d.endsWith('.vercel.app') || d.endsWith('.netlify.app')) return false;
+  return !PLACEHOLDER_DOMAIN_MARKERS.some((p) => d === p || d.endsWith(`.${p}`));
+}
+
+export function resolveClientLink(salonSlug: string, storedDomain?: string | null): string {
+  if (isRealCustomDomain(storedDomain)) {
+    return `https://${storedDomain!.replace(/^https?:\/\//, '')}`;
+  }
+  return clientPublicUrl(salonSlug);
+}
+
+export function resolveAdminLink(salonSlug: string, storedDomain?: string | null): string {
+  if (isRealCustomDomain(storedDomain)) {
+    return `https://${storedDomain!.replace(/^https?:\/\//, '')}`;
+  }
+  return ownerAdminUrl(salonSlug);
+}

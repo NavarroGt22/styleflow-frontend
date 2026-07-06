@@ -1,10 +1,11 @@
 export { API_BASE_URL, WS_BASE_URL, BASE_DOMAIN, isDev } from './env';
 export {
-  PLATFORM_URL,
   adminLoginUrl,
   superAdminUrl,
   ownerAdminUrl,
   clientPublicUrl,
+  resolveClientLink,
+  resolveAdminLink,
   suggestTenantClientPath,
   suggestTenantAdminPath,
 } from './platform-urls';
