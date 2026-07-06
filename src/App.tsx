@@ -9,9 +9,8 @@ import NotFound from './pages/NotFound';
 import { ADMIN_DEV_PORT, CLIENT_DEV_PORT } from './config/dev-ports';
 import { isCustomDomainHost, isLocalhostHost } from './config/domains';
 
-const isCustomDomain = isCustomDomainHost();
-
 export default function App() {
+  const isCustomDomain = isCustomDomainHost();
   useEffect(() => {
     const port = window.location.port;
     const path = window.location.pathname;
@@ -33,6 +32,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Rotas admin sempre registradas — independente de domínio customizado */}
+        <Route path="/admin/super" element={<SuperAdminDashboard />} />
+        <Route path="/admin/novo" element={<Dashboard />} />
+        <Route path="/admin/:salonSlug" element={<Dashboard />} />
+        <Route path="/admin" element={<Navigate to="/login" replace />} />
+
         {isCustomDomain ? (
           <>
             <Route path="/" element={<PublicQueue />} />
@@ -46,10 +51,6 @@ export default function App() {
           <>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/admin" element={<Navigate to="/login" replace />} />
-            <Route path="/admin/super" element={<SuperAdminDashboard />} />
-            <Route path="/admin/novo" element={<Dashboard />} />
-            <Route path="/admin/:salonSlug" element={<Dashboard />} />
             <Route path="/app/:salonSlug" element={<PublicQueue />} />
             <Route path="/app/:salonSlug/login" element={<ClientAuth mode="login" />} />
             <Route path="/app/:salonSlug/cadastro" element={<ClientAuth mode="register" />} />
