@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Scissors, AlertTriangle, ArrowLeft, Home, HelpCircle } from 'lucide-react';
+import { clientPublicUrl, ownerAdminUrl, superAdminUrl } from '../config/platform-urls';
 
 export default function NotFound() {
   const navigate = useNavigate();
@@ -54,7 +55,7 @@ export default function NotFound() {
                   Vitrine Pública:
                 </span>
                 <code className="px-2 py-0.5 bg-slate-200/50 dark:bg-slate-800/80 rounded font-mono text-[11px] sm:text-xs text-indigo-600 dark:text-indigo-400 select-all">
-                  /app/nome-do-salao
+                  {clientPublicUrl('nome-do-salao').replace(/^https?:\/\/[^/]+/, '')}
                 </code>
               </li>
               <li className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
@@ -63,7 +64,7 @@ export default function NotFound() {
                   Admin da Plataforma:
                 </span>
                 <code className="px-2 py-0.5 bg-slate-200/50 dark:bg-slate-800/80 rounded font-mono text-[11px] sm:text-xs text-indigo-600 dark:text-indigo-400 select-all">
-                  /admin/super
+                  {superAdminUrl().replace(/^https?:\/\/[^/]+/, '')}
                 </code>
               </li>
               <li className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
@@ -72,7 +73,7 @@ export default function NotFound() {
                   Painel da Equipe:
                 </span>
                 <code className="px-2 py-0.5 bg-slate-200/50 dark:bg-slate-800/80 rounded font-mono text-[11px] sm:text-xs text-indigo-600 dark:text-indigo-400 select-all">
-                  /admin/nome-do-salao
+                  {ownerAdminUrl('nome-do-salao').replace(/^https?:\/\/[^/]+/, '')}
                 </code>
               </li>
             </ul>

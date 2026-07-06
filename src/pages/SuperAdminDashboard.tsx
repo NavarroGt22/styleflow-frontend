@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { apiUrl } from '../config/api';
 import { BASE_DOMAIN } from '../config/env';
+import { clientPublicUrl, ownerAdminUrl, platformUrl } from '../config/platform-urls';
 import {
   TENANT_LEVEL_COLORS,
   TENANT_LEVEL_FEES,
@@ -142,11 +143,17 @@ export default function SuperAdminDashboard() {
     setForm((prev) => ({
       ...prev,
       slug: s,
-      clientDomain: s ? `app.${s}.com` : '',
-      adminDomain: s ? `admin.${s}.com` : '',
+      clientDomain: s ? `${s}.${BASE_DOMAIN}` : '',
+      adminDomain: s ? `admin.${s}.${BASE_DOMAIN}` : '',
       salonSlug: prev.salonSlug || s,
     }));
   };
+
+  const tenantClientLink = (slug: string, clientDomain: string | null) =>
+    clientDomain?.includes('/') ? platformUrl(clientDomain) : clientDomain ? `https://${clientDomain}` : clientPublicUrl(slug);
+
+  const tenantAdminLink = (slug: string, adminDomain: string | null) =>
+    adminDomain?.includes('/') ? platformUrl(adminDomain) : adminDomain ? `https://${adminDomain}` : ownerAdminUrl(slug);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -334,16 +341,12 @@ export default function SuperAdminDashboard() {
                         <td className="px-5 py-4 text-emerald-400">{formatMoney(t.billing.totalPaid)}</td>
                         <td className="px-5 py-4 text-amber-400">{formatMoney(t.billing.balance)}</td>
                         <td className="px-5 py-4 text-xs space-y-1">
-                          {t.clientDomain && (
-                            <a href={`https://${t.clientDomain}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-400 hover:underline">
-                              Cliente <ExternalLink size={10} />
-                            </a>
-                          )}
-                          {t.adminDomain && (
-                            <a href={`https://${t.adminDomain}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-violet-400 hover:underline">
-                              Admin <ExternalLink size={10} />
-                            </a>
-                          )}
+                          <a href={tenantClientLink(t.slug, t.clientDomain)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-400 hover:underline">
+                            Cliente <ExternalLink size={10} />
+                          </a>
+                          <a href={tenantAdminLink(t.slug, t.adminDomain)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-violet-400 hover:underline">
+                            Admin <ExternalLink size={10} />
+                          </a>
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex flex-col gap-1">
@@ -409,11 +412,17 @@ export default function SuperAdminDashboard() {
 
               <div>
                 <label className="text-xs text-slate-400">Domínio cliente (app)</label>
-                <input value={form.clientDomain} onChange={(e) => setForm({ ...form, clientDomain: e.target.value })} placeholder="app.barbearia1.com" className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
+                <input value={form.clientDomain} onChange={(e) => setForm({ ...form, clientDomain: e.target.value })} placeholder={form.slug ? clientPublicUrl(form.slug) : 'slug.seudominio.com'} className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
+                {form.slug && (
+                  <p className="text-[10px] text-slate-500 mt-0.5">Link atual: {clientPublicUrl(form.slug)}</p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-slate-400">Domínio admin</label>
-                <input value={form.adminDomain} onChange={(e) => setForm({ ...form, adminDomain: e.target.value })} placeholder="admin.barbearia1.com" className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
+                <input value={form.adminDomain} onChange={(e) => setForm({ ...form, adminDomain: e.target.value })} placeholder={form.slug ? ownerAdminUrl(form.slug) : 'admin.slug.seudominio.com'} className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
+                {form.slug && (
+                  <p className="text-[10px] text-slate-500 mt-0.5">Link atual: {ownerAdminUrl(form.slug)}</p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-slate-400">Domínio raiz (opcional)</label>
