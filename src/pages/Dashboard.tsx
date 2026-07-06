@@ -3361,7 +3361,7 @@ export default function Dashboard() {
                     }`}
                   >
                     <Palette size={16} />
-                    Cores / Temas
+                    Estilo / Temas
                   </button>
 
                   <button
@@ -3576,7 +3576,7 @@ export default function Dashboard() {
                 {settingsSubTab === 'temas' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <p className="text-sm text-gray-500 dark:text-slate-400">
-                      Personalize as <strong>cores, logo e ícone</strong> da sua barbearia na página dos clientes. Vale para todas as unidades da mesma conta.
+                      Personalize o <strong>estilo visual</strong> da sua barbearia: cores, logo e ícone na página dos clientes.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
