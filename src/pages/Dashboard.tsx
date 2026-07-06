@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { secureFetch as fetch } from '../utils/api';
 import { getClientPublicUrl } from '../config/dev-ports';
 import { apiUrl, wsUrl } from '../config/api';
+import { ImageUrlUpload } from '../components/ImageUrlUpload';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -3594,16 +3595,12 @@ export default function Dashboard() {
                           className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">URL do Logotipo</label>
-                        <input
-                          type="url"
-                          value={salonForm.logoUrl}
-                          onChange={e => setSalonForm({ ...salonForm, logoUrl: e.target.value })}
-                          placeholder="https://..."
-                          className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
-                        />
-                      </div>
+                      <ImageUrlUpload
+                        label="Logotipo da Barbearia"
+                        value={salonForm.logoUrl}
+                        onChange={(logoUrl) => setSalonForm({ ...salonForm, logoUrl })}
+                        hint="Aparece na página de agendamento dos seus clientes."
+                      />
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Cor Primária</label>
                         <div className="flex gap-3 items-center">

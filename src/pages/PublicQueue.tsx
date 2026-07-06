@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Scissors, Clock, Users, AlertCircle, Instagram, Calendar, Check, CheckCircle, Sun, Moon } from 'lucide-react';
 import { secureFetch as fetch } from '../utils/api';
@@ -118,6 +118,8 @@ export default function PublicQueue() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [selectedService, setSelectedService] = useState<any>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<any>(null);
+  const [lastProfessionalId, setLastProfessionalId] = useState<string | null>(null);
+  const appliedLastProfessional = useRef(false);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
 
@@ -143,6 +145,18 @@ export default function PublicQueue() {
   const [bookingSuccess, setBookingSuccess] = useState<any>(null);
 
   const { brandName, primaryColor, logoUrl } = useTenantBranding(data?.tenant);
+
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (!link) return;
+    if (logoUrl) {
+      link.href = logoUrl;
+      link.type = logoUrl.startsWith('data:image/svg') ? 'image/svg+xml' : 'image/png';
+    } else {
+      link.href = '/favicon.svg';
+      link.type = 'image/svg+xml';
+    }
+  }, [logoUrl]);
 
   useEffect(() => {
     try {
@@ -263,6 +277,54 @@ export default function PublicQueue() {
     }
   }, [data?.salon?.id, currentUser]);
 
+  const lastProfessionalStorageKey = data?.salon?.id && currentUser?.id
+    ? `sf_last_pro_${data.salon.id}_${currentUser.id}`
+    : null;
+
+  // Pré-seleciona o último barbeiro do cliente
+  useEffect(() => {
+    appliedLastProfessional.current = false;
+  }, [data?.salon?.id, currentUser?.id]);
+
+  useEffect(() => {
+    if (!professionals.length || !data?.salon?.id || !currentUser || appliedLastProfessional.current) return;
+
+    const applyLastProfessional = async () => {
+      let preferredId: string | null = null;
+
+      if (lastProfessionalStorageKey) {
+        preferredId = localStorage.getItem(lastProfessionalStorageKey);
+      }
+
+      const token = sessionStorage.getItem('client_token');
+      if (token) {
+        try {
+          const res = await fetch(
+            apiUrl(`/appointments/last-professional?salonId=${data.salon.id}`),
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (res.ok) {
+            const json = await res.json();
+            if (json.professionalId) preferredId = json.professionalId;
+          }
+        } catch {
+          // mantém fallback do localStorage
+        }
+      }
+
+      if (!preferredId) return;
+
+      setLastProfessionalId(preferredId);
+      const match = professionals.find((p) => p.id === preferredId);
+      if (match) {
+        setSelectedProfessional(match);
+        appliedLastProfessional.current = true;
+      }
+    };
+
+    applyLastProfessional();
+  }, [professionals, data?.salon?.id, currentUser, lastProfessionalStorageKey]);
+
 
   // Carregar slots ocupados
   useEffect(() => {
@@ -345,6 +407,11 @@ export default function PublicQueue() {
         date: selectedDate,
         time: selectedTime
       });
+
+      if (lastProfessionalStorageKey && selectedProfessional?.id) {
+        localStorage.setItem(lastProfessionalStorageKey, selectedProfessional.id);
+        setLastProfessionalId(selectedProfessional.id);
+      }
 
       // Limpar formulário
       setSelectedService(null);
@@ -736,53 +803,49 @@ export default function PublicQueue() {
                     ) : professionals.length === 0 ? (
                       <p className="text-sm text-gray-550 dark:text-slate-400 font-medium italic">Nenhum profissional disponível no momento.</p>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        {professionals.map((p) => (
-                          <div
-                            key={p.id}
-                            onClick={() => { setSelectedProfessional(p); setSelectedTime(''); }}
-                            className={`p-4 rounded-xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
-                              selectedProfessional?.id === p.id
-                                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20 shadow-md ring-2 ring-indigo-500/20'
-                                : 'border-gray-200 dark:border-slate-700 bg-transparent hover:border-indigo-300 dark:hover:border-indigo-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                            }`}
-                          >
-                            <div className="flex justify-between items-start gap-2 mb-2">
-                              <div>
-                                <h4 className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors text-sm">{p.user.name}</h4>
-                                <p className="text-[10px] font-medium text-gray-400 dark:text-slate-500 uppercase tracking-wider mt-0.5">Especialista</p>
-                              </div>
-                              {selectedProfessional?.id === p.id && (
-                                <span className="w-4 h-4 bg-indigo-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
-                                  <Check size={10} strokeWidth={3} />
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] font-bold text-gray-450 dark:text-slate-550 flex items-center gap-1 mt-1 border-t border-gray-100 dark:border-slate-700/60 pt-2.5">
-                              <Clock size={12} className="text-indigo-500" />
-                              <span>Horário: {p.workStart} às {p.workEnd}</span>
-                            </div>
-                            {(() => {
-                              if (!selectedService || !p.services) return null;
-                              const custom = p.services.find((ps: any) => ps.serviceId === selectedService.id);
-                              if (!custom || !custom.isActive) return null;
-                              
-                              const hasCustomPrice = custom.customPrice !== null && custom.customPrice !== selectedService.price;
-                              const hasCustomDuration = custom.customDuration !== null && custom.customDuration !== selectedService.duration;
-                              const hasCustomName = custom.customName && custom.customName !== selectedService.name;
+                      <div className="space-y-3">
+                        <select
+                          value={selectedProfessional?.id ?? ''}
+                          onChange={(e) => {
+                            const pro = professionals.find((p) => p.id === e.target.value) ?? null;
+                            setSelectedProfessional(pro);
+                            setSelectedTime('');
+                          }}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="" disabled>Selecione um profissional...</option>
+                          {professionals.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.user.name}
+                              {lastProfessionalId === p.id ? ' ★ (seu barbeiro habitual)' : ''}
+                              {` — ${p.workStart} às ${p.workEnd}`}
+                            </option>
+                          ))}
+                        </select>
 
-                              if (!hasCustomPrice && !hasCustomDuration && !hasCustomName) return null;
+                        {selectedProfessional && lastProfessionalId === selectedProfessional.id && (
+                          <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                            <span className="text-base">★</span>
+                            Seu último barbeiro — já selecionado para você
+                          </p>
+                        )}
 
-                              return (
-                                <div className="mt-2 bg-indigo-50/50 dark:bg-indigo-950/20 p-2 rounded-lg border border-indigo-100/40 dark:border-indigo-950/30 flex flex-wrap gap-2 text-[10px] text-indigo-655 dark:text-indigo-400 font-bold items-center">
-                                  <span>✨ Customizado:</span>
-                                  {hasCustomPrice && <span>R$ {custom.customPrice.toFixed(2)}</span>}
-                                  {hasCustomDuration && <span>⏱️ {custom.customDuration} min</span>}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        ))}
+                        {selectedProfessional && selectedService && (() => {
+                          const custom = selectedProfessional.services?.find(
+                            (ps: any) => ps.serviceId === selectedService.id
+                          );
+                          if (!custom || !custom.isActive) return null;
+                          const hasCustomPrice = custom.customPrice !== null && custom.customPrice !== selectedService.price;
+                          const hasCustomDuration = custom.customDuration !== null && custom.customDuration !== selectedService.duration;
+                          if (!hasCustomPrice && !hasCustomDuration) return null;
+                          return (
+                            <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/40 dark:border-indigo-950/30 text-xs text-indigo-700 dark:text-indigo-300 font-bold">
+                              Valores personalizados deste profissional:
+                              {hasCustomPrice && <span className="ml-2">R$ {custom.customPrice.toFixed(2)}</span>}
+                              {hasCustomDuration && <span className="ml-2">⏱️ {custom.customDuration} min</span>}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
