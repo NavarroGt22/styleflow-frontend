@@ -33,7 +33,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         {/* Rotas admin sempre registradas — independente de domínio customizado */}
-        <Route path="/admin/super" element={<SuperAdminDashboard />} />
+        <Route path="/platform/super" element={<SuperAdminDashboard />} />
+        <Route path="/admin/super" element={<Navigate to="/platform/super" replace />} />
         <Route path="/admin/novo" element={<Dashboard />} />
         <Route path="/admin/:salonSlug" element={<Dashboard />} />
         <Route path="/admin" element={<Navigate to="/login" replace />} />

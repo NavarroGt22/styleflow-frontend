@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scissors } from 'lucide-react';
+import { Eye, EyeOff, Scissors } from 'lucide-react';
 import { useAppContextOptional } from '../context/AppContext';
 import { apiUrl } from '../config/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -45,7 +46,7 @@ export default function Login() {
       appContext?.setSession(user, data.token, data.refreshToken);
       
       if (user.role === 'SUPER_ADMIN') {
-        navigate('/admin/super');
+        navigate('/platform/super');
       } else if (user.role === 'OWNER') {
         if (user.salons && user.salons.length > 0) {
           navigate(`/admin/${user.salons[0].slug}`);
@@ -103,14 +104,24 @@ export default function Login() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Senha</label>
-            <input 
-              required 
-              type="password" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
-              placeholder="••••••••" 
-            />
+            <div className="relative">
+              <input 
+                required 
+                type={showPassword ? 'text' : 'password'} 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+                className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                placeholder="••••••••" 
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 rounded-md transition-colors"
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
           
           <button 

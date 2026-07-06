@@ -346,8 +346,14 @@ export default function SuperAdminDashboard() {
                           <a href={resolveClientLink(linkSlug(t), t.clientDomain)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-400 hover:underline">
                             Cliente <ExternalLink size={10} />
                           </a>
-                          <a href={resolveAdminLink(linkSlug(t), t.adminDomain)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-violet-400 hover:underline">
-                            Admin <ExternalLink size={10} />
+                          <a
+                            href={resolveAdminLink(linkSlug(t), t.adminDomain)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={ownerAdminUrl(linkSlug(t))}
+                            className="flex items-center gap-1 text-violet-400 hover:underline"
+                          >
+                            Admin (dono) <ExternalLink size={10} />
                           </a>
                         </td>
                         <td className="px-5 py-4">

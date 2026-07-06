@@ -15,7 +15,7 @@ export const PLATFORM_URL = normalizeOrigin(import.meta.env.VITE_PLATFORM_URL);
 
 /** Caminhos do painel — sobrescreva na Vercel se mudar a estrutura de rotas */
 export const ADMIN_LOGIN_PATH = import.meta.env.VITE_ADMIN_LOGIN_PATH ?? '/login';
-export const SUPER_ADMIN_PATH = import.meta.env.VITE_SUPER_ADMIN_PATH ?? '/admin/super';
+export const SUPER_ADMIN_PATH = import.meta.env.VITE_SUPER_ADMIN_PATH ?? '/platform/super';
 
 export function platformUrl(path: string): string {
   const base = PLATFORM_URL || (typeof window !== 'undefined' ? window.location.origin : '');
@@ -59,25 +59,40 @@ const PLACEHOLDER_DOMAIN_MARKERS = [
   'styleflow.com.br',
 ];
 
-/** Domínio real com DNS/SSL — não placeholder nem subdomínio auto-gerado falso */
+function extractHostname(domain: string): string {
+  return domain.replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+}
+
+/** Domínio real com DNS/SSL — não placeholder, path nem host da plataforma */
 export function isRealCustomDomain(domain?: string | null): boolean {
   if (!domain?.trim()) return false;
-  const d = domain.trim().toLowerCase();
-  if (d.startsWith('/') || d.startsWith('http')) return false;
-  if (d.endsWith('.vercel.app') || d.endsWith('.netlify.app')) return false;
-  return !PLACEHOLDER_DOMAIN_MARKERS.some((p) => d === p || d.endsWith(`.${p}`));
+  const raw = domain.trim().toLowerCase();
+  if (raw.startsWith('/') || raw.startsWith('http')) return false;
+  if (raw.includes('/')) return false;
+
+  const host = extractHostname(raw);
+  if (!host || host.includes(' ')) return false;
+  if (host.endsWith('.vercel.app') || host.endsWith('.netlify.app')) return false;
+  if (host.includes('.vercel.app') || host.includes('.netlify.app')) return false;
+
+  const platformHost = PLATFORM_URL ? extractHostname(PLATFORM_URL) : '';
+  if (platformHost && (host === platformHost || host.endsWith(`.${platformHost}`))) return false;
+
+  return !PLACEHOLDER_DOMAIN_MARKERS.some((p) => host === p || host.endsWith(`.${p}`));
 }
 
 export function resolveClientLink(salonSlug: string, storedDomain?: string | null): string {
   if (isRealCustomDomain(storedDomain)) {
-    return `https://${storedDomain!.replace(/^https?:\/\//, '')}`;
+    return `https://${extractHostname(storedDomain!)}`;
   }
   return clientPublicUrl(salonSlug);
 }
 
+/** Link do painel do DONO — nunca aponta para Super Admin da plataforma */
 export function resolveAdminLink(salonSlug: string, storedDomain?: string | null): string {
   if (isRealCustomDomain(storedDomain)) {
-    return `https://${storedDomain!.replace(/^https?:\/\//, '')}`;
+    const host = extractHostname(storedDomain!);
+    return `https://${host}${ADMIN_LOGIN_PATH}`;
   }
   return ownerAdminUrl(salonSlug);
 }
