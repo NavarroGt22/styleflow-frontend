@@ -1,40 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
+import { toast } from '../lib/toast';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Scissors, Clock, Users, AlertCircle, Instagram, Calendar, Check, CheckCircle, Sun, Moon } from 'lucide-react';
 import { secureFetch as fetch } from '../utils/api';
 import { useTenantBranding, type TenantBranding } from '../hooks/useTenant';
 import { apiUrl, wsUrl } from '../config/api';
 import { isCustomDomainHost } from '../config/domains';
-
-function ActiveTimer({ startTime }: { startTime: string }) {
-  const [elapsed, setElapsed] = useState('');
-
-  useEffect(() => {
-    const start = new Date(startTime).getTime();
-    
-    const update = () => {
-      const diff = Date.now() - start;
-      if (diff < 0) {
-        setElapsed('00:00');
-        return;
-      }
-      const totalSecs = Math.floor(diff / 1000);
-      const mins = String(Math.floor(totalSecs / 60)).padStart(2, '0');
-      const secs = String(totalSecs % 60).padStart(2, '0');
-      setElapsed(`${mins}:${secs}`);
-    };
-
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [startTime]);
-
-  return (
-    <span className="font-mono text-xl font-bold tracking-wider text-indigo-600 dark:text-indigo-400 animate-pulse">
-      {elapsed}
-    </span>
-  );
-}
+import { computeQueueWaitMinutes } from '../lib/queue-wait';
+import { QueueActiveTimer } from '../components/QueueActiveTimer';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -242,6 +215,14 @@ export default function PublicQueue() {
   useEffect(() => {
     fetchPublicQueue();
   }, [salonSlug]);
+
+  useEffect(() => {
+    if (!data?.salon?.queueMode) return;
+    const interval = window.setInterval(() => {
+      fetchPublicQueue();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [data?.salon?.queueMode, salonSlug]);
 
   useEffect(() => {
     const tenant = data?.tenant as TenantBranding | undefined;
@@ -507,7 +488,7 @@ export default function PublicQueue() {
       fetchPublicQueue();
     } catch (err: any) {
       console.error(err);
-      alert(err.message || 'Erro de conexão.');
+      toast.error(err.message || 'Erro de conexão.');
     }
   };
 
@@ -1205,9 +1186,13 @@ export default function PublicQueue() {
               const inProgressEntry = q.entries.find((e: any) => e.status === 'IN_PROGRESS');
               const waitingEntries = q.entries.filter((e: any) => e.status === 'WAITING');
               const userEntry = currentUser ? q.entries.find((e: any) => e.userId === currentUser.id && ['IN_PROGRESS', 'WAITING'].includes(e.status)) : null;
-              
-              // Calcula tempo restante estimado
-              const totalWaitMinutes = waitingEntries.length * 30; // 30min média por serviço
+
+              const totalWaitMinutes = computeQueueWaitMinutes({
+                waitingEntries,
+                inProgressEntry,
+                queueServices: q.services,
+                userEntry,
+              });
 
               return (
                 <div key={q.sessionId} className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-xl overflow-hidden transition-all duration-300">
@@ -1292,7 +1277,7 @@ export default function PublicQueue() {
                         </div>
                         <div className="flex items-center gap-3 bg-white dark:bg-slate-800/90 px-4 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800">
                           <span className="text-xs font-bold text-gray-400 dark:text-slate-500">Cronômetro:</span>
-                          <ActiveTimer startTime={inProgressEntry.estimatedStart} />
+                          <QueueActiveTimer entry={inProgressEntry} />
                         </div>
                       </div>
                     ) : (

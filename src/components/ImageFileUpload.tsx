@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { toast } from '../lib/toast';
 import { ImagePlus, X } from 'lucide-react';
 
 type ImageFileUploadProps = {
@@ -30,11 +31,11 @@ export function ImageFileUpload({
     const isIco = file.name.toLowerCase().endsWith('.ico');
     const isImage = file.type.startsWith('image/') || isIco;
     if (!isImage) {
-      alert(`Selecione um arquivo válido (${allowedLabel}).`);
+      toast.error(`Selecione um arquivo válido (${allowedLabel}).`);
       return;
     }
     if (file.size > maxMb * 1024 * 1024) {
-      alert(`O arquivo deve ter no máximo ${maxMb}MB.`);
+      toast.info(`O arquivo deve ter no máximo ${maxMb}MB.`);
       return;
     }
 

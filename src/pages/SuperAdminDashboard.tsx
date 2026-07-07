@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -190,7 +191,7 @@ export default function SuperAdminDashboard() {
       await loadDashboard();
       await loadCopySources();
     } catch (err: any) {
-      alert(err.message);
+      toast.info(err.message);
     } finally {
       setCreating(false);
     }
@@ -216,7 +217,7 @@ export default function SuperAdminDashboard() {
       setPaymentNotes('');
       await loadDashboard();
     } catch (err: any) {
-      alert(err.message);
+      toast.info(err.message);
     }
   };
 
@@ -253,7 +254,7 @@ export default function SuperAdminDashboard() {
       setPlanModal(null);
       await loadDashboard();
     } catch (err: any) {
-      alert(err.message);
+      toast.info(err.message);
     } finally {
       setSavingPlan(false);
     }

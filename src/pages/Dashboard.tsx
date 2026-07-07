@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from '../lib/toast';
 import { Scissors, Clock, DollarSign, Plus, Edit2, Trash2, Search, CheckCircle2, X, LogOut, Store, Download, Lock, Package, ShoppingCart, AlertTriangle, Instagram, Play, Copy, ArrowUp, ArrowDown, AlertCircle, Calendar, Users, Sparkles, Cpu, Send, MessageSquare, Bot, Palette } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { secureFetch as fetch } from '../utils/api';
 import { getClientPublicUrl } from '../config/dev-ports';
 import { apiUrl, wsUrl } from '../config/api';
 import { ImageFileUpload } from '../components/ImageFileUpload';
+import { parseApiError } from '../hooks/useTenant';
+import { QueueActiveTimer } from '../components/QueueActiveTimer';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -113,32 +116,6 @@ const renderMarkdown = (text: string) => {
     return <p key={idx} className="text-gray-700 dark:text-slate-300 leading-relaxed mb-2.5 text-sm sm:text-base">{parseInlineBoldAndCode(line)}</p>;
   });
 };
-
-function ActiveTimer({ startTime }: { startTime: string }) {
-  const [elapsed, setElapsed] = useState('');
-
-  useEffect(() => {
-    const start = new Date(startTime).getTime();
-    
-    const update = () => {
-      const diff = Date.now() - start;
-      if (diff < 0) {
-        setElapsed('00:00');
-        return;
-      }
-      const totalSecs = Math.floor(diff / 1000);
-      const mins = String(Math.floor(totalSecs / 60)).padStart(2, '0');
-      const secs = String(totalSecs % 60).padStart(2, '0');
-      setElapsed(`${mins}:${secs}`);
-    };
-
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [startTime]);
-
-  return <span className="font-mono text-2xl font-bold tracking-wider text-indigo-600 dark:text-indigo-400 animate-pulse">{elapsed}</span>;
-}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -263,7 +240,12 @@ export default function Dashboard() {
     }
     return user?.salons?.find((s: any) => s.slug === salonSlug) || user?.salons?.[0] || null;
   });
-  const activeQueueMode = user?.professionalProfile ? (user?.professionalProfile?.queueMode ?? false) : (salon?.queueMode ?? false);
+  const activeQueueMode = isOwner
+    ? Boolean(salon?.queueMode)
+    : user?.professionalProfile
+      ? Boolean(user.professionalProfile.queueMode ?? salon?.queueMode)
+      : Boolean(salon?.queueMode);
+  const queueTabSynced = useRef(false);
   const [showCreateSalonModal, setShowCreateSalonModal] = useState(() => {
     return isOwner && (!user?.salons?.length || salonSlug === 'novo');
   });
@@ -310,6 +292,7 @@ export default function Dashboard() {
   });
 
   const [testPhone, setTestPhone] = useState('');
+  const [salonSaving, setSalonSaving] = useState(false);
 
   useEffect(() => {
     if (salon && !isOwner) {
@@ -320,6 +303,14 @@ export default function Dashboard() {
       }
     }
   }, [activeQueueMode, activeTab, isOwner, salon]);
+
+  useEffect(() => {
+    if (!salon?.id || queueTabSynced.current) return;
+    queueTabSynced.current = true;
+    if (activeQueueMode && (isOwner || user?.role === 'PROFESSIONAL')) {
+      setActiveTab('queue');
+    }
+  }, [salon?.id, activeQueueMode, isOwner, user?.role]);
 
   const [services, setServices] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -406,20 +397,20 @@ export default function Dashboard() {
   const [checkoutProdQty, setCheckoutProdQty] = useState('1');
 
   const handleAddToCheckoutCart = () => {
-    if (!checkoutProdId) return alert('Selecione um produto.');
+    if (!checkoutProdId) { toast.error('Selecione um produto.'); return; }
     const prod = products.find(p => p.id === checkoutProdId);
     if (!prod) return;
     
     const qty = Number(checkoutProdQty);
-    if (qty <= 0) return alert('A quantidade deve ser maior que zero.');
+    if (qty <= 0) { toast.info('A quantidade deve ser maior que zero.'); return; }
     if (prod.stockQuantity < qty) {
-      return alert(`Estoque insuficiente! Apenas ${prod.stockQuantity} unidades disponíveis.`);
+      toast.error(`Estoque insuficiente! Apenas ${prod.stockQuantity} unidades disponíveis.`); return;
     }
 
     const existing = checkoutCart.find(item => item.productId === checkoutProdId);
     if (existing) {
       if (prod.stockQuantity < existing.quantity + qty) {
-        return alert(`Estoque insuficiente! Apenas ${prod.stockQuantity} unidades disponíveis no total.`);
+        toast.error(`Estoque insuficiente! Apenas ${prod.stockQuantity} unidades disponíveis no total.`); return;
       }
       setCheckoutCart(checkoutCart.map(item => 
         item.productId === checkoutProdId 
@@ -488,18 +479,18 @@ export default function Dashboard() {
       });
 
       if (res.ok) {
-        alert(editingProduct ? 'Produto atualizado!' : 'Produto cadastrado!');
+        toast.success(editingProduct ? 'Produto atualizado!' : 'Produto cadastrado!');
         setIsProductModalOpen(false);
         setEditingProduct(null);
         setProductForm({ name: '', description: '', price: '', costPrice: '', stockQuantity: '0', minStockAlert: '5' });
         fetchProducts();
       } else {
         const err = await res.json();
-        alert(err.error || 'Erro ao salvar produto');
+        toast.error(err.error || 'Erro ao salvar produto');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro de conexão ao salvar produto');
+      toast.error('Erro de conexão ao salvar produto');
     }
   };
 
@@ -547,7 +538,7 @@ export default function Dashboard() {
 
   const handlePosSale = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!posForm.productId) return alert('Selecione um produto para vender.');
+    if (!posForm.productId) { toast.error('Selecione um produto para vender.'); return; }
 
     const token = sessionStorage.getItem('token');
     try {
@@ -564,17 +555,17 @@ export default function Dashboard() {
       });
 
       if (res.ok) {
-        alert('Venda registrada com sucesso! 🛒');
+        toast.success('Venda registrada com sucesso! 🛒');
         setPosForm({ productId: '', quantity: '1', paymentMethod: 'PIX', professionalId: '' });
         fetchFinancials();
         fetchProducts();
       } else {
         const err = await res.json();
-        alert(err.error || 'Erro ao processar venda.');
+        toast.error(err.error || 'Erro ao processar venda.');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro ao conectar com o servidor.');
+      toast.error('Erro ao conectar com o servidor.');
     }
   };
 
@@ -795,6 +786,12 @@ export default function Dashboard() {
         if (data && data.id) {
           setSalon(data);
           const updatedUser = { ...user, salons: [data] };
+          if (updatedUser.professionalProfile) {
+            updatedUser.professionalProfile = {
+              ...updatedUser.professionalProfile,
+              queueMode: data.queueMode ?? updatedUser.professionalProfile.queueMode,
+            };
+          }
           sessionStorage.setItem('user', JSON.stringify(updatedUser));
           setUser(updatedUser);
         }
@@ -933,7 +930,7 @@ export default function Dashboard() {
         fetchQueueSession(selectedQueueProfessionalId);
       } else {
         const err = await res.json();
-        alert(err.error || 'Erro ao chamar próximo cliente.');
+        toast.error(err.error || 'Erro ao chamar próximo cliente.');
       }
     } catch (err) {
       console.error("Erro ao avançar fila:", err);
@@ -954,7 +951,7 @@ export default function Dashboard() {
         fetchQueueSession(selectedQueueProfessionalId);
       } else {
         const err = await res.json();
-        alert(err.error || 'Erro ao concluir atendimento.');
+        toast.error(err.error || 'Erro ao concluir atendimento.');
       }
     } catch (err) {
       console.error("Erro ao concluir atendimento:", err);
@@ -982,7 +979,7 @@ export default function Dashboard() {
         fetchQueueSession(selectedQueueProfessionalId);
       } else {
         const err = await res.json();
-        alert(err.error || 'Erro ao registrar falta.');
+        toast.error(err.error || 'Erro ao registrar falta.');
       }
     } catch (err) {
       console.error("Erro ao pular cliente:", err);
@@ -992,8 +989,8 @@ export default function Dashboard() {
   const handleAddWalkInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!queueSession?.id) return;
-    if (!newWalkInName.trim()) return alert('Por favor, informe o nome do cliente.');
-    if (!newWalkInServiceId) return alert('Por favor, selecione um serviço.');
+    if (!newWalkInName.trim()) { toast.info('Por favor, informe o nome do cliente.'); return; }
+    if (!newWalkInServiceId) { toast.error('Por favor, selecione um serviço.'); return; }
 
     setIsWalkInLoading(true);
     const token = sessionStorage.getItem('token');
@@ -1018,11 +1015,11 @@ export default function Dashboard() {
         fetchQueueSession(selectedQueueProfessionalId);
       } else {
         const err = await res.json();
-        alert(err.error || 'Erro ao adicionar cliente na fila.');
+        toast.error(err.error || 'Erro ao adicionar cliente na fila.');
       }
     } catch (err) {
       console.error("Erro ao adicionar cliente presencial:", err);
-      alert('Erro de conexão ao servidor.');
+      toast.error('Erro de conexão ao servidor.');
     } finally {
       setIsWalkInLoading(false);
     }
@@ -1051,7 +1048,7 @@ export default function Dashboard() {
         fetchQueueSession(selectedQueueProfessionalId);
       } else {
         const err = await res.json();
-        alert(err.error || 'Erro ao reordenar fila.');
+        toast.error(err.error || 'Erro ao reordenar fila.');
       }
     } catch (err) {
       console.error("Erro ao reordenar:", err);
@@ -1197,40 +1194,70 @@ export default function Dashboard() {
   const handleToggleQueueMode = async (newMode: boolean) => {
     const token = sessionStorage.getItem('token');
     try {
-      const res = await fetch(apiUrl('/professionals/me/queue-mode'), {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ queueMode: newMode })
-      });
+      const requests: Promise<Response>[] = [];
 
-      const data = await res.json();
-      if (res.ok) {
+      if (user?.professionalProfile) {
+        requests.push(
+          fetch(apiUrl('/professionals/me/queue-mode'), {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ queueMode: newMode }),
+          })
+        );
+      }
+
+      if (isOwner && salon?.id) {
+        requests.push(
+          fetch(apiUrl(`/establishments/${salon.id}`), {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ queueMode: newMode }),
+          })
+        );
+      }
+
+      if (!requests.length) {
+        toast.error('Não foi possível alterar o modelo de agenda.');
+        return;
+      }
+
+      const results = await Promise.all(requests);
+      const payloads = await Promise.all(results.map((res) => res.json().catch(() => ({}))));
+
+      if (results.every((res) => res.ok)) {
         const updatedUser = { ...user };
         if (updatedUser.professionalProfile) {
           updatedUser.professionalProfile.queueMode = newMode;
         }
+        if (isOwner && salon) {
+          const salonPayload = payloads.find((p) => p?.establishment || p?.queueMode !== undefined);
+          const updatedSalon = salonPayload?.establishment ?? { ...salon, queueMode: newMode };
+          setSalon(updatedSalon);
+          updatedUser.salons = [updatedSalon];
+          setSalonForm((prev) => ({ ...prev, queueMode: newMode }));
+        }
         sessionStorage.setItem('user', JSON.stringify(updatedUser));
         setUser(updatedUser);
-        
-        if (newMode) {
-          setActiveTab('queue');
-        } else {
-          setActiveTab('agenda');
-        }
+        setActiveTab(newMode ? 'queue' : 'agenda');
+        toast.success(newMode ? 'Fila dinâmica ativada.' : 'Agenda fixa ativada.');
       } else {
-        alert(data.error || 'Erro ao alterar modelo de agenda.');
+        const failed = payloads.find((_, i) => !results[i].ok);
+        toast.error(failed?.error || 'Erro ao alterar modelo de agenda.');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro de conexão ao tentar alterar o modelo de agenda.');
+      toast.error('Erro de conexão ao tentar alterar o modelo de agenda.');
     }
   };
 
   const exportTimecardCSV = () => {
-    if (!teamTimecards.length) return alert("Nenhum ponto registrado para exportar nesta data!");
+    if (!teamTimecards.length) { toast.info("Nenhum ponto registrado para exportar nesta data!"); return; }
     
     // Gerando CSV com cabeçalho no padrão do Excel brasileiro
     let csvContent = "\uFEFF"; // BOM para acentuação correta no Excel brasileiro
@@ -1292,15 +1319,15 @@ export default function Dashboard() {
         }
       });
       if (res.ok) {
-        alert("Profissional removido com sucesso!");
+        toast.success("Profissional removido com sucesso!");
         fetchTeamMembers();
       } else {
         const error = await res.json();
-        alert(error.error || "Erro ao remover profissional.");
+        toast.error(error.error || "Erro ao remover profissional.");
       }
     } catch (err) {
       console.error(err);
-      alert("Erro de conexão ao tentar remover profissional.");
+      toast.error("Erro de conexão ao tentar remover profissional.");
     }
   };
 
@@ -1331,7 +1358,7 @@ export default function Dashboard() {
         fetchTeamMembers(); // Recarrega reativamente sem precisar trocar de aba
       } else {
         const error = await res.json();
-        alert(error.error || 'Erro ao adicionar profissional');
+        toast.error(error.error || 'Erro ao adicionar profissional');
       }
     } catch (err) {
       console.error(err);
@@ -1377,27 +1404,28 @@ export default function Dashboard() {
         fetchTeamMembers(); // Recarrega a equipe
       } else {
         const error = await res.json();
-        alert(error.error || 'Erro ao atualizar profissional');
+        toast.error(error.error || 'Erro ao atualizar profissional');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro ao atualizar profissional');
+      toast.error('Erro ao atualizar profissional');
     }
   };
 
   const handleUpdateSalon = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!salon?.id) return;
-    
+    if (!salon?.id || salonSaving) return;
+
     const token = sessionStorage.getItem('token');
     const cleanPhone = salonForm.phone.replace(/\D/g, '');
-    
+
+    setSalonSaving(true);
     try {
       const res = await fetch(apiUrl(`/establishments/${salon.id}`), {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': `Bearer ${token}` 
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: salonForm.name,
@@ -1424,27 +1452,34 @@ export default function Dashboard() {
           faviconUrl: salonForm.faviconUrl || null,
           primaryColor: salonForm.primaryColor || undefined,
           secondaryColor: salonForm.secondaryColor || null,
-        })
+        }),
       });
 
+      const data = await res.json().catch(() => null);
+
       if (res.ok) {
-        const data = await res.json();
-        const updatedSalon = data.establishment;
+        const updatedSalon = data?.establishment ?? data;
         setSalon(updatedSalon);
-        
-        // Atualiza localStorage
+
         const updatedUser = { ...user, salons: [updatedSalon] };
+        if (updatedUser.professionalProfile) {
+          updatedUser.professionalProfile = {
+            ...updatedUser.professionalProfile,
+            queueMode: updatedSalon.queueMode ?? salonForm.queueMode,
+          };
+        }
         sessionStorage.setItem('user', JSON.stringify(updatedUser));
         setUser(updatedUser);
-        
-        alert('Configurações do salão atualizadas com sucesso!');
+
+        toast.success('Configurações do salão atualizadas com sucesso!');
       } else {
-        const error = await res.json();
-        alert(error.error || 'Erro ao atualizar configurações do salão');
+        toast.error(parseApiError(data, 'Erro ao atualizar configurações do salão'));
       }
     } catch (err) {
       console.error(err);
-      alert('Erro ao atualizar configurações do salão');
+      toast.error('Erro de conexão ao salvar configurações do salão');
+    } finally {
+      setSalonSaving(false);
     }
   };
 
@@ -1532,7 +1567,7 @@ export default function Dashboard() {
 
     } catch (err) {
       console.error('Erro ao gerar Excel:', err);
-      alert('Erro ao gerar o Excel. Verifique se as bibliotecas foram instaladas.');
+      toast.error('Erro ao gerar o Excel. Verifique se as bibliotecas foram instaladas.');
       return;
     }
 
@@ -1562,11 +1597,11 @@ export default function Dashboard() {
         setAppointments(appointments.map(apt => apt.id === id ? { ...apt, status: newStatus } : apt));
       } else {
         const errData = await res.text();
-        alert(`O SERVIDOR RESPONDEU ISSO: ` + errData);
+        toast.error(`O SERVIDOR RESPONDEU ISSO: ` + errData);
       }
     } catch (err) {
       console.error(err);
-      alert(`Falha no JS: ${err}`);
+      toast.error(`Falha no JS: ${err}`);
     }
   };
 
@@ -1583,12 +1618,12 @@ export default function Dashboard() {
         const checkRes = await fetch(apiUrl(`/tenants/check-slug/${slug}`));
         const checkData = await checkRes.json();
         if (!checkData.available) {
-          alert('Este subdomínio já está em uso. Escolha outro.');
+          toast.info('Este subdomínio já está em uso. Escolha outro.');
           setSlugAvailable(false);
           return;
         }
       } catch {
-        alert('Não foi possível validar o subdomínio. Tente novamente.');
+        toast.error('Não foi possível validar o subdomínio. Tente novamente.');
         return;
       }
       setNewAccount((prev) => ({ ...prev, tenantSlug: slug }));
@@ -1636,11 +1671,11 @@ export default function Dashboard() {
         setTenantSalons([data]);
         navigate(`/admin/${data.slug}`);
       } else {
-        alert(data.error || 'Erro ao criar salão');
+        toast.error(data.error || 'Erro ao criar salão');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro na conexão com o servidor');
+      toast.error('Erro na conexão com o servidor');
     }
   };
 
@@ -1659,7 +1694,7 @@ export default function Dashboard() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Erro ao adicionar unidade');
+        toast.error(data.error || 'Erro ao adicionar unidade');
         return;
       }
       const nextSalons = [...tenantSalons, data];
@@ -1672,7 +1707,7 @@ export default function Dashboard() {
       navigate(`/admin/${data.slug}`);
     } catch (err) {
       console.error(err);
-      alert('Erro na conexão com o servidor');
+      toast.error('Erro na conexão com o servidor');
     }
   };
 
@@ -1747,11 +1782,11 @@ export default function Dashboard() {
         setNewService({ name: '', duration: '', price: '', category: 'Cabelo' });
       } else {
         const error = await res.json();
-        alert(error.message || 'Erro ao salvar serviço');
+        toast.error(error.message || 'Erro ao salvar serviço');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro na conexão com o servidor');
+      toast.error('Erro na conexão com o servidor');
     }
   };
 
@@ -1840,7 +1875,7 @@ export default function Dashboard() {
   const handleScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!appointmentForm.date || !appointmentForm.time || !appointmentForm.professionalId) {
-      return alert("Preencha todos os campos!");
+      toast.error("Preencha todos os campos!"); return;
     }
 
     // Monta a data/hora inicial
@@ -1865,7 +1900,7 @@ export default function Dashboard() {
 
       const data = await res.json();
       if (res.ok) {
-        alert("Agendamento confirmado com sucesso! 🎉");
+        toast.success("Agendamento confirmado com sucesso! 🎉");
         setSchedulingService(null);
         setAppointmentForm({ professionalId: professionals[0]?.id || '', date: '', time: '' });
       } else {
@@ -1874,12 +1909,12 @@ export default function Dashboard() {
             setAppointmentForm({ ...appointmentForm, time: data.suggestion });
           }
         } else {
-          alert(data.error || 'Erro ao agendar.');
+          toast.error(data.error || 'Erro ao agendar.');
         }
       }
     } catch (err) {
       console.error(err);
-      alert('Erro de conexão ao tentar agendar.');
+      toast.error('Erro de conexão ao tentar agendar.');
     }
   };
 
@@ -1902,14 +1937,14 @@ export default function Dashboard() {
   const handleBlockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!blockForm.date || !blockForm.startTime || !blockForm.endTime || !blockForm.professionalId) {
-      return alert("Preencha todos os campos!");
+      toast.error("Preencha todos os campos!"); return;
     }
 
     const startDateTime = new Date(`${blockForm.date}T${blockForm.startTime}:00`);
     const endDateTime = new Date(`${blockForm.date}T${blockForm.endTime}:00`);
 
     if (endDateTime <= startDateTime) {
-      return alert("O horário de término deve ser posterior ao horário de início!");
+      toast.info("O horário de término deve ser posterior ao horário de início!"); return;
     }
 
     const token = sessionStorage.getItem('token');
@@ -1927,16 +1962,16 @@ export default function Dashboard() {
 
       const data = await res.json();
       if (res.ok) {
-        alert("Horário bloqueado com sucesso! 🔒");
+        toast.success("Horário bloqueado com sucesso! 🔒");
         setIsBlockModalOpen(false);
         setBlockForm({ professionalId: professionals[0]?.id || '', date: '', startTime: '', endTime: '' });
         fetchAppointments();
       } else {
-        alert(data.error || 'Erro ao bloquear horário.');
+        toast.error(data.error || 'Erro ao bloquear horário.');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro de conexão ao tentar bloquear.');
+      toast.error('Erro de conexão ao tentar bloquear.');
     }
   };
 
@@ -1959,16 +1994,16 @@ export default function Dashboard() {
       });
       if (res.ok) {
         setAppointments(appointments.map(apt => apt.id === checkoutApt.id ? { ...apt, status: 'COMPLETED' } : apt));
-        alert('Pagamento registrado no caixa com sucesso!');
+        toast.success('Pagamento registrado no caixa com sucesso!');
         setCheckoutApt(null);
         setCheckoutCart([]); // Limpa o carrinho de checkout
       } else {
         const error = await res.json();
-        alert(error.error || 'Erro ao finalizar agendamento');
+        toast.error(error.error || 'Erro ao finalizar agendamento');
       }
     } catch (err) {
       console.error(err);
-      alert('Erro na conexão com o servidor');
+      toast.error('Erro na conexão com o servidor');
     }
   };
 
@@ -3885,7 +3920,7 @@ export default function Dashboard() {
                                       type="button"
                                       onClick={() => {
                                         const sanitized = testPhone.replace(/\D/g, '');
-                                        if (sanitized.length < 10) return alert("Por favor, digite um celular válido com DDD.");
+                                        if (sanitized.length < 10) { toast.error("Por favor, digite um celular válido com DDD."); return; }
                                         const msg = formatNotificationMessage(
                                           salonForm.whatsappTemplate || 'Olá {cliente}, seu atendimento no {estabelecimento} está chegando! Você é o {posicao}º da fila com previsão para as {tempo}.',
                                           user?.name || 'Cliente Teste',
@@ -3944,8 +3979,12 @@ export default function Dashboard() {
                 )}
 
                 <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-slate-700/80">
-                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all hover:-translate-y-0.5 active:scale-98 border-indigo-600">
-                    Salvar Configurações
+                  <button
+                    type="submit"
+                    disabled={salonSaving}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all hover:-translate-y-0.5 active:scale-98 border-indigo-600"
+                  >
+                    {salonSaving ? 'Salvando...' : 'Salvar Configurações'}
                   </button>
                 </div>
               </form>
@@ -4025,7 +4064,7 @@ export default function Dashboard() {
                       onClick={() => {
                         const url = getClientPublicUrl(salon.slug);
                         navigator.clipboard.writeText(url);
-                        alert('Link copiado para a área de transferência! 📋');
+                        toast.success('Link copiado para a área de transferência! 📋');
                       }}
                       className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/25 active:scale-95 transition-all border-indigo-600"
                     >
@@ -4075,7 +4114,10 @@ export default function Dashboard() {
                             
                             <div className="mt-8 bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 flex items-center justify-between">
                               <span className="text-xs font-bold text-white/70">Tempo decorrido:</span>
-                              <ActiveTimer startTime={activeEntry.actualStart || activeEntry.estimatedStart} />
+                              <QueueActiveTimer
+                                entry={activeEntry}
+                                className="font-mono text-2xl font-bold tracking-wider text-white animate-pulse"
+                              />
                             </div>
 
                             <div className="mt-6 space-y-3">
@@ -4201,13 +4243,13 @@ export default function Dashboard() {
                                           });
                                           if (!res.ok) {
                                             const err = await res.json();
-                                            alert(err.error || 'Erro ao reordenar fila.');
+                                            toast.error(err.error || 'Erro ao reordenar fila.');
                                           } else {
                                             fetchQueueSession(selectedQueueProfessionalId);
                                           }
                                         } catch (err) {
                                           console.error("Erro ao reordenar para cima:", err);
-                                          alert('Erro de conexão ao servidor.');
+                                          toast.error('Erro de conexão ao servidor.');
                                         }
                                       }}
                                       className={`p-1.5 rounded-lg border transition-all ${
@@ -4233,13 +4275,13 @@ export default function Dashboard() {
                                           });
                                           if (!res.ok) {
                                             const err = await res.json();
-                                            alert(err.error || 'Erro ao reordenar fila.');
+                                            toast.error(err.error || 'Erro ao reordenar fila.');
                                           } else {
                                             fetchQueueSession(selectedQueueProfessionalId);
                                           }
                                         } catch (err) {
                                           console.error("Erro ao reordenar para baixo:", err);
-                                          alert('Erro de conexão ao servidor.');
+                                          toast.error('Erro de conexão ao servidor.');
                                         }
                                       }}
                                       className={`p-1.5 rounded-lg border transition-all ${

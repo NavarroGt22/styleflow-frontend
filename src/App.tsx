@@ -8,6 +8,7 @@ import ClientAuth from './pages/ClientAuth';
 import NotFound from './pages/NotFound';
 import { ADMIN_DEV_PORT, CLIENT_DEV_PORT } from './config/dev-ports';
 import { isCustomDomainHost, isLocalhostHost } from './config/domains';
+import { ToastHost } from './lib/toast';
 
 export default function App() {
   const isCustomDomain = isCustomDomainHost();
@@ -31,6 +32,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <ToastHost />
       <Routes>
         {/* Rotas admin sempre registradas — independente de domínio customizado */}
         <Route path="/platform/super" element={<SuperAdminDashboard />} />
