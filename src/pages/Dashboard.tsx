@@ -7,6 +7,8 @@ import { getClientPublicUrl } from '../config/dev-ports';
 import { apiUrl, wsUrl } from '../config/api';
 import { ImageFileUpload } from '../components/ImageFileUpload';
 import { parseApiError } from '../hooks/useTenant';
+import { getTenantFeatures, TENANT_LEVEL_UPGRADE_HINT } from '../config/tenant-features';
+import { TENANT_LEVEL_LABELS, type TenantLevel } from '../config/tenant-plans';
 import { QueueActiveTimer } from '../components/QueueActiveTimer';
 
 const formatInstagramUrl = (url: string) => {
@@ -240,11 +242,16 @@ export default function Dashboard() {
     }
     return user?.salons?.find((s: any) => s.slug === salonSlug) || user?.salons?.[0] || null;
   });
+  const tenantLevel = ((user?.tenant?.level ?? salon?.tenant?.level ?? 'FREE') as TenantLevel);
+  const plan = React.useMemo(() => getTenantFeatures(tenantLevel), [tenantLevel]);
+  const hiredStaffCount = teamMembers.filter((m: any) => m.userId !== salon?.ownerId).length;
+  const canAddStaff = plan.tabs.team && hiredStaffCount < plan.maxStaff;
+
   const activeQueueMode = isOwner
-    ? Boolean(salon?.queueMode)
+    ? Boolean(salon?.queueMode) && plan.tabs.queue
     : user?.professionalProfile
-      ? Boolean(user.professionalProfile.queueMode ?? salon?.queueMode)
-      : Boolean(salon?.queueMode);
+      ? Boolean(user.professionalProfile.queueMode ?? salon?.queueMode) && plan.tabs.queue
+      : Boolean(salon?.queueMode) && plan.tabs.queue;
   const queueTabSynced = useRef(false);
   const [showCreateSalonModal, setShowCreateSalonModal] = useState(() => {
     return isOwner && (!user?.salons?.length || salonSlug === 'novo');
@@ -307,10 +314,34 @@ export default function Dashboard() {
   useEffect(() => {
     if (!salon?.id || queueTabSynced.current) return;
     queueTabSynced.current = true;
-    if (activeQueueMode && (isOwner || user?.role === 'PROFESSIONAL')) {
+    if (activeQueueMode && plan.tabs.queue && (isOwner || user?.role === 'PROFESSIONAL')) {
       setActiveTab('queue');
     }
-  }, [salon?.id, activeQueueMode, isOwner, user?.role]);
+  }, [salon?.id, activeQueueMode, isOwner, user?.role, plan.tabs.queue]);
+
+  useEffect(() => {
+    const allowedTabs: Record<string, boolean> = {
+      services: plan.tabs.services,
+      agenda: plan.tabs.agenda,
+      financials: plan.tabs.financials,
+      team: plan.tabs.team,
+      estoque: plan.tabs.inventory,
+      queue: plan.tabs.queue,
+      settings: plan.tabs.settings,
+    };
+    if (!allowedTabs[activeTab]) setActiveTab('services');
+  }, [activeTab, plan]);
+
+  useEffect(() => {
+    const allowedSettings: Record<string, boolean> = {
+      general: plan.settingsTabs.general,
+      temas: plan.settingsTabs.themes,
+      expediente: plan.settingsTabs.expediente,
+      comissao: plan.settingsTabs.commissions,
+      fila: plan.settingsTabs.queue,
+    };
+    if (!allowedSettings[settingsSubTab]) setSettingsSubTab('general');
+  }, [settingsSubTab, plan]);
 
   const [services, setServices] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -786,6 +817,9 @@ export default function Dashboard() {
         if (data && data.id) {
           setSalon(data);
           const updatedUser = { ...user, salons: [data] };
+          if (data.tenant?.level) {
+            updatedUser.tenant = { ...(updatedUser.tenant || {}), ...data.tenant, level: data.tenant.level };
+          }
           if (updatedUser.professionalProfile) {
             updatedUser.professionalProfile = {
               ...updatedUser.professionalProfile,
@@ -1192,6 +1226,10 @@ export default function Dashboard() {
   };
 
   const handleToggleQueueMode = async (newMode: boolean) => {
+    if (!plan.scheduleMode) {
+      toast.error('Alternância de agenda não disponível no seu plano atual.');
+      return;
+    }
     const token = sessionStorage.getItem('token');
     try {
       const requests: Promise<Response>[] = [];
@@ -2030,6 +2068,11 @@ export default function Dashboard() {
               {salon?.name && (salon?.tenant?.name || salon?.tenant?.customBrandName) && (
                 <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Unidade: {salon.name}</p>
               )}
+              {isOwner && (
+                <span className="inline-flex mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
+                  Plano {TENANT_LEVEL_LABELS[tenantLevel]}
+                </span>
+              )}
             </div>
           </div>
           {isOwner && tenantSalons.length > 0 && (
@@ -2108,7 +2151,7 @@ export default function Dashboard() {
       </header>
 
       {/* WIDGET DE PONTO ELETRÔNICO */}
-      {(user?.role === 'PROFESSIONAL' || user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN') && (
+      {plan.timecardWidget && (user?.role === 'PROFESSIONAL' || user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN') && (
         <div className="mb-8 p-6 rounded-2xl bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 shadow-sm flex flex-col gap-4 animate-in slide-in-from-top-4 duration-300">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
             <div className="flex items-center gap-4">
@@ -2166,7 +2209,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {timecard?.timecards && timecard.timecards.length > 0 && (
+          {plan.shiftHistory && timecard?.timecards && timecard.timecards.length > 0 && (
             <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-700/50 w-full animate-in fade-in duration-500">
               <p className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-2.5 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
@@ -2198,7 +2241,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {user?.professionalProfile && (
+          {plan.scheduleMode && user?.professionalProfile && (
             <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-700/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-500 rounded-lg">
@@ -2248,7 +2291,7 @@ export default function Dashboard() {
           >
             Meus Serviços
           </button>
-          {(!activeQueueMode || isOwner) && (
+          {plan.tabs.agenda && (!activeQueueMode || isOwner) && (
             <button 
               onClick={() => setActiveTab('agenda')}
               className={`pb-3 whitespace-nowrap font-medium transition-colors border-b-2 flex gap-2 items-center ${activeTab === 'agenda' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
@@ -2261,7 +2304,7 @@ export default function Dashboard() {
               )}
             </button>
           )}
-          {isOwner && (
+          {isOwner && plan.tabs.financials && (
             <button 
               onClick={() => setActiveTab('financials')}
               className={`pb-3 whitespace-nowrap font-medium transition-colors border-b-2 flex gap-2 items-center ${activeTab === 'financials' ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
@@ -2269,7 +2312,7 @@ export default function Dashboard() {
               <DollarSign size={18} /> Financeiro
             </button>
           )}
-          {isOwner && (
+          {isOwner && plan.tabs.team && (
             <button 
               onClick={() => setActiveTab('team')}
               className={`pb-3 whitespace-nowrap font-medium transition-colors border-b-2 flex gap-2 items-center ${activeTab === 'team' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
@@ -2277,7 +2320,7 @@ export default function Dashboard() {
               Equipe
             </button>
           )}
-          {isOwner && (
+          {isOwner && plan.tabs.inventory && (
             <button 
               onClick={() => setActiveTab('estoque')}
               className={`pb-3 whitespace-nowrap font-medium transition-colors border-b-2 flex gap-2 items-center ${activeTab === 'estoque' ? 'border-amber-500 text-amber-600 dark:text-amber-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
@@ -2285,7 +2328,7 @@ export default function Dashboard() {
               <Package size={18} /> Estoque
             </button>
           )}
-          {(activeQueueMode || isOwner) && (
+          {plan.tabs.queue && (activeQueueMode || isOwner) && (
             <button 
               onClick={() => setActiveTab('queue')}
               className={`pb-3 whitespace-nowrap font-medium transition-colors border-b-2 flex gap-2 items-center ${activeTab === 'queue' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
@@ -2293,7 +2336,7 @@ export default function Dashboard() {
               <Clock size={18} /> Fila Dinâmica
             </button>
           )}
-          {isOwner && (
+          {isOwner && plan.tabs.settings && (
             <button 
               onClick={() => setActiveTab('settings')}
               className={`pb-3 whitespace-nowrap font-medium transition-colors border-b-2 flex gap-2 items-center ${activeTab === 'settings' ? 'border-slate-500 text-slate-800 dark:text-white font-bold' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
@@ -2320,7 +2363,7 @@ export default function Dashboard() {
             className="w-full pl-10 pr-4 py-2 border border-surface-border dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-sm text-gray-900 dark:text-white"
           />
         </div>
-        {(isOwner || user?.role === 'PROFESSIONAL') && (
+        {(isOwner || user?.role === 'PROFESSIONAL') && plan.canCreateServices && (
           <button onClick={() => setIsModalOpen(true)} className="btn-primary shadow-lg shadow-primary/30 flex-shrink-0">
             <Plus size={20} /> <span className="hidden sm:inline">Novo Serviço</span>
           </button>
@@ -2763,6 +2806,7 @@ export default function Dashboard() {
             </div>
 
             {/* STYLEFLOW AI FINANCIAL ADVISOR - GLASSMORPHIC PREMIUM INTERFACE */}
+            {plan.aiAdvisor && (
             <div className="mt-12 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border border-emerald-500/20 dark:border-emerald-500/30 rounded-3xl p-6 sm:p-8 shadow-[0_0_40px_rgba(16,185,129,0.06)] dark:shadow-[0_0_40px_rgba(16,185,129,0.12)] animate-in fade-in slide-in-from-bottom-6 duration-700">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 dark:border-slate-800/80 pb-6">
                 <div className="flex items-center gap-3">
@@ -2985,6 +3029,7 @@ export default function Dashboard() {
                 </>
               )}
             </div>
+            )}
             </>
           )}
         </div>
@@ -2996,11 +3041,22 @@ export default function Dashboard() {
           <div className="mb-8 mt-4 flex justify-between items-end">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Minha Equipe</h1>
-              <p className="text-gray-500 dark:text-gray-400 mt-1">Gerencie seus barbeiros, funcionários e comissões.</p>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">
+                Gerencie seus barbeiros, funcionários e comissões.
+                {plan.maxStaff > 0 && (
+                  <span className="block text-xs mt-1 text-indigo-600 dark:text-indigo-400 font-semibold">
+                    Plano {TENANT_LEVEL_LABELS[tenantLevel]}: {hiredStaffCount}/{plan.maxStaff} funcionários
+                  </span>
+                )}
+              </p>
             </div>
+            {canAddStaff ? (
             <button onClick={() => setIsTeamModalOpen(true)} className="btn-primary shadow-lg shadow-indigo-500/30 bg-indigo-600 hover:bg-indigo-700 border-indigo-600">
               <Plus size={20} /> Novo Profissional
             </button>
+            ) : plan.tabs.team && (
+              <span className="text-xs text-gray-500 dark:text-slate-400 font-medium">{TENANT_LEVEL_UPGRADE_HINT[tenantLevel]}</span>
+            )}
           </div>
 
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 overflow-hidden shadow-sm">
@@ -3069,6 +3125,7 @@ export default function Dashboard() {
           </div>
 
           {/* SEÇÃO: CONTROLE DE PRESENÇA (PONTO ELETRÔNICO) */}
+          {plan.teamTimecards && (
           <div className="mt-12 bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 p-6 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div>
@@ -3195,6 +3252,7 @@ export default function Dashboard() {
               </table>
             </div>
           </div>
+          )}
         </div>
       )}
 
@@ -3386,6 +3444,7 @@ export default function Dashboard() {
                     Dados Gerais
                   </button>
 
+                  {plan.settingsTabs.themes && (
                   <button
                     type="button"
                     onClick={() => setSettingsSubTab('temas')}
@@ -3398,7 +3457,9 @@ export default function Dashboard() {
                     <Palette size={16} />
                     Estilo / Temas
                   </button>
+                  )}
 
+                  {plan.settingsTabs.expediente && (
                   <button
                     type="button"
                     onClick={() => setSettingsSubTab('expediente')}
@@ -3411,7 +3472,9 @@ export default function Dashboard() {
                     <Clock size={16} />
                     Funcionamento
                   </button>
+                  )}
 
+                  {plan.settingsTabs.commissions && (
                   <button
                     type="button"
                     onClick={() => setSettingsSubTab('comissao')}
@@ -3424,7 +3487,9 @@ export default function Dashboard() {
                     <DollarSign size={16} />
                     Comissões
                   </button>
+                  )}
 
+                  {plan.settingsTabs.queue && (
                   <button
                     type="button"
                     onClick={() => setSettingsSubTab('fila')}
@@ -3437,6 +3502,7 @@ export default function Dashboard() {
                     <Users size={16} />
                     Fila & Agendamento
                   </button>
+                  )}
                 </div>
 
                 {settingsSubTab === 'general' && (
@@ -3485,6 +3551,7 @@ export default function Dashboard() {
                         )}
                       </div>
 
+                      {plan.whatsappAutomation && (
                       <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700/50 space-y-4">
                         <div className="flex justify-between items-center">
                           <h4 className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -3525,6 +3592,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
+                      )}
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Instagram (URL ou Usuário)</label>
@@ -3849,6 +3917,7 @@ export default function Dashboard() {
                               </label>
                             </div>
 
+                            {plan.whatsappAutomation && (
                             <div className="flex items-center gap-3">
                               <input 
                                 type="checkbox"
@@ -3861,8 +3930,9 @@ export default function Dashboard() {
                                 Notificar cliente por WhatsApp
                               </label>
                             </div>
+                            )}
 
-                            {salonForm.queueNotifyClient && (
+                            {plan.whatsappAutomation && salonForm.queueNotifyClient && (
                               <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200 col-span-1 sm:col-span-2">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
