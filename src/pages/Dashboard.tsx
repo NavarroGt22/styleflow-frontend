@@ -10,6 +10,7 @@ import { parseApiError } from '../hooks/useTenant';
 import { getTenantFeatures, TENANT_LEVEL_UPGRADE_HINT } from '../config/tenant-features';
 import { TENANT_LEVEL_LABELS, type TenantLevel } from '../config/tenant-plans';
 import { QueueActiveTimer } from '../components/QueueActiveTimer';
+import { resolveInProgressStart } from '../lib/queue-timer';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -361,6 +362,8 @@ export default function Dashboard() {
   // Estados para Checkout (Finalizar Agendamento)
   const [checkoutApt, setCheckoutApt] = useState<any>(null);
   const [checkoutForm, setCheckoutForm] = useState({ paymentMethod: 'PIX', finalPrice: '' });
+  const [queueCheckoutAction, setQueueCheckoutAction] = useState<'complete' | 'completeAndNext' | null>(null);
+  const autoFinishTriggeredRef = useRef<string | null>(null);
 
   // Estados para Bloqueio de Horário (Dono)
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
@@ -952,6 +955,13 @@ export default function Dashboard() {
 
   const handleStartNext = async () => {
     if (!queueSession?.id) return;
+
+    const activeEntry = queueSession.entries?.find((e: any) => e.status === 'IN_PROGRESS');
+    if (activeEntry) {
+      openQueueCheckout(activeEntry, 'completeAndNext');
+      return;
+    }
+
     const token = sessionStorage.getItem('token');
     try {
       const res = await fetch(apiUrl(`/queue/${queueSession.id}/start`), {
@@ -971,25 +981,31 @@ export default function Dashboard() {
     }
   };
 
-  const handleCompleteActive = async () => {
-    if (!queueSession?.id) return;
-    const token = sessionStorage.getItem('token');
-    try {
-      const res = await fetch(apiUrl(`/queue/${queueSession.id}/complete`), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        fetchQueueSession(selectedQueueProfessionalId);
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Erro ao concluir atendimento.');
-      }
-    } catch (err) {
-      console.error("Erro ao concluir atendimento:", err);
+  const openQueueCheckout = (activeEntry: any, action: 'complete' | 'completeAndNext') => {
+    const apt = activeEntry?.appointment;
+    if (!apt) {
+      toast.error('Agendamento não encontrado para este atendimento.');
+      return;
     }
+
+    const price = Number(apt.service?.price ?? 0);
+    setCheckoutCart([]);
+    setQueueCheckoutAction(action);
+    setCheckoutApt(apt);
+    setCheckoutForm({
+      paymentMethod: 'PIX',
+      finalPrice: price.toFixed(2).replace('.', ','),
+    });
+  };
+
+  const handleCompleteActive = () => {
+    if (!queueSession?.entries) return;
+    const activeEntry = queueSession.entries.find((e: any) => e.status === 'IN_PROGRESS');
+    if (!activeEntry) {
+      toast.info('Não há cliente em atendimento no momento.');
+      return;
+    }
+    openQueueCheckout(activeEntry, 'complete');
   };
 
   const handleSkipEntrySubmit = async (e: React.FormEvent) => {
@@ -1099,6 +1115,36 @@ export default function Dashboard() {
       }
     }
   }, [activeTab, selectedQueueProfessionalId, teamMembers]);
+
+  // Finalização automática ao fim do tempo do serviço (configurável no Salão)
+  useEffect(() => {
+    if (!salon?.queueAutoAdvance || activeTab !== 'queue' || !queueSession?.entries) return;
+
+    const activeEntry = queueSession.entries.find((e: any) => e.status === 'IN_PROGRESS');
+    if (!activeEntry) {
+      autoFinishTriggeredRef.current = null;
+      return;
+    }
+
+    if (autoFinishTriggeredRef.current === activeEntry.id || checkoutApt) return;
+
+    const durationMin = activeEntry.appointment?.service?.duration ?? 30;
+    const durationMs = durationMin * 60 * 1000;
+    const start = resolveInProgressStart(activeEntry);
+    if (!start) return;
+
+    const check = () => {
+      if (Date.now() - start >= durationMs) {
+        autoFinishTriggeredRef.current = activeEntry.id;
+        openQueueCheckout(activeEntry, 'complete');
+        toast.info('Tempo do serviço encerrado. Confirme o pagamento para finalizar.');
+      }
+    };
+
+    check();
+    const interval = window.setInterval(check, 1000);
+    return () => window.clearInterval(interval);
+  }, [salon?.queueAutoAdvance, activeTab, queueSession, checkoutApt]);
 
   // Efeito para WebSocket live subscription
   useEffect(() => {
@@ -2033,8 +2079,29 @@ export default function Dashboard() {
       if (res.ok) {
         setAppointments(appointments.map(apt => apt.id === checkoutApt.id ? { ...apt, status: 'COMPLETED' } : apt));
         toast.success('Pagamento registrado no caixa com sucesso!');
+
+        const action = queueCheckoutAction;
         setCheckoutApt(null);
-        setCheckoutCart([]); // Limpa o carrinho de checkout
+        setCheckoutCart([]);
+        setQueueCheckoutAction(null);
+        autoFinishTriggeredRef.current = null;
+
+        if (action === 'completeAndNext' && queueSession?.id) {
+          const startRes = await fetch(apiUrl(`/queue/${queueSession.id}/start`), {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (startRes.ok) {
+            fetchQueueSession(selectedQueueProfessionalId);
+            toast.success('Próximo cliente chamado!');
+          } else {
+            const startErr = await startRes.json();
+            toast.error(startErr.error || 'Pagamento ok, mas falha ao chamar o próximo cliente.');
+            fetchQueueSession(selectedQueueProfessionalId);
+          }
+        } else if (activeTab === 'queue' && selectedQueueProfessionalId) {
+          fetchQueueSession(selectedQueueProfessionalId);
+        }
       } else {
         const error = await res.json();
         toast.error(error.error || 'Erro ao finalizar agendamento');
@@ -3891,17 +3958,22 @@ export default function Dashboard() {
                       <div className="space-y-4">
                         {salonForm.queueMode && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                            <div className="flex items-center gap-3">
-                              <input 
-                                type="checkbox"
-                                id="queueAutoAdvance"
-                                checked={salonForm.queueAutoAdvance}
-                                onChange={e => setSalonForm({...salonForm, queueAutoAdvance: e.target.checked})}
-                                className="w-4 h-4 text-indigo-600 border-gray-300 dark:border-slate-600 rounded focus:ring-indigo-500 cursor-pointer"
-                              />
-                              <label htmlFor="queueAutoAdvance" className="text-sm font-medium text-gray-700 dark:text-slate-300 cursor-pointer select-none">
-                                Avanço automático da fila
-                              </label>
+                            <div className="sm:col-span-2 space-y-1">
+                              <div className="flex items-center gap-3">
+                                <input 
+                                  type="checkbox"
+                                  id="queueAutoAdvance"
+                                  checked={salonForm.queueAutoAdvance}
+                                  onChange={e => setSalonForm({...salonForm, queueAutoAdvance: e.target.checked})}
+                                  className="w-4 h-4 text-indigo-600 border-gray-300 dark:border-slate-600 rounded focus:ring-indigo-500 cursor-pointer"
+                                />
+                                <label htmlFor="queueAutoAdvance" className="text-sm font-medium text-gray-700 dark:text-slate-300 cursor-pointer select-none">
+                                  Finalizar automaticamente ao fim do tempo do serviço
+                                </label>
+                              </div>
+                              <p className="text-[11px] text-gray-500 dark:text-slate-400 ml-7">
+                                Quando ativo, abre o checkout ao terminar a duração do corte. Desativado = finalização manual pelo profissional.
+                              </p>
                             </div>
                             
                             <div className="flex items-center gap-3">
@@ -4183,7 +4255,13 @@ export default function Dashboard() {
                             <p className="text-xs font-semibold text-white/80 mt-1">{activeEntry.appointment?.service?.name || activeEntry.serviceName || 'Serviço'}</p>
                             
                             <div className="mt-8 bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 flex items-center justify-between">
-                              <span className="text-xs font-bold text-white/70">Tempo decorrido:</span>
+                              <div>
+                                <span className="text-xs font-bold text-white/70 block">Tempo decorrido:</span>
+                                <span className="text-[10px] text-white/50">
+                                  Duração prevista: {activeEntry.appointment?.service?.duration ?? 30} min
+                                  {salon?.queueAutoAdvance ? ' · finalização automática' : ' · finalização manual'}
+                                </span>
+                              </div>
                               <QueueActiveTimer
                                 entry={activeEntry}
                                 className="font-mono text-2xl font-bold tracking-wider text-white animate-pulse"
@@ -4195,14 +4273,14 @@ export default function Dashboard() {
                                 onClick={handleCompleteActive} 
                                 className="w-full bg-white hover:bg-slate-50 text-indigo-900 font-bold py-3 px-4 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 border border-white"
                               >
-                                <CheckCircle2 size={18} /> Concluir Atendimento
+                                <DollarSign size={18} /> Finalizar & Cobrar
                               </button>
 
                               <button 
                                 onClick={handleStartNext} 
                                 className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl border border-white/20 transition-all active:scale-95 flex items-center justify-center gap-2"
                               >
-                                <Play size={18} /> Concluir & Chamar Próximo
+                                <Play size={18} /> Cobrar & Chamar Próximo
                               </button>
 
                               <button 
@@ -4961,7 +5039,7 @@ export default function Dashboard() {
                   <p className="text-xs text-emerald-700 dark:text-emerald-500 font-medium">Checkout de Agendamento</p>
                 </div>
                 <button 
-                  onClick={() => { setCheckoutApt(null); setCheckoutCart([]); }} 
+                  onClick={() => { setCheckoutApt(null); setCheckoutCart([]); setQueueCheckoutAction(null); autoFinishTriggeredRef.current = null; }} 
                   className="text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300"
                 >
                   <X size={24} />
@@ -5105,7 +5183,7 @@ export default function Dashboard() {
                 <div className="mt-8 pt-4 flex justify-end gap-3 border-t border-gray-100 dark:border-slate-700">
                   <button 
                     type="button" 
-                    onClick={() => { setCheckoutApt(null); setCheckoutCart([]); }} 
+                    onClick={() => { setCheckoutApt(null); setCheckoutCart([]); setQueueCheckoutAction(null); autoFinishTriggeredRef.current = null; }} 
                     className="px-4 py-2 font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors text-sm"
                   >
                     Cancelar
