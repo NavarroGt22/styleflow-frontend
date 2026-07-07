@@ -21,8 +21,6 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
 
   const [tenant, setTenant] = useState<TenantBranding | null>(null);
   const [salonName, setSalonName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
@@ -70,6 +68,14 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
     fetchSalonInfo();
   }, [salonSlug]);
 
+  const formatPhoneInput = (value: string) => {
+    let v = value.replace(/\D/g, '');
+    if (v.length > 11) v = v.slice(0, 11);
+    if (v.length > 2) v = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+    if (v.length > 9) v = `${v.slice(0, 10)}-${v.slice(10)}`;
+    return v;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -77,19 +83,17 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
     setLoading(true);
 
     const isLogin = mode === 'login';
-    const endpoint = isLogin ? '/auth/login' : '/auth/register';
+    const endpoint = isLogin ? '/auth/client/login' : '/auth/client/register';
 
-    const payload: Record<string, unknown> = isLogin
-      ? { email, password }
-      : {
-          name,
-          email,
-          password,
-          role: 'CUSTOMER',
-          phone: phone.replace(/\D/g, ''),
-          ...(tenant?.id ? { tenantId: tenant.id } : {}),
-          ...(salonSlug ? { salonSlug } : {}),
-        };
+    const payload: Record<string, unknown> = {
+      phone: phone.replace(/\D/g, ''),
+      ...(tenant?.id ? { tenantId: tenant.id } : {}),
+      ...(salonSlug ? { salonSlug } : {}),
+    };
+
+    if (!isLogin) {
+      payload.name = name.trim();
+    }
 
     try {
       const response = await fetch(apiUrl(endpoint), {
@@ -104,33 +108,12 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
         throw new Error(parseApiError(data, 'Ocorreu um erro ao processar sua solicitação.'));
       }
 
-      if (isLogin) {
-        sessionStorage.setItem('client_token', data.token);
-        sessionStorage.setItem('client_refreshToken', data.refreshToken);
-        sessionStorage.setItem('client_user', JSON.stringify(data.user));
+      sessionStorage.setItem('client_token', data.token);
+      sessionStorage.setItem('client_refreshToken', data.refreshToken);
+      sessionStorage.setItem('client_user', JSON.stringify(data.user));
 
-        setSuccess('Login realizado com sucesso! Redirecionando...');
-        setTimeout(() => navigate(publicSalonPath), 1200);
-        return;
-      }
-
-      setSuccess('Conta criada com sucesso! Carregando painel...');
-
-      const loginRes = await fetch(apiUrl('/auth/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const loginData = await loginRes.json();
-
-      if (loginRes.ok) {
-        sessionStorage.setItem('client_token', loginData.token);
-        sessionStorage.setItem('client_refreshToken', loginData.refreshToken);
-        sessionStorage.setItem('client_user', JSON.stringify(loginData.user));
-        setTimeout(() => navigate(publicSalonPath), 1200);
-      } else {
-        setTimeout(() => navigate(loginPath), 1500);
-      }
+      setSuccess(isLogin ? 'Login realizado! Redirecionando...' : 'Conta criada! Redirecionando...');
+      setTimeout(() => navigate(publicSalonPath), 1200);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro inesperado.');
     } finally {
@@ -192,7 +175,7 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
           {mode === 'register' && (
             <div>
               <label className="block text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-1">
-                Seu Nome Completo
+                Seu Nome
               </label>
               <input
                 required
@@ -205,56 +188,25 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
             </div>
           )}
 
-          {mode === 'register' && (
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-1">
-                Telefone / WhatsApp
-              </label>
-              <input
-                required
-                type="text"
-                maxLength={15}
-                value={phone}
-                onChange={(e) => {
-                  let v = e.target.value.replace(/\D/g, '');
-                  if (v.length > 11) v = v.slice(0, 11);
-                  if (v.length > 2) v = `(${v.slice(0, 2)}) ${v.slice(2)}`;
-                  if (v.length > 9) v = `${v.slice(0, 10)}-${v.slice(10)}`;
-                  setPhone(v);
-                }}
-                className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                placeholder="(11) 99999-9999"
-              />
-            </div>
-          )}
-
           <div>
             <label className="block text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-1">
-              E-mail
+              Telefone / WhatsApp
             </label>
             <input
               required
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              inputMode="tel"
+              maxLength={15}
+              value={phone}
+              onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
               className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="cliente@exemplo.com"
+              placeholder="(11) 99999-9999"
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-1">
-              Senha {mode === 'register' && <span className="normal-case font-medium">(mín. 8 caracteres)</span>}
-            </label>
-            <input
-              required
-              type="password"
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="Sua senha secreta"
-            />
+            {mode === 'login' && (
+              <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1.5">
+                Use o mesmo número que cadastrou na barbearia.
+              </p>
+            )}
           </div>
 
           <button
@@ -268,7 +220,7 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
                 <span>Processando...</span>
               </>
             ) : (
-              <span>{mode === 'login' ? 'Acessar Salão' : 'Cadastrar e Entrar'}</span>
+              <span>{mode === 'login' ? 'Entrar' : 'Cadastrar e Entrar'}</span>
             )}
           </button>
         </form>
@@ -280,7 +232,7 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
               to={alternatePath}
               className="ml-1.5 text-indigo-600 dark:text-indigo-400 font-extrabold hover:underline"
             >
-              {mode === 'login' ? 'Crie sua conta' : 'Faça seu login'}
+              {mode === 'login' ? 'Crie sua conta' : 'Entrar com seu telefone'}
             </Link>
           </p>
         </div>

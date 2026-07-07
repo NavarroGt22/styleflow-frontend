@@ -3612,7 +3612,7 @@ export default function Dashboard() {
                         value={salonForm.faviconUrl}
                         onChange={(faviconUrl) => setSalonForm({ ...salonForm, faviconUrl })}
                         hint="Ícone pequeno que aparece na aba do navegador dos clientes."
-                        maxMb={1}
+                        maxMb={2}
                         accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico"
                         allowedLabel="ICO ou PNG"
                         previewClassName="object-contain p-2"
