@@ -299,6 +299,27 @@ export default function Dashboard() {
     secondaryColor: salon?.tenant?.secondaryColor || '',
   });
 
+  const tenantBrandIcon = React.useMemo(
+    () =>
+      salonForm.faviconUrl ||
+      salon?.tenant?.faviconUrl ||
+      salonForm.logoUrl ||
+      salon?.tenant?.logoUrl ||
+      '',
+    [salonForm.faviconUrl, salonForm.logoUrl, salon?.tenant?.faviconUrl, salon?.tenant?.logoUrl]
+  );
+  const hasTenantBranding = Boolean(tenantBrandIcon);
+
+  useEffect(() => {
+    let link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = tenantBrandIcon || '/favicon.svg';
+  }, [tenantBrandIcon]);
+
   const [testPhone, setTestPhone] = useState('');
   const [salonSaving, setSalonSaving] = useState(false);
 
@@ -804,6 +825,34 @@ export default function Dashboard() {
       fetchProducts();
     }
   }, [salon, activeTab, isOwner]);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem('token');
+    if (!token || !user?.id) return;
+
+    fetch(apiUrl('/auth/me'), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.user) return;
+        setUser((prev: any) => {
+          const updated = { ...prev, ...data.user };
+          sessionStorage.setItem('user', JSON.stringify(updated));
+          return updated;
+        });
+        if (data.user.professionalProfile?.salon) {
+          setSalon((prev: any) => {
+            const profSalon = data.user.professionalProfile.salon;
+            if (!prev?.id || prev.id === profSalon.id) {
+              return { ...prev, ...profSalon };
+            }
+            return prev;
+          });
+        }
+      })
+      .catch((err) => console.error('Erro ao atualizar sessão/plano:', err));
+  }, [user?.id]);
 
   // Busca as configurações completas do salão quando monta ou quando o salão ID é definido
   useEffect(() => {
@@ -1546,6 +1595,9 @@ export default function Dashboard() {
         setSalon(updatedSalon);
 
         const updatedUser = { ...user, salons: [updatedSalon] };
+        if (updatedSalon?.tenant) {
+          updatedUser.tenant = { ...(updatedUser.tenant || {}), ...updatedSalon.tenant };
+        }
         if (updatedUser.professionalProfile) {
           updatedUser.professionalProfile = {
             ...updatedUser.professionalProfile,
@@ -2121,14 +2173,28 @@ export default function Dashboard() {
       <header className="flex justify-between items-end mb-10 border-b border-gray-200 dark:border-slate-800 pb-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-xl text-white shadow-lg shadow-indigo-500/20 hover:scale-110 hover:rotate-12 transition-all duration-300">
-              <Scissors size={26} />
+            <div className={`flex items-center justify-center overflow-hidden rounded-xl shadow-lg transition-all duration-300 ${
+              hasTenantBranding
+                ? 'h-12 w-12 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700'
+                : 'p-2.5 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white shadow-indigo-500/20 hover:scale-110 hover:rotate-12'
+            }`}>
+              {hasTenantBranding ? (
+                <img
+                  src={tenantBrandIcon}
+                  alt={salon?.tenant?.customBrandName || salon?.tenant?.name || salon?.name || 'Logo'}
+                  className="h-full w-full object-contain p-1"
+                />
+              ) : (
+                <Scissors size={26} />
+              )}
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded-md">SaaS</span>
-                <span className="text-xs font-bold tracking-wider text-gray-400 dark:text-slate-500">STYLEFLOW</span>
-              </div>
+              {!hasTenantBranding && (
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded-md">SaaS</span>
+                  <span className="text-xs font-bold tracking-wider text-gray-400 dark:text-slate-500">STYLEFLOW</span>
+                </div>
+              )}
               <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white transition-colors leading-none mt-1">
                 {salon?.tenant?.customBrandName || salon?.tenant?.name || salon?.name || 'Meu Salão'}
               </h1>
