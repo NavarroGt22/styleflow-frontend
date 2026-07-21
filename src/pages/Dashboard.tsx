@@ -1882,12 +1882,21 @@ export default function Dashboard() {
   const handleDelete = async (id: string) => {
     if (!window.confirm("Deseja excluir este serviço?")) return;
     const token = sessionStorage.getItem('token');
-    const res = await fetch(apiUrl(`/services/${id}`), {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) {
-      setServices(services.filter(s => s.id !== id));
+    try {
+      const res = await fetch(apiUrl(`/services/${id}`), {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setServices(services.filter(s => s.id !== id));
+        toast.success('Serviço excluído com sucesso.');
+      } else {
+        const error = await res.json().catch(() => null);
+        toast.error(error?.error || 'Não foi possível excluir o serviço.');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro de conexão ao excluir o serviço.');
     }
   };
 

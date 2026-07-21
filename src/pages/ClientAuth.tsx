@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Scissors, ArrowLeft, Loader2, Sparkles } from 'lucide-react';
+import { Scissors, ArrowLeft, Loader2, Sparkles, MapPin } from 'lucide-react';
 import {
   getTenantBrandCss,
   isCustomDomainHost,
@@ -21,6 +21,7 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
 
   const [tenant, setTenant] = useState<TenantBranding | null>(null);
   const [salonName, setSalonName] = useState('');
+  const [salonAddress, setSalonAddress] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
@@ -60,6 +61,7 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
         const json = await res.json();
         if (json?.tenant) setTenant(json.tenant);
         if (json?.salon?.name) setSalonName(json.salon.name);
+        if (json?.salon?.address) setSalonAddress(json.salon.address);
       } catch (err) {
         console.error('Erro ao carregar dados do salão:', err);
       }
@@ -158,6 +160,12 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
           <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-1.5 text-center">
             {salonName || salonSlug || brandName}
           </p>
+          {salonAddress && (
+            <p className="mt-2 inline-flex items-center justify-center gap-1.5 text-xs text-gray-500 dark:text-slate-400 text-center max-w-sm">
+              <MapPin size={12} className="shrink-0" />
+              <span>{salonAddress}</span>
+            </p>
+          )}
         </div>
 
         {error && (

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from '../lib/toast';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Scissors, Clock, Users, AlertCircle, Instagram, Calendar, Check, CheckCircle, Sun, Moon } from 'lucide-react';
+import { Scissors, Clock, Users, AlertCircle, Instagram, Calendar, Check, CheckCircle, Sun, Moon, MapPin } from 'lucide-react';
 import { secureFetch as fetch } from '../utils/api';
 import { useTenantBranding, type TenantBranding } from '../hooks/useTenant';
 import { apiUrl, wsUrl } from '../config/api';
@@ -675,6 +675,12 @@ export default function PublicQueue() {
             <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white transition-colors">
               {salon.name}
             </h1>
+            {salon.address && (
+              <p className="mt-2 inline-flex items-center justify-center gap-1.5 text-sm text-gray-500 dark:text-slate-400 max-w-md mx-auto">
+                <MapPin size={14} className="shrink-0 text-indigo-500" />
+                <span>{salon.address}</span>
+              </p>
+            )}
             <p className="text-sm text-gray-550 dark:text-slate-400 mt-2">
               Escolha seu serviço, profissional e reserve seu horário em poucos cliques.
             </p>
@@ -967,6 +973,12 @@ export default function PublicQueue() {
                 </span>
 
                 <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">{salon.name}</h2>
+                {salon.address && (
+                  <p className="mb-3 inline-flex items-center justify-center gap-1.5 text-sm text-gray-500 dark:text-slate-400">
+                    <MapPin size={14} className="shrink-0 text-indigo-500" />
+                    <span>{salon.address}</span>
+                  </p>
+                )}
                 <p className="text-gray-500 dark:text-slate-400 text-sm leading-relaxed mb-6">
                   Este estabelecimento atende exclusivamente através de agendamento de horário tradicional (Agenda Comercial).
                 </p>
@@ -1137,6 +1149,12 @@ export default function PublicQueue() {
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white transition-colors">
             {salon.name}
           </h1>
+          {salon.address && (
+            <p className="mt-2 inline-flex items-center justify-center gap-1.5 text-sm text-gray-500 dark:text-slate-400 max-w-md mx-auto">
+              <MapPin size={14} className="shrink-0 text-indigo-500" />
+              <span>{salon.address}</span>
+            </p>
+          )}
           <p className="text-sm text-gray-555 dark:text-slate-400 mt-2">
             Acompanhe a fila de hoje em tempo real. Os tempos são estimados de forma inteligente.
           </p>
