@@ -245,7 +245,9 @@ export default function Dashboard() {
   });
   const tenantLevel = ((user?.tenant?.level ?? salon?.tenant?.level ?? 'FREE') as TenantLevel);
   const plan = React.useMemo(() => getTenantFeatures(tenantLevel), [tenantLevel]);
-  const hiredStaffCount = teamMembers.filter((m: any) => m.userId !== salon?.ownerId).length;
+  const hiredStaffCount = teamMembers.filter(
+    (m: any) => !m.isOwnerBarber && m.userId !== salon?.ownerId && m.userId !== user?.id
+  ).length;
   const canAddStaff = plan.tabs.team && hiredStaffCount < plan.maxStaff;
 
   const activeQueueMode = isOwner
@@ -1504,6 +1506,28 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleEnsureOwnerAsBarber = async () => {
+    if (!salon?.id) return;
+    const token = sessionStorage.getItem('token');
+    try {
+      const res = await fetch(apiUrl('/professionals/ensure-owner-barber'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ salonId: salon.id }),
+      });
+      if (res.ok) {
+        toast.success('Perfil de barbeiro do dono ativado. Seus atendimentos vão para o lucro (sem comissão).');
+        fetchTeamMembers();
+      } else {
+        const error = await res.json().catch(() => null);
+        toast.error(error?.error || 'Não foi possível ativar seu perfil de barbeiro.');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro de conexão ao ativar perfil de barbeiro.');
     }
   };
 
@@ -3203,11 +3227,11 @@ export default function Dashboard() {
       {/* ABA DE EQUIPE */}
       {activeTab === 'team' && isOwner && (
         <div className="animate-in slide-in-from-bottom-4 duration-500">
-          <div className="mb-8 mt-4 flex justify-between items-end">
+          <div className="mb-8 mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Minha Equipe</h1>
               <p className="text-gray-500 dark:text-gray-400 mt-1">
-                Gerencie seus barbeiros, funcionários e comissões.
+                Gerencie barbeiros, funcionários e comissões. Dono que também corta não recebe comissão de si mesmo.
                 {plan.maxStaff > 0 && (
                   <span className="block text-xs mt-1 text-indigo-600 dark:text-indigo-400 font-semibold">
                     Plano {TENANT_LEVEL_LABELS[tenantLevel]}: {hiredStaffCount}/{plan.maxStaff} funcionários
@@ -3215,13 +3239,24 @@ export default function Dashboard() {
                 )}
               </p>
             </div>
-            {canAddStaff ? (
-            <button onClick={() => setIsTeamModalOpen(true)} className="btn-primary shadow-lg shadow-indigo-500/30 bg-indigo-600 hover:bg-indigo-700 border-indigo-600">
-              <Plus size={20} /> Novo Profissional
-            </button>
-            ) : plan.tabs.team && (
-              <span className="text-xs text-gray-500 dark:text-slate-400 font-medium">{TENANT_LEVEL_UPGRADE_HINT[tenantLevel]}</span>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {isOwner && salon?.id && !teamMembers.some((m: any) => m.isOwnerBarber || m.userId === user?.id) && (
+                <button
+                  type="button"
+                  onClick={handleEnsureOwnerAsBarber}
+                  className="px-4 py-2 rounded-xl border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 text-sm font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                >
+                  Sou dono e barbeiro
+                </button>
+              )}
+              {canAddStaff ? (
+                <button onClick={() => setIsTeamModalOpen(true)} className="btn-primary shadow-lg shadow-indigo-500/30 bg-indigo-600 hover:bg-indigo-700 border-indigo-600">
+                  <Plus size={20} /> Novo Profissional
+                </button>
+              ) : plan.tabs.team && (
+                <span className="text-xs text-gray-500 dark:text-slate-400 font-medium self-center">{TENANT_LEVEL_UPGRADE_HINT[tenantLevel]}</span>
+              )}
+            </div>
           </div>
 
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 overflow-hidden shadow-sm">
@@ -3242,7 +3277,14 @@ export default function Dashboard() {
                   teamMembers.map((member) => (
                     <tr key={member.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="p-4 font-bold text-gray-900 dark:text-white">
-                        {member.user?.name} {member.userId === salon.ownerId && '(Dono)'}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{member.user?.name}</span>
+                          {(member.isOwnerBarber || member.userId === user?.id || member.userId === salon?.ownerId) && (
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              Dono / Barbeiro
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs font-normal text-gray-500 dark:text-gray-400 mt-0.5">
                           ⏰ {member.workStart || '09:00'} - {member.workEnd || '18:00'}
                         </div>
@@ -3251,7 +3293,11 @@ export default function Dashboard() {
                         <div className="text-sm text-gray-900 dark:text-white">{member.user?.email}</div>
                         <div className="text-xs text-gray-500">{formatPhoneNumber(member.user?.phone)}</div>
                       </td>
-                      <td className="p-4 font-bold text-indigo-600 dark:text-indigo-400">{member.commissionRate}%</td>
+                      <td className="p-4 font-bold text-indigo-600 dark:text-indigo-400">
+                        {(member.isOwnerBarber || member.userId === user?.id || member.userId === salon?.ownerId)
+                          ? '0% (lucro da casa)'
+                          : `${member.commissionRate}%`}
+                      </td>
                       <td className="p-4">
                         {member.isActive ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
