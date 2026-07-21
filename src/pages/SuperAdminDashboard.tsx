@@ -12,6 +12,8 @@ import {
   Users,
   ExternalLink,
   Lock,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { apiUrl } from '../config/api';
 import { BASE_DOMAIN } from '../config/env';
@@ -37,6 +39,7 @@ type TenantRow = {
   clientDomain: string | null;
   adminDomain: string | null;
   isActive: boolean;
+  deletedAt: string | null;
   salonsCount: number;
   primarySalonSlug: string | null;
   owner: { name: string; email: string } | null;
@@ -69,6 +72,7 @@ type DashboardData = {
     totalPaidAll: number;
     totalBalance: number;
     lockedTenants?: number;
+    deletedTenants?: number;
   };
   tenants: TenantRow[];
   periodMonth: string;
@@ -147,6 +151,7 @@ export default function SuperAdminDashboard() {
   const [planMonthlyFee, setPlanMonthlyFee] = useState('');
   const [planDueDate, setPlanDueDate] = useState(defaultDueDateInput());
   const [savingPlan, setSavingPlan] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const token = sessionStorage.getItem('token');
   const user = (() => {
@@ -300,6 +305,44 @@ export default function SuperAdminDashboard() {
       body: JSON.stringify({ isActive: !tenant.isActive }),
     });
     if (res.ok) loadDashboard();
+  };
+
+  const handleSoftDelete = async (tenant: TenantRow) => {
+    if (
+      !window.confirm(
+        `Excluir "${tenant.name}"?\n\nSoft delete: some da lista, mas os dados ficam no banco (você pode restaurar ou apagar no Neon depois).`
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(apiUrl(`/admin/tenants/${tenant.id}`), {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Erro ao excluir');
+      toast.info('Barbearia excluída (soft delete).');
+      await loadDashboard();
+    } catch (err: any) {
+      toast.info(err.message);
+    }
+  };
+
+  const handleRestore = async (tenant: TenantRow) => {
+    try {
+      const res = await fetch(apiUrl(`/admin/tenants/${tenant.id}/restore`), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Erro ao restaurar');
+      toast.info('Barbearia restaurada.');
+      await loadDashboard();
+    } catch (err: any) {
+      toast.info(err.message);
+    }
   };
 
   const openPlanModal = (tenant: TenantRow) => {
@@ -461,9 +504,22 @@ export default function SuperAdminDashboard() {
             )}
 
             <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-900">
-              <div className="px-5 py-4 border-b border-slate-800">
-                <h2 className="font-bold">Barbearias cadastradas</h2>
-                <p className="text-xs text-slate-500">Planos, vencimento e cobrança da plataforma</p>
+              <div className="px-5 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-bold">Barbearias cadastradas</h2>
+                  <p className="text-xs text-slate-500">
+                    Planos, vencimento e cobrança · {data.summary.deletedTenants ?? 0} excluída(s) (soft delete)
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showDeleted}
+                    onChange={(e) => setShowDeleted(e.target.checked)}
+                    className="rounded border-slate-600"
+                  />
+                  Ver excluídas
+                </label>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -481,16 +537,23 @@ export default function SuperAdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.tenants.map((t) => (
-                      <tr key={t.id} className="border-b border-slate-800/80 hover:bg-slate-800/30">
+                    {data.tenants
+                      .filter((t) => (showDeleted ? Boolean(t.deletedAt) : !t.deletedAt))
+                      .map((t) => (
+                      <tr key={t.id} className={`border-b border-slate-800/80 hover:bg-slate-800/30 ${t.deletedAt ? 'opacity-70' : ''}`}>
                         <td className="px-5 py-4">
                           <p className="font-semibold">{t.name}</p>
-                          {!t.isActive && (
+                          {t.deletedAt && (
+                            <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-600/40 text-slate-300">
+                              Excluída
+                            </span>
+                          )}
+                          {!t.isActive && !t.deletedAt && (
                             <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">
                               Inativa
                             </span>
                           )}
-                          {t.billing.adminLocked && (
+                          {t.billing.adminLocked && !t.deletedAt && (
                             <span className="inline-block mt-1 ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">
                               Painel travado
                             </span>
@@ -534,36 +597,55 @@ export default function SuperAdminDashboard() {
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex flex-col gap-1">
-                            {t.monthlyFee > 0 && t.billing.currentStatus !== 'PAID' && (
+                            {t.deletedAt ? (
                               <button
-                                onClick={() => handleConfirmPaid(t)}
-                                className="text-xs px-2 py-1 rounded bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/40 font-bold"
+                                type="button"
+                                onClick={() => handleRestore(t)}
+                                className="text-xs px-2 py-1 rounded bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 font-bold inline-flex items-center justify-center gap-1"
                               >
-                                Marcar como pago
+                                <RotateCcw size={12} /> Restaurar
                               </button>
+                            ) : (
+                              <>
+                                {t.monthlyFee > 0 && t.billing.currentStatus !== 'PAID' && (
+                                  <button
+                                    onClick={() => handleConfirmPaid(t)}
+                                    className="text-xs px-2 py-1 rounded bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/40 font-bold"
+                                  >
+                                    Marcar como pago
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setPaymentModal(t);
+                                    setPaymentAmount(String(Math.max(0, t.billing.currentDue - t.billing.currentPaid) || t.monthlyFee));
+                                    setPaymentDueDate(t.billing.dueDate || defaultDueDateInput());
+                                  }}
+                                  className="text-xs px-2 py-1 rounded bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30"
+                                >
+                                  Registrar pagamento
+                                </button>
+                                <button
+                                  onClick={() => openPlanModal(t)}
+                                  className="text-xs px-2 py-1 rounded bg-violet-600/20 text-violet-400 hover:bg-violet-600/30"
+                                >
+                                  Alterar plano
+                                </button>
+                                <button
+                                  onClick={() => toggleActive(t)}
+                                  className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600"
+                                >
+                                  {t.isActive ? 'Desativar' : 'Ativar'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSoftDelete(t)}
+                                  className="text-xs px-2 py-1 rounded bg-red-600/20 text-red-400 hover:bg-red-600/30 inline-flex items-center justify-center gap-1"
+                                >
+                                  <Trash2 size={12} /> Excluir
+                                </button>
+                              </>
                             )}
-                            <button
-                              onClick={() => {
-                                setPaymentModal(t);
-                                setPaymentAmount(String(Math.max(0, t.billing.currentDue - t.billing.currentPaid) || t.monthlyFee));
-                                setPaymentDueDate(t.billing.dueDate || defaultDueDateInput());
-                              }}
-                              className="text-xs px-2 py-1 rounded bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30"
-                            >
-                              Registrar pagamento
-                            </button>
-                            <button
-                              onClick={() => openPlanModal(t)}
-                              className="text-xs px-2 py-1 rounded bg-violet-600/20 text-violet-400 hover:bg-violet-600/30"
-                            >
-                              Alterar plano
-                            </button>
-                            <button
-                              onClick={() => toggleActive(t)}
-                              className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600"
-                            >
-                              {t.isActive ? 'Desativar' : 'Ativar'}
-                            </button>
                           </div>
                         </td>
                       </tr>
