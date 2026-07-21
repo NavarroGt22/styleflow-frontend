@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from '../lib/toast';
-import { Scissors, Clock, DollarSign, Plus, Edit2, Trash2, Search, CheckCircle2, X, LogOut, Store, Download, Lock, Package, ShoppingCart, AlertTriangle, Instagram, Play, Copy, ArrowUp, ArrowDown, AlertCircle, Calendar, Users, Sparkles, Cpu, Send, MessageSquare, Bot, Palette } from 'lucide-react';
+import { Scissors, Clock, DollarSign, Plus, Edit2, Trash2, Search, CheckCircle2, X, LogOut, Store, Download, Lock, Package, ShoppingCart, AlertTriangle, Instagram, Play, Copy, ArrowUp, ArrowDown, AlertCircle, Calendar, Users, Sparkles, Cpu, Send, MessageSquare, Bot, Palette, Moon, Sun } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { secureFetch as fetch } from '../utils/api';
 import { getClientPublicUrl } from '../config/dev-ports';
@@ -132,7 +132,7 @@ export default function Dashboard() {
     return `${year}-${month}-${day}`;
   }, []);
 
-  const [isDark] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
   
   const [user, setUser] = useState(() => {
     try {
@@ -734,14 +734,23 @@ export default function Dashboard() {
       fetch(apiUrl(`/financials/salon/${salon.id}`), {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      .then(res => {
-        if (!res.ok) throw new Error("Erro na API");
+      .then(async (res) => {
+        if (!res.ok) {
+          let detail = '';
+          try {
+            const body = await res.json();
+            detail = body?.error || body?.message || '';
+          } catch {
+            /* ignore */
+          }
+          throw new Error(detail || `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then(data => setFinancials(data))
       .catch(err => {
         console.error("Erro ao buscar financeiro:", err);
-        setFinancials('error'); // Mostra mensagem de erro
+        setFinancials({ __error: true, message: err?.message || 'Erro na API' });
       });
     }
   };
@@ -2268,7 +2277,16 @@ export default function Dashboard() {
           </p>
         </div>
         
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+          <button
+            type="button"
+            onClick={() => setIsDark((prev) => !prev)}
+            className="p-2 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+            title={isDark ? 'Tema claro' : 'Tema escuro'}
+          >
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+
           <button 
             onClick={() => setIsChangePasswordModalOpen(true)}
             className="p-2 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -2766,10 +2784,15 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {financials === 'error' ? (
+          {financials?.__error ? (
             <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-6 rounded-xl text-center font-medium border border-red-200 dark:border-red-800">
-              Ocorreu um erro de comunicação com o servidor. O backend precisa ser reiniciado para aplicar as mudanças do banco de dados.<br/>
-              Dê um <kbd className="bg-red-100 dark:bg-red-900 px-2 rounded">Ctrl + C</kbd> no terminal do backend e rode <kbd className="bg-red-100 dark:bg-red-900 px-2 rounded">npm run dev</kbd> novamente.
+              Não foi possível carregar o financeiro.
+              <p className="mt-2 text-sm font-normal opacity-90">
+                {financials.message || 'Erro de comunicação com a API.'}
+              </p>
+              <p className="mt-3 text-xs font-normal text-red-500/80 dark:text-red-300/80">
+                O Railway está no ar — confira no navegador (F12 → Rede) a chamada <code className="px-1 rounded bg-red-100 dark:bg-red-900">/financials/salon/...</code> (401 = sessão expirada, 403 = sem permissão de dono).
+              </p>
             </div>
           ) : !financials ? (
             <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>
