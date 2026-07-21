@@ -71,11 +71,19 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
   }, [salonSlug]);
 
   const formatPhoneInput = (value: string) => {
-    let v = value.replace(/\D/g, '');
-    if (v.length > 11) v = v.slice(0, 11);
-    if (v.length > 2) v = `(${v.slice(0, 2)}) ${v.slice(2)}`;
-    if (v.length > 9) v = `${v.slice(0, 10)}-${v.slice(10)}`;
-    return v;
+    const digits = value.replace(/\D/g, '').slice(0, 11);
+    if (digits.length === 0) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    // Até 7 dígitos: (71) 98884 — sem traço, para conseguir apagar normalmente
+    if (digits.length <= 7) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    }
+    // Celular 11 dígitos: (71) 98884-1234
+    if (digits.length === 11) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+    }
+    // 8 a 10 dígitos (fixando ou fixo): (71) 9888-4123
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
