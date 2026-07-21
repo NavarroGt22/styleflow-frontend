@@ -1509,28 +1509,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleEnsureOwnerAsBarber = async () => {
-    if (!salon?.id) return;
-    const token = sessionStorage.getItem('token');
-    try {
-      const res = await fetch(apiUrl('/professionals/ensure-owner-barber'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ salonId: salon.id }),
-      });
-      if (res.ok) {
-        toast.success('Perfil de barbeiro do dono ativado. Seus atendimentos vão para o lucro (sem comissão).');
-        fetchTeamMembers();
-      } else {
-        const error = await res.json().catch(() => null);
-        toast.error(error?.error || 'Não foi possível ativar seu perfil de barbeiro.');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Erro de conexão ao ativar perfil de barbeiro.');
-    }
-  };
-
   const handleEditProfessionalClick = (member: any) => {
     setEditingProfessional(member);
     setEditProfessionalForm({
@@ -3231,7 +3209,7 @@ export default function Dashboard() {
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Minha Equipe</h1>
               <p className="text-gray-500 dark:text-gray-400 mt-1">
-                Gerencie barbeiros, funcionários e comissões. Dono que também corta não recebe comissão de si mesmo.
+                Gerencie barbeiros, funcionários e comissões. O e-mail do dono (Super Admin) já entra como chefe — se ele cortar, não paga comissão.
                 {plan.maxStaff > 0 && (
                   <span className="block text-xs mt-1 text-indigo-600 dark:text-indigo-400 font-semibold">
                     Plano {TENANT_LEVEL_LABELS[tenantLevel]}: {hiredStaffCount}/{plan.maxStaff} funcionários
@@ -3240,15 +3218,6 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {isOwner && salon?.id && !teamMembers.some((m: any) => m.isOwnerBarber || m.userId === user?.id) && (
-                <button
-                  type="button"
-                  onClick={handleEnsureOwnerAsBarber}
-                  className="px-4 py-2 rounded-xl border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 text-sm font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
-                >
-                  Sou dono e barbeiro
-                </button>
-              )}
               {canAddStaff ? (
                 <button onClick={() => setIsTeamModalOpen(true)} className="btn-primary shadow-lg shadow-indigo-500/30 bg-indigo-600 hover:bg-indigo-700 border-indigo-600">
                   <Plus size={20} /> Novo Profissional
