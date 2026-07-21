@@ -2186,6 +2186,47 @@ export default function Dashboard() {
 
   const filteredServices = services.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  const billingLocked =
+    (user?.role === 'OWNER' || user?.role === 'PROFESSIONAL') && Boolean(user?.tenant?.adminLocked);
+
+  if (billingLocked) {
+    const dueLabel = user?.tenant?.billingDueDate
+      ? (() => {
+          const [y, m, d] = String(user.tenant.billingDueDate).slice(0, 10).split('-');
+          return `${d}/${m}/${y}`;
+        })()
+      : null;
+
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100 dark:bg-slate-950">
+        <div className="max-w-md w-full text-center space-y-4 rounded-2xl border border-red-200 dark:border-red-900/50 bg-white dark:bg-slate-900 p-8 shadow-lg">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center">
+            <Lock size={28} />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Painel temporariamente bloqueado</h1>
+          <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed">
+            O pagamento da plataforma StyleFlow está em atraso
+            {dueLabel ? ` (vencimento em ${dueLabel})` : ''}.
+            Assim que o pagamento for confirmado no Super Admin, o acesso será liberado automaticamente.
+          </p>
+          <p className="text-xs text-gray-500 dark:text-slate-500">
+            Entre em contato com o suporte StyleFlow se precisar de ajuda.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              sessionStorage.clear();
+              navigate('/login');
+            }}
+            className="w-full py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-bold"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-8 max-w-6xl mx-auto transition-colors duration-300">
       

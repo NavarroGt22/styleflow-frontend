@@ -3,6 +3,7 @@ import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
+  Calendar,
   DollarSign,
   LogOut,
   Plus,
@@ -10,6 +11,7 @@ import {
   Shield,
   Users,
   ExternalLink,
+  Lock,
 } from 'lucide-react';
 import { apiUrl } from '../config/api';
 import { BASE_DOMAIN } from '../config/env';
@@ -42,10 +44,21 @@ type TenantRow = {
     currentDue: number;
     currentPaid: number;
     currentStatus: string;
+    dueDate: string | null;
+    adminLocked: boolean;
     totalDue: number;
     totalPaid: number;
     balance: number;
   };
+};
+
+type UpcomingDue = {
+  tenantId: string;
+  name: string;
+  dueDate: string;
+  status: string;
+  balance: number;
+  adminLocked: boolean;
 };
 
 type DashboardData = {
@@ -55,10 +68,19 @@ type DashboardData = {
     totalDueAll: number;
     totalPaidAll: number;
     totalBalance: number;
+    lockedTenants?: number;
   };
   tenants: TenantRow[];
   periodMonth: string;
+  upcomingDue?: UpcomingDue[];
 };
+
+function defaultDueDateInput() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-05`;
+}
 
 const emptyForm = {
   name: '',
@@ -68,6 +90,7 @@ const emptyForm = {
   adminDomain: '',
   level: 'BASIC' as TenantLevel,
   monthlyFee: '',
+  dueDate: defaultDueDateInput(),
   ownerName: '',
   ownerEmail: '',
   ownerPassword: '',
@@ -83,6 +106,29 @@ function formatMoney(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function formatDateBr(iso: string | null | undefined) {
+  if (!iso) return '—';
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
+}
+
+function billingStatusBadge(status: string, locked?: boolean) {
+  if (locked || status === 'OVERDUE') {
+    return 'bg-red-500/20 text-red-400';
+  }
+  if (status === 'PAID') return 'bg-emerald-500/20 text-emerald-400';
+  if (status === 'PARTIAL') return 'bg-amber-500/20 text-amber-400';
+  return 'bg-slate-700 text-slate-300';
+}
+
+function billingStatusLabel(status: string, locked?: boolean) {
+  if (locked || status === 'OVERDUE') return 'ATRASADO';
+  if (status === 'PAID') return 'PAGO';
+  if (status === 'PARTIAL') return 'PARCIAL';
+  return 'PENDENTE';
+}
+
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
@@ -95,9 +141,11 @@ export default function SuperAdminDashboard() {
   const [paymentModal, setPaymentModal] = useState<TenantRow | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [paymentDueDate, setPaymentDueDate] = useState(defaultDueDateInput());
   const [planModal, setPlanModal] = useState<TenantRow | null>(null);
   const [planLevel, setPlanLevel] = useState<TenantLevel>('BASIC');
   const [planMonthlyFee, setPlanMonthlyFee] = useState('');
+  const [planDueDate, setPlanDueDate] = useState(defaultDueDateInput());
   const [savingPlan, setSavingPlan] = useState(false);
 
   const token = sessionStorage.getItem('token');
@@ -172,6 +220,7 @@ export default function SuperAdminDashboard() {
         clientDomain: form.clientDomain || null,
         adminDomain: form.adminDomain || null,
         monthlyFee: form.monthlyFee ? Number(form.monthlyFee) : undefined,
+        dueDate: form.dueDate || undefined,
         copyFromTenantId: form.copyFromTenantId || undefined,
         salonSlug: form.salonSlug || form.slug,
         salonPhone: form.salonPhone.replace(/\D/g, ''),
@@ -207,7 +256,11 @@ export default function SuperAdminDashboard() {
       const res = await fetch(apiUrl(`/admin/tenants/${paymentModal.id}/payments`), {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ amountPaid: amount, notes: paymentNotes || undefined }),
+        body: JSON.stringify({
+          amountPaid: amount,
+          notes: paymentNotes || undefined,
+          dueDate: paymentDueDate || undefined,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Erro ao registrar pagamento');
@@ -215,6 +268,25 @@ export default function SuperAdminDashboard() {
       setPaymentModal(null);
       setPaymentAmount('');
       setPaymentNotes('');
+      await loadDashboard();
+    } catch (err: any) {
+      toast.info(err.message);
+    }
+  };
+
+  const handleConfirmPaid = async (tenant: TenantRow) => {
+    try {
+      const res = await fetch(apiUrl(`/admin/tenants/${tenant.id}/confirm-payment`), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          dueDate: tenant.billing.dueDate || undefined,
+          notes: 'Confirmado como pago no Super Admin',
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erro ao confirmar pagamento');
+      toast.info('Pagamento confirmado — painel liberado.');
       await loadDashboard();
     } catch (err: any) {
       toast.info(err.message);
@@ -234,6 +306,7 @@ export default function SuperAdminDashboard() {
     setPlanModal(tenant);
     setPlanLevel(tenant.level as TenantLevel);
     setPlanMonthlyFee(String(tenant.monthlyFee));
+    setPlanDueDate(tenant.billing.dueDate || defaultDueDateInput());
   };
 
   const handleSavePlan = async (e: React.FormEvent) => {
@@ -247,6 +320,7 @@ export default function SuperAdminDashboard() {
         body: JSON.stringify({
           level: planLevel,
           monthlyFee: Number(planMonthlyFee.replace(',', '.')),
+          dueDate: planDueDate || undefined,
         }),
       });
       const json = await res.json();
@@ -307,7 +381,7 @@ export default function SuperAdminDashboard() {
 
         {data && (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
                 <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase mb-2">
                   <Building2 size={14} /> Barbearias
@@ -335,12 +409,61 @@ export default function SuperAdminDashboard() {
                 <p className="text-3xl font-black">{formatMoney(data.summary.totalDueAll)}</p>
                 <p className="text-xs text-slate-500 mt-1">valor total contratado</p>
               </div>
+              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+                <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase mb-2">
+                  <Lock size={14} /> Painéis bloqueados
+                </div>
+                <p className="text-3xl font-black text-red-400">{data.summary.lockedTenants ?? 0}</p>
+                <p className="text-xs text-slate-500 mt-1">após vencimento sem pagamento</p>
+              </div>
             </div>
+
+            {(data.upcomingDue?.length ?? 0) > 0 && (
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar size={18} className="text-indigo-400" />
+                  <div>
+                    <h2 className="font-bold">Próximos vencimentos</h2>
+                    <p className="text-xs text-slate-500">No dia seguinte ao vencimento, sem marcar pago, o painel do dono trava</p>
+                  </div>
+                </div>
+                <ul className="space-y-2">
+                  {data.upcomingDue!.map((item) => (
+                    <li
+                      key={item.tenantId}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-800"
+                    >
+                      <div>
+                        <p className="font-medium text-sm">{item.name}</p>
+                        <p className="text-xs text-slate-500">
+                          Vence {formatDateBr(item.dueDate)} · {formatMoney(item.balance)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${billingStatusBadge(item.status, item.adminLocked)}`}>
+                          {billingStatusLabel(item.status, item.adminLocked)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const t = data.tenants.find((x) => x.id === item.tenantId);
+                            if (t) handleConfirmPaid(t);
+                          }}
+                          className="text-xs px-2 py-1 rounded bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30"
+                        >
+                          Marcar pago
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-900">
               <div className="px-5 py-4 border-b border-slate-800">
                 <h2 className="font-bold">Barbearias cadastradas</h2>
-                <p className="text-xs text-slate-500">Planos, domínios e cobrança da plataforma</p>
+                <p className="text-xs text-slate-500">Planos, vencimento e cobrança da plataforma</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -349,8 +472,9 @@ export default function SuperAdminDashboard() {
                       <th className="px-5 py-3 font-medium">Barbearia</th>
                       <th className="px-5 py-3 font-medium">Plano</th>
                       <th className="px-5 py-3 font-medium">Mensal</th>
+                      <th className="px-5 py-3 font-medium">Vencimento</th>
+                      <th className="px-5 py-3 font-medium">Status</th>
                       <th className="px-5 py-3 font-medium">Mês atual</th>
-                      <th className="px-5 py-3 font-medium">Total pago</th>
                       <th className="px-5 py-3 font-medium">Saldo</th>
                       <th className="px-5 py-3 font-medium">Links</th>
                       <th className="px-5 py-3 font-medium">Ações</th>
@@ -366,6 +490,11 @@ export default function SuperAdminDashboard() {
                               Inativa
                             </span>
                           )}
+                          {t.billing.adminLocked && (
+                            <span className="inline-block mt-1 ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">
+                              Painel travado
+                            </span>
+                          )}
                           <p className="text-xs text-slate-500">{t.owner?.email}</p>
                           <p className="text-xs text-slate-600">{t.salonsCount} unidade(s)</p>
                         </td>
@@ -375,12 +504,17 @@ export default function SuperAdminDashboard() {
                           </span>
                         </td>
                         <td className="px-5 py-4">{formatMoney(t.monthlyFee)}</td>
+                        <td className="px-5 py-4 whitespace-nowrap">{formatDateBr(t.billing.dueDate)}</td>
+                        <td className="px-5 py-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${billingStatusBadge(t.billing.currentStatus, t.billing.adminLocked)}`}>
+                            {billingStatusLabel(t.billing.currentStatus, t.billing.adminLocked)}
+                          </span>
+                        </td>
                         <td className="px-5 py-4">
                           <span className="text-amber-400">{formatMoney(t.billing.currentDue)}</span>
                           <span className="text-slate-600 mx-1">/</span>
                           <span className="text-emerald-400">{formatMoney(t.billing.currentPaid)}</span>
                         </td>
-                        <td className="px-5 py-4 text-emerald-400">{formatMoney(t.billing.totalPaid)}</td>
                         <td className="px-5 py-4 text-amber-400">
                           {t.isActive ? formatMoney(t.billing.balance) : <span className="text-slate-600">—</span>}
                         </td>
@@ -400,8 +534,20 @@ export default function SuperAdminDashboard() {
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex flex-col gap-1">
+                            {t.monthlyFee > 0 && t.billing.currentStatus !== 'PAID' && (
+                              <button
+                                onClick={() => handleConfirmPaid(t)}
+                                className="text-xs px-2 py-1 rounded bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/40 font-bold"
+                              >
+                                Marcar como pago
+                              </button>
+                            )}
                             <button
-                              onClick={() => { setPaymentModal(t); setPaymentAmount(String(t.billing.currentDue - t.billing.currentPaid || t.monthlyFee)); }}
+                              onClick={() => {
+                                setPaymentModal(t);
+                                setPaymentAmount(String(Math.max(0, t.billing.currentDue - t.billing.currentPaid) || t.monthlyFee));
+                                setPaymentDueDate(t.billing.dueDate || defaultDueDateInput());
+                              }}
                               className="text-xs px-2 py-1 rounded bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30"
                             >
                               Registrar pagamento
@@ -499,6 +645,16 @@ export default function SuperAdminDashboard() {
                 <label className="text-xs text-slate-400">Mensalidade (R$)</label>
                 <input value={form.monthlyFee} onChange={(e) => setForm({ ...form, monthlyFee: e.target.value })} className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
               </div>
+              <div>
+                <label className="text-xs text-slate-400">Vencimento do 1º pagamento</label>
+                <input
+                  type="date"
+                  value={form.dueDate}
+                  onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">No dia seguinte, sem marcar pago, o painel do dono trava.</p>
+              </div>
 
               <div className="md:col-span-2 border-t border-slate-800 pt-4 mt-2">
                 <p className="text-xs font-bold text-slate-500 uppercase mb-3">Dono (OWNER)</p>
@@ -581,6 +737,15 @@ export default function SuperAdminDashboard() {
                 />
                 <p className="text-[10px] text-slate-500 mt-1">Você pode ajustar o valor manualmente (desconto, promoção, etc.).</p>
               </div>
+              <div>
+                <label className="text-xs text-slate-400">Vencimento (mês atual)</label>
+                <input
+                  type="date"
+                  value={planDueDate}
+                  onChange={(e) => setPlanDueDate(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700"
+                />
+              </div>
               <div className="flex gap-3">
                 <button type="button" onClick={() => setPlanModal(null)} className="flex-1 py-2 rounded-lg border border-slate-700">
                   Cancelar
@@ -603,6 +768,15 @@ export default function SuperAdminDashboard() {
               <div>
                 <label className="text-xs text-slate-400">Valor recebido (R$)</label>
                 <input required value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Vencimento</label>
+                <input
+                  type="date"
+                  value={paymentDueDate}
+                  onChange={(e) => setPaymentDueDate(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700"
+                />
               </div>
               <div>
                 <label className="text-xs text-slate-400">Observação</label>
