@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from '../lib/toast';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Scissors, Clock, Users, AlertCircle, Instagram, Calendar, Check, CheckCircle, Sun, Moon, MapPin } from 'lucide-react';
+import { Scissors, Clock, Users, AlertCircle, Instagram, Check, CheckCircle, Sun, Moon, MapPin } from 'lucide-react';
 import { secureFetch as fetch } from '../utils/api';
 import { useTenantBranding, type TenantBranding } from '../hooks/useTenant';
 import { apiUrl, wsUrl } from '../config/api';
