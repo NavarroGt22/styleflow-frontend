@@ -8,6 +8,7 @@ import { apiUrl, wsUrl } from '../config/api';
 import { isCustomDomainHost } from '../config/domains';
 import { computeQueueWaitMinutes } from '../lib/queue-wait';
 import { QueueActiveTimer } from '../components/QueueActiveTimer';
+import ClientLanding from '../components/ClientLanding';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -578,6 +579,33 @@ export default function PublicQueue() {
   );
 
   if (!salon.queueMode) {
+    if (!currentUser) {
+      const loginPath = isCustomDomain ? '/login' : `/app/${salonSlug}/login`;
+      const digits = salon.phone ? String(salon.phone).replace(/\D/g, '') : '';
+      const whatsappUrl = digits
+        ? `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}`
+        : undefined;
+
+      return (
+        <div className="min-h-screen bg-[#0b0d0e]">
+          {unitPicker}
+          <ClientLanding
+            brandName={brandName}
+            salonName={salon.name}
+            salonAddress={salon.address || undefined}
+            logoUrl={logoUrl}
+            heroImageUrl={data?.tenant?.heroImageUrl}
+            historyText={data?.tenant?.historyText}
+            lpSinceYear={data?.tenant?.lpSinceYear}
+            primaryColor={primaryColor || '#d5a85c'}
+            whatsappUrl={whatsappUrl}
+            instagramUrl={salon.instagramUrl ? formatInstagramUrl(salon.instagramUrl) : undefined}
+            loginPath={loginPath}
+          />
+        </div>
+      );
+    }
+
     const timeSlots = generateTimeSlots(
       selectedProfessional,
       selectedDate,
@@ -960,72 +988,7 @@ export default function PublicQueue() {
                 </div>
               </div>
             )
-          ) : (
-            /* CARD DE LOGIN (VISITANTE) */
-            <div className="max-w-md mx-auto">
-              <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-gray-150/60 dark:border-slate-700/60 text-center shadow-xl">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-500/20 hover:scale-105 transition-all duration-300">
-                  <Calendar size={32} />
-                </div>
-                
-                <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded-md mb-3 inline-block">
-                  AGENDA ONLINE
-                </span>
-
-                <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">{salon.name}</h2>
-                {salon.address && (
-                  <p className="mb-3 inline-flex items-center justify-center gap-1.5 text-sm text-gray-500 dark:text-slate-400">
-                    <MapPin size={14} className="shrink-0 text-indigo-500" />
-                    <span>{salon.address}</span>
-                  </p>
-                )}
-                <p className="text-gray-500 dark:text-slate-400 text-sm leading-relaxed mb-6">
-                  Este estabelecimento atende exclusivamente através de agendamento de horário tradicional (Agenda Comercial).
-                </p>
-
-                <Link 
-                  to={`/app/${salonSlug}/login`}
-                  className="w-full inline-flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-500/25 transition-all duration-300 active:scale-95 mb-4"
-                >
-                  Fazer meu Agendamento
-                </Link>
-
-                {(salon.phone || salon.instagramUrl) && (
-                  <div className="border-t border-gray-100 dark:border-slate-700/60 pt-6 mt-6">
-                    <p className="text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-3">
-                      Outras formas de contato:
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      {salon.phone && (
-                        <a 
-                          href={`https://wa.me/55${salon.phone.replace(/\D/g, '')}`} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all duration-300 shadow-sm"
-                        >
-                          <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.504-5.729-1.464L0 24zm6.59-4.846c1.6.95 3.197 1.451 4.793 1.457 5.485.002 9.95-4.461 9.953-9.946.002-2.657-1.032-5.155-2.906-7.03C16.615 1.76 14.12 .727 11.46.727 5.973.727 1.507 5.19 1.504 10.677c0 1.682.449 3.322 1.302 4.773L1.879 21.05l5.768-1.512-.1 1.616z" />
-                          </svg>
-                          <span>Reservar pelo WhatsApp</span>
-                        </a>
-                      )}
-                      {salon.instagramUrl && (
-                        <a 
-                          href={formatInstagramUrl(salon.instagramUrl)} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:from-purple-600 hover:via-pink-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold transition-all duration-300"
-                        >
-                          <Instagram size={14} />
-                          <span>Visitar Instagram</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          ) : null}
 
           <footer className="mt-16 text-center">
             <p className="text-xs text-gray-400 dark:text-slate-500">

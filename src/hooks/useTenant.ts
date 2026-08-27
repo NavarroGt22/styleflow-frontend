@@ -15,6 +15,9 @@ export type TenantBranding = {
   primaryColor?: string;
   secondaryColor?: string | null;
   customBrandName?: string | null;
+  historyText?: string | null;
+  heroImageUrl?: string | null;
+  lpSinceYear?: string | null;
 };
 
 export { isCustomDomainHost };
@@ -39,6 +42,9 @@ export function useTenantBranding(tenant?: TenantBranding | null) {
       primaryColor: tenant.primaryColor,
       logoUrl: tenant.logoUrl || undefined,
       faviconUrl: tenant.faviconUrl || undefined,
+      historyText: tenant.historyText || undefined,
+      heroImageUrl: tenant.heroImageUrl || undefined,
+      lpSinceYear: tenant.lpSinceYear || undefined,
     };
   }, [tenant]);
 }

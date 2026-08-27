@@ -276,6 +276,7 @@ export default function Dashboard() {
   // Formulário do Salão (Abertura/Fechamento/Contato)
   const [salonForm, setSalonForm] = useState({
     name: salon?.name || '',
+    slug: salon?.slug || '',
     phone: salon?.phone || '',
     address: salon?.address || '',
     openTime: salon?.openTime || '09:00',
@@ -299,6 +300,9 @@ export default function Dashboard() {
     faviconUrl: salon?.tenant?.faviconUrl || '',
     primaryColor: salon?.tenant?.primaryColor || '#4f46e5',
     secondaryColor: salon?.tenant?.secondaryColor || '',
+    historyText: salon?.tenant?.historyText || '',
+    heroImageUrl: salon?.tenant?.heroImageUrl || '',
+    lpSinceYear: salon?.tenant?.lpSinceYear || '',
   });
 
   const tenantBrandIcon = React.useMemo(
@@ -925,6 +929,10 @@ export default function Dashboard() {
         faviconUrl: salon.tenant?.faviconUrl || '',
         primaryColor: salon.tenant?.primaryColor || '#4f46e5',
         secondaryColor: salon.tenant?.secondaryColor || '',
+        historyText: salon.tenant?.historyText || '',
+        heroImageUrl: salon.tenant?.heroImageUrl || '',
+        lpSinceYear: salon.tenant?.lpSinceYear || '',
+        slug: salon.slug || '',
       });
     }
   }, [salon]);
@@ -1596,6 +1604,10 @@ export default function Dashboard() {
           faviconUrl: salonForm.faviconUrl || null,
           primaryColor: salonForm.primaryColor || undefined,
           secondaryColor: salonForm.secondaryColor || null,
+          historyText: salonForm.historyText || null,
+          heroImageUrl: salonForm.heroImageUrl || null,
+          lpSinceYear: salonForm.lpSinceYear || null,
+          slug: salonForm.slug || undefined,
         }),
       });
 
@@ -1603,6 +1615,7 @@ export default function Dashboard() {
 
       if (res.ok) {
         const updatedSalon = data?.establishment ?? data;
+        const previousSlug = salon?.slug;
         setSalon(updatedSalon);
 
         const updatedUser = { ...user, salons: [updatedSalon] };
@@ -1619,6 +1632,9 @@ export default function Dashboard() {
         setUser(updatedUser);
 
         toast.success('Configurações do salão atualizadas com sucesso!');
+        if (updatedSalon?.slug && previousSlug && updatedSalon.slug !== previousSlug) {
+          navigate(`/admin/${updatedSalon.slug}`, { replace: true });
+        }
       } else {
         toast.error(parseApiError(data, 'Erro ao atualizar configurações do salão'));
       }
@@ -3900,7 +3916,7 @@ export default function Dashboard() {
                 {settingsSubTab === 'temas' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <p className="text-sm text-gray-500 dark:text-slate-400">
-                      Personalize o <strong>estilo visual</strong> da sua barbearia: cores, logo e ícone na página dos clientes.
+                      Personalize a <strong>landing page</strong> dos clientes: história, foto, cor e slug da URL pública.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
@@ -3922,27 +3938,24 @@ export default function Dashboard() {
                           className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
                         />
                       </div>
-                      <ImageFileUpload
-                        label="Logotipo da Barbearia"
-                        value={salonForm.logoUrl}
-                        onChange={(logoUrl) => setSalonForm({ ...salonForm, logoUrl })}
-                        hint="Aparece na página de agendamento dos seus clientes."
-                        maxMb={2}
-                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
-                        allowedLabel="PNG, JPG, SVG ou WebP"
-                      />
-                      <ImageFileUpload
-                        label="Favicon (ícone da aba do navegador)"
-                        value={salonForm.faviconUrl}
-                        onChange={(faviconUrl) => setSalonForm({ ...salonForm, faviconUrl })}
-                        hint="Ícone pequeno que aparece na aba do navegador dos clientes."
-                        maxMb={2}
-                        accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico"
-                        allowedLabel="ICO ou PNG"
-                        previewClassName="object-contain p-2"
-                      />
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Cor Primária</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Slug da página do cliente</label>
+                        <input
+                          type="text"
+                          value={salonForm.slug}
+                          onChange={e => setSalonForm({
+                            ...salonForm,
+                            slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                          })}
+                          placeholder="ex: leleco-barbers"
+                          className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary outline-none font-mono text-sm"
+                        />
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-slate-400">
+                          URL pública: <span className="font-mono">/app/{salonForm.slug || 'seu-slug'}</span>
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Cor da landing page</label>
                         <div className="flex gap-3 items-center">
                           <input
                             type="color"
@@ -3958,10 +3971,61 @@ export default function Dashboard() {
                           />
                         </div>
                       </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">História / texto da LP</label>
+                        <textarea
+                          value={salonForm.historyText}
+                          onChange={e => setSalonForm({ ...salonForm, historyText: e.target.value })}
+                          rows={4}
+                          maxLength={800}
+                          placeholder="Conte a história da barbearia. Ex: Corte preciso, barba alinhada e a experiência que você merece..."
+                          className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary outline-none resize-y"
+                        />
+                        <p className="mt-1 text-xs text-gray-400">{salonForm.historyText.length}/800</p>
+                      </div>
+                      <ImageFileUpload
+                        label="Logotipo da Barbearia"
+                        value={salonForm.logoUrl}
+                        onChange={(logoUrl) => setSalonForm({ ...salonForm, logoUrl })}
+                        hint="Aparece na página de agendamento dos seus clientes."
+                        maxMb={2}
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                        allowedLabel="PNG, JPG, SVG ou WebP"
+                      />
+                      <ImageFileUpload
+                        label="Foto da landing page (hero)"
+                        value={salonForm.heroImageUrl}
+                        onChange={(heroImageUrl) => setSalonForm({ ...salonForm, heroImageUrl })}
+                        hint="Foto grande da LP do cliente. Preferencialmente vertical."
+                        maxMb={3}
+                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                        allowedLabel="PNG, JPG ou WebP"
+                      />
+                      <ImageFileUpload
+                        label="Favicon (ícone da aba do navegador)"
+                        value={salonForm.faviconUrl}
+                        onChange={(faviconUrl) => setSalonForm({ ...salonForm, faviconUrl })}
+                        hint="Ícone pequeno que aparece na aba do navegador dos clientes."
+                        maxMb={2}
+                        accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico"
+                        allowedLabel="ICO ou PNG"
+                        previewClassName="object-contain p-2"
+                      />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Desde (ano / selo)</label>
+                        <input
+                          type="text"
+                          value={salonForm.lpSinceYear}
+                          onChange={e => setSalonForm({ ...salonForm, lpSinceYear: e.target.value })}
+                          placeholder="Ex: 2014"
+                          className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
+                        />
+                      </div>
                       {salon?.tenant?.subdomain && (
                         <div className="sm:col-span-2 p-4 rounded-xl bg-gray-50 dark:bg-slate-900/50 border border-gray-100 dark:border-slate-700">
-                          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Subdomínio</span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Subdomínio da conta</span>
                           <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 mt-1">{salon.tenant.subdomain}</p>
+                          <p className="text-xs text-gray-500 mt-1">O slug da conta (tenant) não muda aqui — só o slug da unidade na URL /app/...</p>
                         </div>
                       )}
                     </div>
