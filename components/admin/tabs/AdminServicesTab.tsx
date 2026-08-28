@@ -28,6 +28,7 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
   const [editing, setEditing] = useState<Service | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   async function load() {
     if (!salonId) {
@@ -103,11 +104,24 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
     }
   }
 
+  async function handleToggleActive(service: Service) {
+    setTogglingId(service.id)
+    setError('')
+    try {
+      const updated = await updateService(service.id, { isActive: !service.active })
+      setServices((current) => current.map((item) => (item.id === service.id ? updated : item)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar status do serviço.')
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
   async function handleDelete(id: string) {
-    if (!confirm('Excluir este serviço?')) return
+    if (!confirm('Excluir este serviço? Ele deixará de aparecer para os clientes.')) return
     try {
       await deleteService(id)
-      setServices((current) => current.filter((item) => item.id !== id))
+      await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao excluir.')
     }
@@ -153,16 +167,24 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
                   <span className="grid size-10 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
                     <Scissors className="size-4" />
                   </span>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(service)}
+                    disabled={togglingId === service.id}
+                    title={service.active ? 'Clique para desativar' : 'Clique para ativar'}
+                    className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase transition hover:scale-105 disabled:cursor-wait disabled:opacity-60 ${
                       service.active
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-rose-200 bg-rose-50 text-rose-600'
+                        ? lightMode
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                        : lightMode
+                          ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                          : 'border-rose-500/40 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
                     }`}
                   >
                     {service.active ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
-                    {service.active ? 'Ativo' : 'Inativo'}
-                  </span>
+                    {togglingId === service.id ? '...' : service.active ? 'Ativo' : 'Inativo'}
+                  </button>
                 </div>
                 <h3 className={`mt-3 text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{service.name}</h3>
                 <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-indigo-500">{service.category}</p>
@@ -182,8 +204,9 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
                 <AdminButton variant="soft" onClick={() => openEdit(service)} className="h-9 px-3 text-xs">
                   <Pencil className="size-3.5" /> Editar
                 </AdminButton>
-                <AdminButton variant="danger" onClick={() => handleDelete(service.id)} className="h-9 w-9 px-0">
+                <AdminButton variant="danger" onClick={() => handleDelete(service.id)} className="h-9 px-3 text-xs">
                   <Trash2 className="size-3.5" />
+                  Excluir
                 </AdminButton>
               </footer>
             </article>

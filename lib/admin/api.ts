@@ -28,7 +28,7 @@ export function mapService(item: Record<string, unknown>): Service {
 }
 
 export async function fetchServices(salonId: string): Promise<Service[]> {
-  const response = await authFetch(`/services/${salonId}`)
+  const response = await authFetch(`/services/manage/${salonId}`)
   const data = await parseJson<Record<string, unknown>[]>(response)
   return Array.isArray(data) ? data.map(mapService) : []
 }
