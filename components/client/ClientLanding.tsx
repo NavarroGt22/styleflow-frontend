@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { ArrowUpRight, CalendarDays, Check, MapPin, MessageCircle, Scissors, Share2 } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, Check, MapPin, MessageCircle, Scissors } from 'lucide-react'
+import InstagramIcon from '@/components/icons/InstagramIcon'
 
 export type ClientLandingProps = {
   brandName?: string
@@ -51,7 +52,7 @@ export default function ClientLanding({
 
   return (
     <main
-      className="client-lp relative min-h-screen overflow-hidden text-[#f5f5f4]"
+      className="client-lp relative min-h-screen text-[#f5f5f4]"
       style={
         {
           '--brand': primaryColor,
@@ -64,13 +65,16 @@ export default function ClientLanding({
         } as React.CSSProperties
       }
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_75%_20%,color-mix(in_srgb,var(--brand)_13%,transparent),transparent_38%),linear-gradient(115deg,transparent_0%,rgba(255,255,255,0.025)_47%,transparent_48%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:46px_46px] [mask-image:linear-gradient(to_bottom,black,transparent_75%)]" />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-[radial-gradient(ellipse_at_75%_20%,color-mix(in_srgb,var(--brand)_13%,transparent),transparent_38%),linear-gradient(115deg,transparent_0%,rgba(255,255,255,0.025)_47%,transparent_48%)]" />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-20 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:46px_46px] [mask-image:linear-gradient(to_bottom,black,transparent_75%)]" />
 
-      <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-5 sm:px-8">
+      <header
+        className="fixed inset-x-0 top-0 z-50 border-b backdrop-blur-md supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--lp-bg)_92%,transparent)] bg-[color-mix(in_srgb,var(--lp-bg)_92%,transparent)]"
+        style={{ borderColor: 'var(--lp-border)' }}
+      >
         <div
-          className="sticky top-0 z-40 -mx-5 flex items-center justify-between border-b px-5 py-4 text-[11px] font-medium sm:-mx-8 sm:px-8"
-          style={{ borderColor: 'var(--lp-border)', color: 'var(--lp-muted)', background: 'color-mix(in srgb, var(--lp-bg) 92%, transparent)', backdropFilter: 'blur(10px)' }}
+          className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 text-[11px] font-medium sm:px-8"
+          style={{ color: 'var(--lp-muted)' }}
         >
           <span className="flex items-center gap-2 tracking-wide">
             <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)] shadow-[0_0_12px_var(--brand)]" />
@@ -85,7 +89,11 @@ export default function ClientLanding({
             <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
           </Link>
         </div>
+      </header>
 
+      <div aria-hidden className="h-[53px] shrink-0 sm:h-[57px]" />
+
+      <div className="relative mx-auto flex min-h-[calc(100vh-53px)] max-w-7xl flex-col px-5 sm:min-h-[calc(100vh-57px)] sm:px-8">
         <section className="grid flex-1 items-center gap-12 py-14 lg:grid-cols-[1fr_0.9fr] lg:gap-20 lg:py-20">
           <div className="animate-[lp-fade-up_700ms_ease-out_both]">
             <div className="mb-8 flex items-center gap-4">
@@ -196,7 +204,7 @@ export default function ClientLanding({
                 className="inline-flex items-center gap-1.5 border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors hover:text-[var(--brand)]"
                 style={{ borderColor: 'var(--lp-border)', color: 'var(--lp-muted)' }}
               >
-                <Share2 className="h-3.5 w-3.5 text-[var(--brand)]" />
+                <InstagramIcon className="text-pink-400" size={14} />
                 Instagram
               </a>
             ) : null}

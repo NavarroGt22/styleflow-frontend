@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { toast } from '@/lib/client/toast';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Scissors, Clock, Users, AlertCircle, Share2, Check, CheckCircle, Sun, Moon, MapPin } from 'lucide-react';
+import { Scissors, Clock, Users, AlertCircle, Check, CheckCircle, Sun, Moon, MapPin } from 'lucide-react';
+import InstagramIcon from '@/components/icons/InstagramIcon';
 import { secureFetch as fetch } from '@/lib/client/api';
 import { useTenantBranding, type TenantBranding } from '@/lib/client/useTenant';
 import { apiUrl, wsUrl } from '@/lib/client/config';
@@ -1079,7 +1080,7 @@ export default function PublicSalonPage() {
                   rel="noopener noreferrer" 
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:from-purple-600 hover:via-pink-600 hover:to-orange-600 text-white rounded-full text-xs font-extrabold transition-all duration-300 shadow-sm shadow-pink-500/30 hover:scale-105 active:scale-95"
                 >
-                  <Share2 size={14} />
+                  <InstagramIcon size={14} />
                   <span>Instagram</span>
                 </a>
               )}

@@ -9,6 +9,7 @@ import {
   Store,
   Users,
 } from 'lucide-react'
+import InstagramIcon from '@/components/icons/InstagramIcon'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import ImageFileUpload from '../ImageFileUpload'
 import {
@@ -136,6 +137,8 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
     return digits ? `https://wa.me/55${digits}` : ''
   }, [form.phone])
 
+  const instagramLink = useMemo(() => normalizeInstagram(form.instagramUrl), [form.instagramUrl])
+
   async function lookupCep() {
     const clean = onlyDigits(cep)
     if (clean.length !== 8) return
@@ -163,7 +166,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
         address: form.address,
         openTime: form.openTime,
         closeTime: form.closeTime,
-        instagramUrl: normalizeInstagram(form.instagramUrl),
+        instagramUrl: normalizeInstagram(form.instagramUrl) || null,
         slug: form.slug,
         queueMode: form.queueMode,
         queueAutoAdvance: form.queueAutoAdvance,
@@ -175,7 +178,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
         productCommissionEnabled: form.productCommissionEnabled,
         productCommissionRate: Number(form.productCommissionRate) || 10,
         primaryColor: form.primaryColor,
-        customBrandName: form.customBrandName,
+        customBrandName: form.customBrandName.trim() || null,
         historyText: form.historyText.slice(0, 800),
         tenantName: form.tenantName,
         lpSinceYear: form.lpSinceYear?.trim() || null,
@@ -298,7 +301,24 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
               </div>
               <div>
                 <label className={labelClass(lightMode)}>Instagram (URL ou Usuário)</label>
-                <input value={form.instagramUrl} onChange={(e) => setForm({ ...form, instagramUrl: e.target.value })} placeholder="https://instagram.com/seuusuario" className={inputClass(lightMode)} />
+                <div className="relative">
+                  <InstagramIcon
+                    className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 ${lightMode ? 'text-pink-500' : 'text-pink-400'}`}
+                    size={16}
+                  />
+                  <input
+                    value={form.instagramUrl}
+                    onChange={(e) => setForm({ ...form, instagramUrl: e.target.value })}
+                    placeholder="https://instagram.com/seuusuario"
+                    className={`${inputClass(lightMode)} pl-10`}
+                  />
+                </div>
+                {instagramLink ? (
+                  <a href={instagramLink} target="_blank" rel="noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-pink-500 hover:underline">
+                    <InstagramIcon className="text-pink-500" size={14} />
+                    Testar link do Instagram ↗
+                  </a>
+                ) : null}
               </div>
               <div>
                 <label className={labelClass(lightMode)}>CEP (Buscar Endereço)</label>
