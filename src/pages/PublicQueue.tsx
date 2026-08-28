@@ -9,9 +9,6 @@ import { isCustomDomainHost } from '../config/domains';
 import { computeQueueWaitMinutes } from '../lib/queue-wait';
 import { QueueActiveTimer } from '../components/QueueActiveTimer';
 import ClientLanding from '../components/ClientLanding';
-import ClientPageLoader from '../components/ClientPageLoader';
-import ClientBooking from '../components/ClientBooking';
-import { prefetchPublicSalon, readPublicSalonCache, writePublicSalonCache } from '../lib/public-salon-cache';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -71,8 +68,8 @@ export default function PublicQueue() {
   const todayStr = new Date().toISOString().split('T')[0];
   const { salonSlug } = useParams<{ salonSlug: string }>();
   const navigate = useNavigate();
-  const [data, setData] = useState<any>(() => readPublicSalonCache(salonSlug));
-  const [loading, setLoading] = useState(() => !readPublicSalonCache(salonSlug));
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -189,7 +186,7 @@ export default function PublicQueue() {
 
   const displayService = getServiceDisplayInfo();
 
-  const fetchPublicQueue = async (options?: { silent?: boolean }) => {
+  const fetchPublicQueue = async () => {
     try {
       const fetchUrl = salonSlug
         ? apiUrl(`/queue/public/${salonSlug}`)
@@ -206,34 +203,24 @@ export default function PublicQueue() {
         throw new Error('Erro ao carregar a fila de atendimento.');
       }
       const json = await res.json();
-      writePublicSalonCache(salonSlug, json);
       setData(json);
       setError(null);
     } catch (err: any) {
       console.error(err);
-      if (!options?.silent || !data) {
-        setError(err.message || 'Erro de conexão.');
-      }
+      setError(err.message || 'Erro de conexão.');
     } finally {
-      if (!options?.silent) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const cached = readPublicSalonCache(salonSlug);
-    if (cached) {
-      fetchPublicQueue({ silent: true });
-    } else {
-      fetchPublicQueue();
-    }
+    fetchPublicQueue();
   }, [salonSlug]);
 
   useEffect(() => {
     if (!data?.salon?.queueMode) return;
     const interval = window.setInterval(() => {
-      fetchPublicQueue({ silent: true });
+      fetchPublicQueue();
     }, 30000);
     return () => window.clearInterval(interval);
   }, [data?.salon?.queueMode, salonSlug]);
@@ -531,7 +518,15 @@ export default function PublicQueue() {
   }, [data?.salon?.id]);
 
   if (loading) {
-    return <ClientPageLoader label="Carregando vitrine..." primaryColor={primaryColor || '#d5a85c'} />;
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-4">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 border-4 border-indigo-200 dark:border-indigo-900 rounded-full"></div>
+          <div className="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
+        </div>
+        <p className="mt-4 text-sm font-bold text-gray-500 dark:text-slate-400 animate-pulse">Carregando painel...</p>
+      </div>
+    );
   }
 
   if (error || !data) {
@@ -592,7 +587,7 @@ export default function PublicQueue() {
         : undefined;
 
       return (
-        <div className="min-h-screen bg-[#0b0d0e] client-content-reveal">
+        <div className="min-h-screen bg-[#0b0d0e]">
           {unitPicker}
           <ClientLanding
             brandName={brandName}
@@ -606,7 +601,6 @@ export default function PublicQueue() {
             whatsappUrl={whatsappUrl}
             instagramUrl={salon.instagramUrl ? formatInstagramUrl(salon.instagramUrl) : undefined}
             loginPath={loginPath}
-            onPrefetchAuth={() => prefetchPublicSalon(salonSlug)}
           />
         </div>
       );
@@ -619,41 +613,390 @@ export default function PublicQueue() {
       busySlots
     );
 
-    const publicSalonPath = isCustomDomain ? '/' : `/app/${salonSlug}`;
-
     return (
-      <ClientBooking
-        unitPicker={unitPicker}
-        brandName={brandName || salon.name}
-        salonName={salon.name}
-        salonAddress={salon.address || undefined}
-        logoUrl={logoUrl}
-        primaryColor={primaryColor || '#d5a85c'}
-        clientName={currentUser.name}
-        onLogout={handleLogout}
-        backHref={publicSalonPath}
-        services={services}
-        professionals={professionals}
-        loadingBookingData={loadingBookingData}
-        selectedService={selectedService}
-        onSelectService={(s) => { setSelectedService(s); setSelectedTime(''); }}
-        selectedProfessional={selectedProfessional}
-        onSelectProfessional={(pro) => { setSelectedProfessional(pro); setSelectedTime(''); }}
-        lastProfessionalId={lastProfessionalId}
-        selectedDate={selectedDate}
-        onSelectDate={(d) => { setSelectedDate(d); setSelectedTime(''); }}
-        selectedTime={selectedTime}
-        onSelectTime={setSelectedTime}
-        todayStr={todayStr}
-        timeSlots={timeSlots}
-        loadingSlots={loadingSlots}
-        displayService={displayService}
-        bookingError={bookingError}
-        bookingLoading={bookingLoading}
-        bookingSuccess={bookingSuccess}
-        onBookingSuccessDismiss={() => setBookingSuccess(null)}
-        onConfirm={handleSchedule}
-      />
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 transition-colors duration-300">
+        {unitPicker}
+        {primaryColor && (
+          <style>{`
+            :root {
+              --brand-primary: ${primaryColor};
+            }
+            .bg-indigo-600 {
+              background-color: var(--brand-primary) !important;
+            }
+            .text-indigo-600 {
+              color: var(--brand-primary) !important;
+            }
+            .border-indigo-600 {
+              border-color: var(--brand-primary) !important;
+            }
+            .bg-indigo-50 {
+              background-color: var(--brand-primary)15 !important;
+            }
+            .text-indigo-500 {
+              color: var(--brand-primary) !important;
+            }
+            .bg-indigo-500 {
+              background-color: var(--brand-primary) !important;
+            }
+            .bg-indigo-50\\/50 {
+              background-color: var(--brand-primary)10 !important;
+            }
+            .focus\\:ring-indigo-500:focus {
+              --tw-ring-color: var(--brand-primary) !important;
+            }
+            .hover\\:bg-indigo-700:hover {
+              filter: brightness(0.9) !important;
+            }
+          `}</style>
+        )}
+        <div className="max-w-5xl mx-auto">
+          
+          {/* BARRA DE LOGIN DO CLIENTE */}
+          <div className="flex justify-between items-center bg-white dark:bg-slate-800 px-6 py-3.5 rounded-2xl border border-gray-150/60 dark:border-slate-700/60 shadow-sm mb-6 transition-all duration-300 hover:shadow-md">
+            <div className="flex items-center gap-2.5">
+              <span className={`w-2 h-2 rounded-full ${currentUser ? 'bg-emerald-500 animate-pulse' : 'bg-indigo-500 animate-pulse'}`}></span>
+              <span className="text-xs font-extrabold text-gray-500 dark:text-slate-400">
+                {currentUser ? `Cliente: ${currentUser.name}` : 'Acesso de Visitante'}
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              <button 
+                type="button"
+                onClick={() => setIsDark(!isDark)}
+                className="p-2 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-600 transition-all cursor-pointer border-none flex items-center justify-center"
+                title="Mudar Tema"
+              >
+                {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              </button>
+
+              {currentUser ? (
+                <button 
+                  onClick={handleLogout}
+                  className="text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-650 dark:text-red-400 dark:hover:text-red-300 transition-all cursor-pointer border-none bg-transparent"
+                >
+                  Sair
+                </button>
+              ) : (
+                <Link 
+                  to={isCustomDomain ? `/login` : `/app/${salonSlug}/login`}
+                  className="text-xs font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
+                >
+                  Entrar / Cadastrar
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* HEADER DO ESTABELECIMENTO */}
+          <header className="flex flex-col items-center justify-center text-center mb-8 pb-6 border-b border-gray-200 dark:border-slate-800">
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="w-20 h-20 object-cover rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-none mb-4 hover:scale-105 transition-all duration-300" />
+            ) : (
+              <div className="p-3 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl text-white shadow-xl shadow-indigo-500/20 mb-4 hover:scale-105 transition-all duration-300">
+                <Scissors size={32} />
+              </div>
+            )}
+            <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded-md mb-2">
+              {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} • AGENDA ONLINE
+            </span>
+            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white transition-colors">
+              {salon.name}
+            </h1>
+            {salon.address && (
+              <p className="mt-2 inline-flex items-center justify-center gap-1.5 text-sm text-gray-500 dark:text-slate-400 max-w-md mx-auto">
+                <MapPin size={14} className="shrink-0 text-indigo-500" />
+                <span>{salon.address}</span>
+              </p>
+            )}
+            <p className="text-sm text-gray-550 dark:text-slate-400 mt-2">
+              Escolha seu serviço, profissional e reserve seu horário em poucos cliques.
+            </p>
+          </header>
+
+          {currentUser ? (
+            /* WIZARD DE AGENDAMENTO COMERCIAL (LOGADO) */
+            bookingSuccess ? (
+              /* CARD DE AGENDAMENTO CONFIRMADO */
+              <div className="max-w-md mx-auto bg-white dark:bg-slate-800 p-8 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 text-center shadow-xl animate-fade-in">
+                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-md shadow-emerald-500/10">
+                  <CheckCircle size={32} />
+                </div>
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">Reserva Confirmada!</h2>
+                <p className="text-gray-500 dark:text-slate-400 text-sm leading-relaxed mb-6">
+                  Seu horário foi agendado com sucesso no StyleFlow.
+                </p>
+
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl text-left border border-gray-150 dark:border-slate-700/60 mb-6 space-y-3">
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Serviço</span>
+                    <span className="text-gray-800 dark:text-slate-200">{bookingSuccess.service.name}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Profissional</span>
+                    <span className="text-gray-800 dark:text-slate-200">{bookingSuccess.professional.user.name}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Data</span>
+                    <span className="text-gray-800 dark:text-slate-200">{new Date(bookingSuccess.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Horário</span>
+                    <span className="text-indigo-600 dark:text-indigo-400 text-sm">{bookingSuccess.time}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-bold border-t border-gray-200 dark:border-slate-700 pt-3">
+                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Valor</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 text-sm font-black">R$ {bookingSuccess.service.price.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setBookingSuccess(null)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3.5 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95 border-none cursor-pointer"
+                >
+                  Novo Agendamento
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
+                {/* COLUNA ESQUERDA - FORMULÁRIO */}
+                <div className="lg:col-span-2 space-y-6">
+                  
+                  {/* SELEÇÃO DE SERVIÇO */}
+                  <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-gray-150/60 dark:border-slate-700/60 shadow-sm">
+                    <h3 className="text-sm font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-4 flex items-center gap-2">
+                      <span className="w-5 h-5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-md flex items-center justify-center font-bold text-xs">1</span>
+                      Selecione o Serviço
+                    </h3>
+                    {loadingBookingData ? (
+                      <div className="py-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div></div>
+                    ) : services.length === 0 ? (
+                      <p className="text-sm text-gray-550 dark:text-slate-400 font-medium italic">Nenhum serviço disponível no catálogo no momento.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {services.map((s) => (
+                          <div
+                            key={s.id}
+                            onClick={() => { setSelectedService(s); setSelectedTime(''); }}
+                            className={`p-4 rounded-xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
+                              selectedService?.id === s.id
+                                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20 shadow-md ring-2 ring-indigo-500/20'
+                                : 'border-gray-200 dark:border-slate-700 bg-transparent hover:border-indigo-300 dark:hover:border-indigo-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex justify-between items-start gap-2">
+                                <h4 className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors text-sm">{s.name}</h4>
+                                {selectedService?.id === s.id && (
+                                  <span className="w-4 h-4 bg-indigo-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
+                                    <Check size={10} strokeWidth={3} />
+                                  </span>
+                                )}
+                              </div>
+                              {s.description && (
+                                <p className="text-[11px] text-gray-550 dark:text-slate-400 line-clamp-2 mt-1 leading-relaxed">{s.description}</p>
+                              )}
+                            </div>
+                            <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100 dark:border-slate-700/60 text-xs font-bold">
+                              <span className="text-gray-400 dark:text-slate-550 flex items-center gap-1">
+                                <Clock size={12} className="text-indigo-500" />
+                                {s.duration} min
+                              </span>
+                              <span className="text-emerald-600 dark:text-emerald-400">R$ {s.price.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SELEÇÃO DE PROFISSIONAL */}
+                  <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-gray-150/60 dark:border-slate-700/60 shadow-sm">
+                    <h3 className="text-sm font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-4 flex items-center gap-2">
+                      <span className="w-5 h-5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-md flex items-center justify-center font-bold text-xs">2</span>
+                      Selecione o Profissional
+                    </h3>
+                    {loadingBookingData ? (
+                      <div className="py-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div></div>
+                    ) : professionals.length === 0 ? (
+                      <p className="text-sm text-gray-550 dark:text-slate-400 font-medium italic">Nenhum profissional disponível no momento.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        <select
+                          value={selectedProfessional?.id ?? ''}
+                          onChange={(e) => {
+                            const pro = professionals.find((p) => p.id === e.target.value) ?? null;
+                            setSelectedProfessional(pro);
+                            setSelectedTime('');
+                          }}
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="" disabled>Selecione um profissional...</option>
+                          {professionals.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.user.name}
+                              {lastProfessionalId === p.id ? ' ★ (seu barbeiro habitual)' : ''}
+                              {` — ${p.workStart} às ${p.workEnd}`}
+                            </option>
+                          ))}
+                        </select>
+
+                        {selectedProfessional && lastProfessionalId === selectedProfessional.id && (
+                          <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                            <span className="text-base">★</span>
+                            Seu último barbeiro — já selecionado para você
+                          </p>
+                        )}
+
+                        {selectedProfessional && selectedService && (() => {
+                          const custom = selectedProfessional.services?.find(
+                            (ps: any) => ps.serviceId === selectedService.id
+                          );
+                          if (!custom || !custom.isActive) return null;
+                          const hasCustomPrice = custom.customPrice !== null && custom.customPrice !== selectedService.price;
+                          const hasCustomDuration = custom.customDuration !== null && custom.customDuration !== selectedService.duration;
+                          if (!hasCustomPrice && !hasCustomDuration) return null;
+                          return (
+                            <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/40 dark:border-indigo-950/30 text-xs text-indigo-700 dark:text-indigo-300 font-bold">
+                              Valores personalizados deste profissional:
+                              {hasCustomPrice && <span className="ml-2">R$ {custom.customPrice.toFixed(2)}</span>}
+                              {hasCustomDuration && <span className="ml-2">⏱️ {custom.customDuration} min</span>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SELEÇÃO DE DATA E HORÁRIO */}
+                  <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-gray-150/60 dark:border-slate-700/60 shadow-sm">
+                    <h3 className="text-sm font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-4 flex items-center gap-2">
+                      <span className="w-5 h-5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-md flex items-center justify-center font-bold text-xs">3</span>
+                      Data e Horário
+                    </h3>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-1.5">Escolha a Data</label>
+                        <input
+                          type="date"
+                          min={todayStr}
+                          value={selectedDate}
+                          onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(''); }}
+                          disabled={!selectedProfessional}
+                          className="px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-50"
+                        />
+                        {!selectedProfessional && (
+                          <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-extrabold mt-1.5">Selecione o profissional primeiro para ativar o calendário.</p>
+                        )}
+                      </div>
+
+                      {selectedProfessional && selectedDate && (
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-2">Horários Disponíveis</label>
+                          {loadingSlots ? (
+                            <div className="py-6 flex justify-center"><div className="w-6 h-6 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div></div>
+                          ) : timeSlots.length === 0 ? (
+                            <p className="text-sm text-gray-550 dark:text-slate-400 italic">Fora do horário de expediente deste profissional.</p>
+                          ) : (
+                            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                              {timeSlots.map((slot: any) => (
+                                <button
+                                  key={slot.time}
+                                  type="button"
+                                  disabled={!slot.available}
+                                  onClick={() => setSelectedTime(slot.time)}
+                                  className={`py-2 px-1 rounded-xl text-xs font-extrabold transition-all border ${
+                                    !slot.available
+                                      ? 'bg-gray-100 dark:bg-slate-900 border-gray-200 dark:border-slate-850 text-gray-400 dark:text-slate-600 cursor-not-allowed line-through'
+                                      : selectedTime === slot.time
+                                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 dark:border-indigo-500 shadow-md shadow-indigo-500/25 scale-105 active:scale-95'
+                                      : 'bg-white dark:bg-slate-800 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-900/60 active:scale-95'
+                                  }`}
+                                >
+                                  {slot.time}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* COLUNA DIREITA - RESUMO E CONFIRMAÇÃO */}
+                <div className="lg:col-span-1">
+                  <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-gray-150/60 dark:border-slate-700/60 shadow-md sticky top-6">
+                    <h3 className="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-slate-700/60">
+                      Resumo da Reserva
+                    </h3>
+                    
+                    {bookingError && (
+                      <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-950/30 rounded-xl text-xs text-red-600 dark:text-red-400 font-bold mb-4 leading-relaxed">
+                        {bookingError}
+                      </div>
+                    )}
+
+                    <div className="space-y-4 text-xs font-bold mb-6">
+                      <div className="flex justify-between items-start gap-4">
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Serviço</span>
+                        <span className="text-gray-800 dark:text-slate-200 text-right">{displayService ? displayService.name : 'Não selecionado'}</span>
+                      </div>
+                      <div className="flex justify-between items-start gap-4">
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Duração</span>
+                        <span className="text-gray-800 dark:text-slate-200 text-right">{displayService ? `${displayService.duration} min` : '-'}</span>
+                      </div>
+                      <div className="flex justify-between items-start gap-4">
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Profissional</span>
+                        <span className="text-gray-800 dark:text-slate-200 text-right">{selectedProfessional ? selectedProfessional.user.name : 'Não selecionado'}</span>
+                      </div>
+                      <div className="flex justify-between items-start gap-4">
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Data</span>
+                        <span className="text-gray-800 dark:text-slate-200 text-right">
+                          {selectedDate ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR') : 'Não selecionada'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-start gap-4">
+                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Horário</span>
+                        <span className="text-indigo-600 dark:text-indigo-400 text-sm font-black">{selectedTime || 'Não selecionado'}</span>
+                      </div>
+                      <div className="flex justify-between items-start gap-4 border-t border-gray-100 dark:border-slate-700/60 pt-4 text-sm">
+                        <span className="text-gray-900 dark:text-white uppercase tracking-wider">Total</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-black text-lg">
+                          R$ {displayService ? displayService.price.toFixed(2) : '0,00'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleSchedule}
+                      disabled={bookingLoading || !selectedService || !selectedProfessional || !selectedDate || !selectedTime}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-500/25 transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none flex items-center justify-center gap-2 border-none cursor-pointer"
+                    >
+                      {bookingLoading ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
+                          <span>Confirmando...</span>
+                        </>
+                      ) : (
+                        <span>Confirmar Agendamento</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          ) : null}
+
+          <footer className="mt-16 text-center">
+            <p className="text-xs text-gray-400 dark:text-slate-500">
+              Painel STYLEFLOW • Todos os direitos reservados.
+            </p>
+          </footer>
+        </div>
+      </div>
     );
   }
 

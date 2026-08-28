@@ -1,9 +1,3 @@
 {
-  "build": {
-    "env": {
-      "VITE_ADMIN_PROTOTYPE": "true",
-      "VITE_ADMIN_PROTOTYPE_SLUGS": "leleco"
-    }
-  },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
