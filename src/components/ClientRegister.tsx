@@ -9,6 +9,7 @@ export type ClientRegisterProps = {
   primaryColor?: string;
   backHref: string;
   loginHref: string;
+  onPrefetchAlternate?: () => void;
   name: string;
   phone: string;
   onNameChange: (value: string) => void;
@@ -27,6 +28,7 @@ export default function ClientRegister({
   primaryColor = '#d5a85c',
   backHref,
   loginHref,
+  onPrefetchAlternate,
   name,
   phone,
   onNameChange,
@@ -184,7 +186,12 @@ export default function ClientRegister({
 
           <p className="mt-6 text-center text-sm" style={{ color: 'var(--lp-muted)' }}>
             Já tem cadastro?{' '}
-            <Link to={loginHref} className="font-medium text-[var(--brand)] underline-offset-4 hover:underline">
+            <Link
+              to={loginHref}
+              onMouseEnter={onPrefetchAlternate}
+              onFocus={onPrefetchAlternate}
+              className="font-medium text-[var(--brand)] underline-offset-4 hover:underline"
+            >
               Entrar agora
             </Link>
           </p>

@@ -9,6 +9,7 @@ export type ClientLoginProps = {
   primaryColor?: string;
   backHref: string;
   registerHref: string;
+  onPrefetchAlternate?: () => void;
   phone: string;
   onPhoneChange: (value: string) => void;
   onSubmit: (event: React.FormEvent) => void;
@@ -25,6 +26,7 @@ export default function ClientLogin({
   primaryColor = '#d5a85c',
   backHref,
   registerHref,
+  onPrefetchAlternate,
   phone,
   onPhoneChange,
   onSubmit,
@@ -161,7 +163,12 @@ export default function ClientLogin({
 
           <p className="mt-6 text-center text-sm" style={{ color: 'var(--lp-muted)' }}>
             Ainda não tem cadastro?{' '}
-            <Link to={registerHref} className="font-medium text-[var(--brand)] underline-offset-4 hover:underline">
+            <Link
+              to={registerHref}
+              onMouseEnter={onPrefetchAlternate}
+              onFocus={onPrefetchAlternate}
+              className="font-medium text-[var(--brand)] underline-offset-4 hover:underline"
+            >
               Criar conta
             </Link>
           </p>

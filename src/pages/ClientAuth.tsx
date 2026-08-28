@@ -5,6 +5,7 @@ import ClientRegister from '../components/ClientRegister';
 import { isCustomDomainHost, parseApiError, useTenantBranding } from '../hooks/useTenant';
 import type { TenantBranding } from '../hooks/useTenant';
 import { apiUrl } from '../config/api';
+import { prefetchPublicSalon, readPublicSalonCache } from '../lib/public-salon-cache';
 
 interface ClientAuthProps {
   mode: 'login' | 'register';
@@ -15,9 +16,18 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
   const navigate = useNavigate();
   const isCustomDomain = isCustomDomainHost();
 
-  const [tenant, setTenant] = useState<TenantBranding | null>(null);
-  const [salonName, setSalonName] = useState('');
-  const [salonAddress, setSalonAddress] = useState('');
+  const [tenant, setTenant] = useState<TenantBranding | null>(() => {
+    const cached = readPublicSalonCache(salonSlug) as { tenant?: TenantBranding } | null;
+    return cached?.tenant ?? null;
+  });
+  const [salonName, setSalonName] = useState(() => {
+    const cached = readPublicSalonCache(salonSlug) as { salon?: { name?: string } } | null;
+    return cached?.salon?.name || '';
+  });
+  const [salonAddress, setSalonAddress] = useState(() => {
+    const cached = readPublicSalonCache(salonSlug) as { salon?: { address?: string } } | null;
+    return cached?.salon?.address || '';
+  });
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
@@ -37,6 +47,10 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
       navigate(publicSalonPath);
     }
   }, [navigate, publicSalonPath]);
+
+  useEffect(() => {
+    prefetchPublicSalon(salonSlug);
+  }, [salonSlug]);
 
   useEffect(() => {
     const fetchSalonInfo = async () => {
@@ -141,6 +155,7 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
       <ClientLogin
         {...sharedProps}
         registerHref={registerPath}
+        onPrefetchAlternate={() => prefetchPublicSalon(salonSlug)}
         phone={phone}
         onPhoneChange={(value) => setPhone(formatPhoneInput(value))}
       />
@@ -151,6 +166,7 @@ export default function ClientAuth({ mode }: ClientAuthProps) {
     <ClientRegister
       {...sharedProps}
       loginHref={loginPath}
+      onPrefetchAlternate={() => prefetchPublicSalon(salonSlug)}
       name={name}
       phone={phone}
       onNameChange={setName}

@@ -14,6 +14,7 @@ export type ClientLandingProps = {
   primaryColor?: string;
   loginPath: string;
   onBookClick?: () => void;
+  onPrefetchAuth?: () => void;
 };
 
 const DEFAULT_HISTORY =
@@ -32,6 +33,7 @@ export default function ClientLanding({
   primaryColor = '#d5a85c',
   loginPath,
   onBookClick,
+  onPrefetchAuth,
 }: ClientLandingProps) {
   const story = historyText?.trim() || DEFAULT_HISTORY;
   const sinceLabel = lpSinceYear?.trim() ? `Desde ${lpSinceYear.trim()}` : null;
@@ -73,6 +75,8 @@ export default function ClientLanding({
           </span>
           <Link
             to={loginPath}
+            onMouseEnter={onPrefetchAuth}
+            onFocus={onPrefetchAuth}
             className="group flex items-center gap-1.5 text-[#f5f5f4] transition-colors hover:text-[var(--brand)]"
           >
             Entrar / Cadastrar
@@ -126,6 +130,8 @@ export default function ClientLanding({
                 <button
                   type="button"
                   onClick={onBookClick}
+                  onMouseEnter={onPrefetchAuth}
+                  onFocus={onPrefetchAuth}
                   className="group inline-flex items-center justify-center gap-3 border-none bg-[var(--brand)] px-6 py-4 text-sm font-semibold text-[#111] transition-all hover:-translate-y-1 hover:brightness-110 cursor-pointer"
                 >
                   Fazer meu Agendamento
@@ -134,6 +140,8 @@ export default function ClientLanding({
               ) : (
                 <Link
                   to={loginPath}
+                  onMouseEnter={onPrefetchAuth}
+                  onFocus={onPrefetchAuth}
                   className="group inline-flex items-center justify-center gap-3 bg-[var(--brand)] px-6 py-4 text-sm font-semibold text-[#111] transition-all hover:-translate-y-1 hover:brightness-110"
                 >
                   Fazer meu Agendamento
@@ -209,14 +217,16 @@ export default function ClientLanding({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Instagram do salão"
-                className="inline-flex items-center gap-1.5 border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors hover:text-[var(--brand)]"
-                style={{ borderColor: 'var(--lp-border)', color: 'var(--lp-muted)' }}
+                className="transition-colors hover:text-[var(--brand)]"
               >
-                <Instagram className="h-3.5 w-3.5 text-[var(--brand)]" />
-                Instagram
+                <Instagram className="h-4 w-4" />
               </a>
-            ) : null}
-            {instagramUrl && <span className="h-1 w-1 rounded-full bg-white/30" />}
+            ) : (
+              <span style={{ color: 'var(--lp-muted)' }}>
+                <Instagram className="h-4 w-4" />
+              </span>
+            )}
+            <span className="h-1 w-1 rounded-full bg-white/30" />
             Agende em poucos cliques
           </span>
         </footer>
