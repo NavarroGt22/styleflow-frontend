@@ -1,7 +1,12 @@
-import { apiUrl } from './config'
-import { clearSession, getSessionToken } from './auth'
+import { apiUrl } from '@/lib/config'
+import { clearSession, getSessionToken, isAdminSessionExpired, redirectToAdminLogin } from './auth'
 
 export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  if (typeof window !== 'undefined' && isAdminSessionExpired()) {
+    redirectToAdminLogin(`${window.location.pathname}${window.location.search}`, 'session_expired')
+    return new Response(null, { status: 401 })
+  }
+
   const token = getSessionToken()
   const headers = new Headers(options.headers ?? {})
 

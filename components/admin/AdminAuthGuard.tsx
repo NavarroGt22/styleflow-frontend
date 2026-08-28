@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
-import { getSessionUser, userCanAccessSalon } from '@/lib/auth'
+import { getSessionUser, userCanAccessSalon, clearSession, isAdminSessionExpired } from '@/lib/auth'
 import AdminPageShell from './AdminPageShell'
 
 type Props = {
@@ -18,10 +18,11 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
 
   useEffect(() => {
     const user = getSessionUser()
+    const next = encodeURIComponent(`/admin/${salonSlug}`)
 
-    if (!user) {
-      const next = encodeURIComponent(`/admin/${salonSlug}`)
-      router.replace(`/login?next=${next}`)
+    if (!user || isAdminSessionExpired()) {
+      if (user) clearSession()
+      router.replace(`/login?next=${next}&reason=session_expired`)
       return
     }
 
@@ -40,6 +41,19 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
     setBillingLocked(locked)
     setReady(true)
   }, [router, salonSlug])
+
+  useEffect(() => {
+    if (!ready) return
+
+    const interval = window.setInterval(() => {
+      if (!isAdminSessionExpired()) return
+      clearSession()
+      const next = encodeURIComponent(`/admin/${salonSlug}`)
+      router.replace(`/login?next=${next}&reason=session_expired`)
+    }, 30_000)
+
+    return () => window.clearInterval(interval)
+  }, [ready, router, salonSlug])
 
   if (!ready) {
     return (

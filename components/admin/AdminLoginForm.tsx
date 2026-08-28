@@ -1,14 +1,34 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowUpRight, Eye, EyeOff, Scissors } from 'lucide-react'
 import { apiUrl } from '@/lib/config'
 import { setSession } from '@/lib/auth'
+import {
+  clearLoginLockout,
+  formatLockoutRemaining,
+  forceLoginLockout,
+  getLoginLockout,
+  recordFailedLogin,
+} from '@/lib/admin/login-lockout'
 import AdminPageShell from './AdminPageShell'
 
 const inputClass =
   'h-12 w-full rounded-xl border border-slate-600 bg-[#142035] px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400'
+
+async function parseLoginResponse(response: Response) {
+  const contentType = response.headers.get('content-type') || ''
+  const isJson = contentType.includes('application/json')
+
+  if (!isJson) {
+    throw new Error(
+      `Não foi possível conectar à API (${response.status}). Verifique se o backend está online e se NEXT_PUBLIC_API_URL está configurada.`,
+    )
+  }
+
+  return response.json() as Promise<{ error?: string; token?: string; refreshToken?: string; user?: unknown }>
+}
 
 export default function AdminLoginForm() {
   const router = useRouter()
@@ -17,11 +37,48 @@ export default function AdminLoginForm() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
+  const [lockoutRemainingMs, setLockoutRemainingMs] = useState(0)
   const [loading, setLoading] = useState(false)
+
+  const sessionExpired = searchParams.get('reason') === 'session_expired'
+  const lockout = getLoginLockout(email)
+  const isLocked = lockout.locked || lockoutRemainingMs > 0
+
+  useEffect(() => {
+    if (sessionExpired) {
+      setInfo('Por segurança, confirme sua senha novamente. A sessão do painel expira a cada 10 minutos.')
+    }
+  }, [sessionExpired])
+
+  useEffect(() => {
+    const current = getLoginLockout(email)
+    if (!current.locked) {
+      setLockoutRemainingMs(0)
+      return
+    }
+
+    setLockoutRemainingMs(current.remainingMs)
+    const timer = window.setInterval(() => {
+      const next = getLoginLockout(email)
+      setLockoutRemainingMs(next.remainingMs)
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [email])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
+    setInfo(sessionExpired ? 'Por segurança, confirme sua senha novamente. A sessão do painel expira a cada 10 minutos.' : '')
+
+    const currentLockout = getLoginLockout(email)
+    if (currentLockout.locked) {
+      setLockoutRemainingMs(currentLockout.remainingMs)
+      setError(`Muitas tentativas incorretas. Aguarde ${formatLockoutRemaining(currentLockout.remainingMs)} para tentar novamente.`)
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -30,17 +87,42 @@ export default function AdminLoginForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
-      const data = await response.json()
+      const data = await parseLoginResponse(response)
 
       if (!response.ok) {
-        throw new Error(data.error || 'E-mail ou senha incorretos.')
+        if (response.status === 429) {
+          const nextLockout = forceLoginLockout(email)
+          setLockoutRemainingMs(nextLockout.remainingMs)
+          throw new Error(data.error || 'Muitas tentativas incorretas. Aguarde 10 minutos.')
+        }
+
+        if (response.status === 401) {
+          const nextLockout = recordFailedLogin(email)
+          if (nextLockout.locked) {
+            setLockoutRemainingMs(nextLockout.remainingMs)
+            throw new Error(`Senha incorreta. Conta bloqueada por 10 minutos após ${3} tentativas.`)
+          }
+          throw new Error(
+            data.error ||
+              `E-mail ou senha incorretos. Restam ${nextLockout.attemptsLeft} tentativa(s) antes do bloqueio.`,
+          )
+        }
+
+        throw new Error(data.error || 'Não foi possível entrar.')
       }
 
-      if (data.user.role === 'CUSTOMER') {
+      if (!data.token || !data.refreshToken || !data.user) {
+        throw new Error('Resposta de login inválida.')
+      }
+
+      const user = data.user as { role: string; professionalProfile?: { salon?: { slug?: string } }; salons?: { slug: string }[] }
+
+      if (user.role === 'CUSTOMER') {
         throw new Error('Este portal é exclusivo para donos e profissionais.')
       }
 
-      setSession(data.token, data.refreshToken, data.user)
+      clearLoginLockout(email)
+      setSession(data.token, data.refreshToken, user as Parameters<typeof setSession>[2])
 
       const next = searchParams.get('next')
       if (next?.startsWith('/admin/')) {
@@ -48,8 +130,7 @@ export default function AdminLoginForm() {
         return
       }
 
-      const salonSlug =
-        data.user.professionalProfile?.salon?.slug ?? data.user.salons?.[0]?.slug ?? 'leleco'
+      const salonSlug = user.professionalProfile?.salon?.slug ?? user.salons?.[0]?.slug ?? 'leleco'
       router.replace(`/admin/${salonSlug}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível entrar.')
@@ -97,6 +178,7 @@ export default function AdminLoginForm() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   required
+                  disabled={isLocked || loading}
                   className={inputClass}
                 />
               </div>
@@ -112,6 +194,7 @@ export default function AdminLoginForm() {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     required
+                    disabled={isLocked || loading}
                     className={`${inputClass} pr-11`}
                   />
                   <button
@@ -125,11 +208,17 @@ export default function AdminLoginForm() {
                 </div>
               </div>
 
+              {info ? <p className="text-sm text-amber-300/90">{info}</p> : null}
               {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+              {isLocked ? (
+                <p className="text-sm text-rose-300">
+                  Bloqueio ativo. Tente novamente em {formatLockoutRemaining(lockoutRemainingMs)}.
+                </p>
+              ) : null}
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || isLocked}
                 className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:-translate-y-0.5 hover:brightness-110 disabled:pointer-events-none disabled:opacity-60"
               >
                 {loading ? 'Entrando...' : 'Entrar no painel'}
