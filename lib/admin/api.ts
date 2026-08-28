@@ -4,7 +4,13 @@ import type { Appointment, FinancialDashboard, Product, Professional, QueueSessi
 async function parseJson<T>(response: Response): Promise<T> {
   const data = await response.json()
   if (!response.ok) {
-    throw new Error((data as { error?: string }).error || 'Erro na requisição.')
+    const payload = data as { error?: string; details?: unknown }
+    if (payload.details && Array.isArray(payload.details)) {
+      const first = payload.details[0] as { message?: string; path?: (string | number)[] }
+      const field = first?.path?.join('.') || 'campo'
+      throw new Error(first?.message ? `${field}: ${first.message}` : payload.error || 'Erro na requisição.')
+    }
+    throw new Error(payload.error || 'Erro na requisição.')
   }
   return data as T
 }
@@ -257,7 +263,21 @@ export async function sellProduct(payload: {
 export function normalizeInstagram(value: string): string {
   const trimmed = value.trim()
   if (!trimmed) return ''
-  if (trimmed.startsWith('http')) return trimmed
-  const handle = trimmed.replace(/^@/, '')
-  return `https://instagram.com/${handle}`
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const parsed = new URL(trimmed)
+      const host = parsed.hostname.replace(/^www\./, '')
+      if (host === 'instagram.com') {
+        const path = parsed.pathname.replace(/^\/+/, '').replace(/\/+$/, '')
+        return path ? `https://www.instagram.com/${path}` : ''
+      }
+    } catch {
+      return trimmed
+    }
+    return trimmed
+  }
+
+  const handle = trimmed.replace(/^@/, '').replace(/^\/+/, '')
+  return handle ? `https://www.instagram.com/${handle}` : ''
 }

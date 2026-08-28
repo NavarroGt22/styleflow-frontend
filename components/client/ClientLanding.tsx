@@ -69,19 +69,19 @@ export default function ClientLanding({
 
       <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-5 sm:px-8">
         <div
-          className="flex items-center justify-between border-b py-5 text-[11px] font-medium uppercase tracking-[0.18em]"
-          style={{ borderColor: 'var(--lp-border)', color: 'var(--lp-muted)' }}
+          className="sticky top-0 z-40 -mx-5 flex items-center justify-between border-b px-5 py-4 text-[11px] font-medium sm:-mx-8 sm:px-8"
+          style={{ borderColor: 'var(--lp-border)', color: 'var(--lp-muted)', background: 'color-mix(in srgb, var(--lp-bg) 92%, transparent)', backdropFilter: 'blur(10px)' }}
         >
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 tracking-wide">
             <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)] shadow-[0_0_12px_var(--brand)]" />
-            Acesso de Visitante
+            <span className="uppercase">Acesso de Visitante</span>
           </span>
           <Link
             href={loginPath}
             prefetch
-            className="group flex items-center gap-1.5 text-[#f5f5f4] transition-colors hover:text-[var(--brand)]"
+            className="group flex items-center gap-1.5 tracking-wide text-[#f5f5f4] transition-colors hover:text-[var(--brand)]"
           >
-            Entrar / Cadastrar
+            <span className="uppercase">Entrar / Cadastrar</span>
             <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
           </Link>
         </div>

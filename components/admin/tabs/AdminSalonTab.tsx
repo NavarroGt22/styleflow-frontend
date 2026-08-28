@@ -178,7 +178,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
         customBrandName: form.customBrandName,
         historyText: form.historyText.slice(0, 800),
         tenantName: form.tenantName,
-        lpSinceYear: form.lpSinceYear ? Number(form.lpSinceYear) : null,
+        lpSinceYear: form.lpSinceYear?.trim() || null,
         logoUrl: form.logoUrl || null,
         heroImageUrl: form.heroImageUrl || null,
         faviconUrl: form.faviconUrl || null,

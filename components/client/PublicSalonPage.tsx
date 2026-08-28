@@ -601,10 +601,10 @@ export default function PublicSalonPage() {
       <div className="min-h-screen bg-[#0b1224] px-4 py-8 text-slate-100 transition-colors duration-300 sm:px-6">
         {unitPicker}
         {primaryColor ? <style>{clientBrandStyles(primaryColor)}</style> : null}
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-6xl">
           
-          {/* BARRA DE LOGIN DO CLIENTE */}
-          <div className="mb-5 flex items-center justify-between rounded-xl border border-slate-700 bg-[#1d2a3e] px-4 py-3 text-[10px] font-bold">
+          {/* BARRA DO CLIENTE — fixa no scroll */}
+          <div className="sticky top-0 z-40 -mx-4 mb-5 flex items-center justify-between rounded-none border-b border-slate-700 bg-[#0b1224]/95 px-4 py-3 text-[10px] font-bold backdrop-blur-md sm:-mx-6 sm:px-6">
             <div className="flex items-center gap-2.5">
               <span className={`h-2 w-2 rounded-full ${currentUser ? 'animate-pulse bg-emerald-400' : 'animate-pulse bg-indigo-400'}`} />
               <span className="text-slate-300">
@@ -707,7 +707,7 @@ export default function PublicSalonPage() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1fr_160px]">
+              <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_minmax(240px,280px)]">
                 <div className="space-y-3.5">
                   
                   {/* SELEÇÃO DE SERVIÇO */}
@@ -863,8 +863,8 @@ export default function PublicSalonPage() {
                 </div>
 
                 <aside>
-                  <div className="rounded-xl border border-slate-700 bg-[#1d2a3e] p-4 lg:sticky lg:top-5">
-                    <h3 className="mb-4 border-b border-slate-600 pb-3 text-[10px] font-bold text-white">
+                  <div className="rounded-xl border border-slate-700 bg-[#1d2a3e] p-4 lg:sticky lg:top-[4.5rem] lg:z-30">
+                    <h3 className="mb-4 border-b border-slate-600 pb-3 text-[10px] font-bold tracking-wide text-white">
                       RESUMO DA RESERVA
                     </h3>
                     
@@ -874,32 +874,32 @@ export default function PublicSalonPage() {
                       </div>
                     )}
 
-                    <div className="space-y-4 text-xs font-bold mb-6">
-                      <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Serviço</span>
-                        <span className="text-gray-800 dark:text-slate-200 text-right">{displayService ? displayService.name : 'Não selecionado'}</span>
+                    <div className="space-y-3.5 text-sm mb-6">
+                      <div className="space-y-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Serviço</span>
+                        <span className="block text-right font-medium leading-snug text-slate-200">{displayService ? displayService.name : 'Não selecionado'}</span>
                       </div>
-                      <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Duração</span>
-                        <span className="text-gray-800 dark:text-slate-200 text-right">{displayService ? `${displayService.duration} min` : '-'}</span>
+                      <div className="space-y-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Duração</span>
+                        <span className="block text-right font-medium text-slate-200">{displayService ? `${displayService.duration} min` : '-'}</span>
                       </div>
-                      <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Profissional</span>
-                        <span className="text-gray-800 dark:text-slate-200 text-right">{selectedProfessional ? selectedProfessional.user.name : 'Não selecionado'}</span>
+                      <div className="space-y-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Profissional</span>
+                        <span className="block text-right font-medium leading-snug text-slate-200">{selectedProfessional ? selectedProfessional.user.name : 'Não selecionado'}</span>
                       </div>
-                      <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Data</span>
-                        <span className="text-gray-800 dark:text-slate-200 text-right">
+                      <div className="space-y-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Data</span>
+                        <span className="block text-right font-medium text-slate-200">
                           {selectedDate ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR') : 'Não selecionada'}
                         </span>
                       </div>
-                      <div className="flex justify-between items-start gap-4">
-                        <span className="text-gray-400 dark:text-slate-550 uppercase tracking-wider shrink-0">Horário</span>
-                        <span className="text-indigo-600 dark:text-indigo-400 text-sm font-black">{selectedTime || 'Não selecionado'}</span>
+                      <div className="space-y-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Horário</span>
+                        <span className="block text-right text-base font-bold text-[var(--brand,#d5a85c)]">{selectedTime || 'Não selecionado'}</span>
                       </div>
-                      <div className="flex justify-between items-start gap-4 border-t border-gray-100 dark:border-slate-700/60 pt-4 text-sm">
-                        <span className="text-gray-900 dark:text-white uppercase tracking-wider">Total</span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-black text-lg">
+                      <div className="space-y-1 border-t border-slate-600 pt-3">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total</span>
+                        <span className="block text-right text-lg font-bold text-emerald-400">
                           R$ {displayService ? displayService.price.toFixed(2) : '0,00'}
                         </span>
                       </div>
@@ -996,8 +996,8 @@ export default function PublicSalonPage() {
       )}
       <div className="max-w-4xl mx-auto">
         
-        {/* BARRA DE LOGIN DO CLIENTE */}
-        <div className="flex justify-between items-center bg-white dark:bg-slate-800 px-6 py-3.5 rounded-2xl border border-gray-150/60 dark:border-slate-700 shadow-sm mb-6 transition-all duration-300 hover:shadow-md">
+        {/* BARRA DO CLIENTE — fixa no scroll */}
+        <div className="sticky top-0 z-40 -mx-4 mb-6 flex items-center justify-between border-b border-gray-200 bg-white/95 px-4 py-3.5 backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/95 sm:-mx-6 sm:px-6">
           <div className="flex items-center gap-2.5">
             <span className={`w-2 h-2 rounded-full ${currentUser ? 'bg-emerald-500 animate-pulse' : 'bg-indigo-500 animate-pulse'}`}></span>
             <span className="text-xs font-extrabold text-gray-500 dark:text-slate-400">
