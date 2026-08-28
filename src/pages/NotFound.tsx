@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Scissors, AlertTriangle, ArrowLeft, Home, HelpCircle } from 'lucide-react';
-import { clientPublicUrl, ownerAdminUrl, superAdminUrl } from '../config/platform-urls';
+import { Scissors, AlertTriangle, ArrowLeft, Store, HelpCircle } from 'lucide-react';
+import { clientPublicUrl } from '../config/platform-urls';
 
 export default function NotFound() {
   const navigate = useNavigate();
@@ -45,10 +45,10 @@ export default function NotFound() {
           
           <div className="space-y-3.5 text-xs sm:text-sm text-gray-600 dark:text-slate-350">
             <p className="leading-relaxed">
-              O StyleFlow separa links administrativos de vitrines públicas usando <strong className="text-gray-900 dark:text-white font-bold">Slugs Dinâmicos</strong>:
+              A vitrine pública de cada salão usa um <strong className="text-gray-900 dark:text-white font-bold">slug</strong> no endereço:
             </p>
             
-            <ul className="space-y-2.5 pl-1.5 border-l-2 border-indigo-500/30">
+            <ul className="space-y-2.5 pl-1.5 border-l-2 border-emerald-500/30">
               <li className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
                 <span className="font-bold text-gray-800 dark:text-slate-200 min-w-[130px] flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -56,24 +56,6 @@ export default function NotFound() {
                 </span>
                 <code className="px-2 py-0.5 bg-slate-200/50 dark:bg-slate-800/80 rounded font-mono text-[11px] sm:text-xs text-indigo-600 dark:text-indigo-400 select-all">
                   {clientPublicUrl('nome-do-salao').replace(/^https?:\/\/[^/]+/, '')}
-                </code>
-              </li>
-              <li className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
-                <span className="font-bold text-gray-800 dark:text-slate-200 min-w-[130px] flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-                  Admin da Plataforma:
-                </span>
-                <code className="px-2 py-0.5 bg-slate-200/50 dark:bg-slate-800/80 rounded font-mono text-[11px] sm:text-xs text-indigo-600 dark:text-indigo-400 select-all">
-                  {superAdminUrl().replace(/^https?:\/\/[^/]+/, '')}
-                </code>
-              </li>
-              <li className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
-                <span className="font-bold text-gray-800 dark:text-slate-200 min-w-[130px] flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                  Painel da Equipe:
-                </span>
-                <code className="px-2 py-0.5 bg-slate-200/50 dark:bg-slate-800/80 rounded font-mono text-[11px] sm:text-xs text-indigo-600 dark:text-indigo-400 select-all">
-                  {ownerAdminUrl('nome-do-salao').replace(/^https?:\/\/[^/]+/, '')}
                 </code>
               </li>
             </ul>
@@ -95,11 +77,11 @@ export default function NotFound() {
           </button>
           
           <Link
-            to="/login"
+            to="/app/nome-do-salao"
             className="flex-1 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 transition-all active:scale-95 flex items-center justify-center gap-2 text-center decoration-transparent"
           >
-            <Home size={16} />
-            Página de Login
+            <Store size={16} />
+            Ver vitrine
           </Link>
         </div>
         
