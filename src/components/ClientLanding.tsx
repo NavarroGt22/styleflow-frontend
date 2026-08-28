@@ -1,4 +1,4 @@
-import { ArrowUpRight, CalendarDays, Camera, Check, MapPin, MessageCircle, Scissors } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, Check, Instagram, MapPin, MessageCircle, Scissors } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export type ClientLandingProps = {
@@ -204,13 +204,19 @@ export default function ClientLanding({
           <span>© {new Date().getFullYear()} {salonName}. Feito para quem cuida do próprio estilo.</span>
           <span className="flex items-center gap-4">
             {instagramUrl ? (
-              <a href={instagramUrl} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="transition-colors hover:text-[var(--brand)]">
-                <Camera className="h-4 w-4" />
+              <a
+                href={instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram do salão"
+                className="inline-flex items-center gap-1.5 border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors hover:text-[var(--brand)]"
+                style={{ borderColor: 'var(--lp-border)', color: 'var(--lp-muted)' }}
+              >
+                <Instagram className="h-3.5 w-3.5 text-[var(--brand)]" />
+                Instagram
               </a>
-            ) : (
-              <Camera className="h-4 w-4 opacity-40" />
-            )}
-            <span className="h-1 w-1 rounded-full bg-white/30" />
+            ) : null}
+            {instagramUrl && <span className="h-1 w-1 rounded-full bg-white/30" />}
             Agende em poucos cliques
           </span>
         </footer>
