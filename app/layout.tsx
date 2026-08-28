@@ -8,25 +8,16 @@ const bodyFont = DM_Sans({ subsets: ['latin'], variable: '--font-body' })
 const displayFont = Playfair_Display({ subsets: ['latin'], variable: '--font-display' })
 
 export const metadata: Metadata = {
-  title: 'Leleco Barbers — Seu estilo. Seu momento.',
-  description: 'Agende seu corte e barba online na Leleco Barbers.',
-  generator: 'v0.app',
+  title: {
+    default: 'StyleFlow',
+    template: '%s | StyleFlow',
+  },
+  description: 'Agendamento e gestão para barbearias e salões.',
+  applicationName: 'StyleFlow',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
   },
 }
 
