@@ -17,6 +17,7 @@ import {
   Sun,
   Timer,
   Users,
+  Contact,
 } from 'lucide-react'
 import AdminServicesTab from './tabs/AdminServicesTab'
 import AdminAgendaTab from './tabs/AdminAgendaTab'
@@ -25,6 +26,7 @@ import AdminTeamTab from './tabs/AdminTeamTab'
 import AdminStockTab from './tabs/AdminStockTab'
 import AdminQueueTab from './tabs/AdminQueueTab'
 import AdminSalonTab from './tabs/AdminSalonTab'
+import AdminClientsTab from './tabs/AdminClientsTab'
 import AdminPageShell from './AdminPageShell'
 import type { AdminTab, AdminDashboardProps } from '@/lib/admin/types'
 import { clearSession, getSessionUser, resolveSalonForSlug } from '@/lib/auth'
@@ -35,6 +37,7 @@ const DEFAULT_BRAND = '#d5a85c'
 const tabs: { id: AdminTab; label: string; icon: typeof Scissors }[] = [
   { id: 'services', label: 'Meus Serviços', icon: Scissors },
   { id: 'agenda', label: 'Agenda', icon: CalendarDays },
+  { id: 'clientes', label: 'Clientes', icon: Contact },
   { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
   { id: 'equipe', label: 'Equipe', icon: Users },
   { id: 'estoque', label: 'Estoque', icon: Package },
@@ -156,7 +159,10 @@ export default function AdminDashboard({
             <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-lg border border-[var(--brand)]/60 bg-[var(--brand)]/10 text-[var(--brand)]">
               <Scissors className="size-5 -rotate-45" />
             </div>
-            <p className="mx-auto mb-1 w-fit rounded bg-gradient-to-r from-indigo-500 to-pink-500 px-2 py-0.5 text-[8px] font-bold tracking-wide text-white">
+            <p
+              className="mx-auto mb-1 w-fit rounded px-2 py-0.5 text-[8px] font-bold tracking-wide text-white"
+              style={{ backgroundColor: 'var(--brand, #d5a85c)' }}
+            >
               {brandUpper} · STYLEFLOW
             </p>
             <h1 className={`text-lg font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{resolvedBrand}</h1>
@@ -170,8 +176,8 @@ export default function AdminDashboard({
               type="button"
               className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition ${
                 lightMode
-                  ? 'border-indigo-300 text-indigo-600 hover:bg-indigo-50'
-                  : 'border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/10'
+                  ? 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                  : 'border-slate-600 text-slate-300 hover:bg-slate-800/80'
               }`}
             >
               <Plus className="size-3.5" />
@@ -186,7 +192,11 @@ export default function AdminDashboard({
             </button>
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-500 via-fuchsia-500 to-orange-400 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-white transition hover:brightness-110"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition ${
+                lightMode
+                  ? 'border-slate-300 text-slate-700 hover:bg-slate-50'
+                  : 'border-slate-600 text-slate-300 hover:bg-slate-800'
+              }`}
             >
               <Camera className="size-3.5" />
               Instagram
@@ -257,6 +267,7 @@ export default function AdminDashboard({
               <>
                 {activeTab === 'services' && <AdminServicesTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'agenda' && <AdminAgendaTab salonId={resolvedSalonId} lightMode={lightMode} />}
+                {activeTab === 'clientes' && <AdminClientsTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'financeiro' && <AdminFinancialTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'equipe' && <AdminTeamTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'estoque' && <AdminStockTab salonId={resolvedSalonId} lightMode={lightMode} />}

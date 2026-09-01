@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { toast } from '@/lib/client/toast';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Scissors, Clock, Users, AlertCircle, Check, CheckCircle, Sun, Moon, MapPin } from 'lucide-react';
+import { Scissors, Clock, Users, AlertCircle, Check, CheckCircle, Sun, Moon, MapPin, Gift } from 'lucide-react';
 import InstagramIcon from '@/components/icons/InstagramIcon';
 import { secureFetch as fetch } from '@/lib/client/api';
 import { useTenantBranding, type TenantBranding } from '@/lib/client/useTenant';
@@ -13,6 +13,7 @@ import { isCustomDomainHost } from '@/lib/client/domains';
 import { computeQueueWaitMinutes } from '@/lib/client/queue-wait';
 import { QueueActiveTimer } from '@/components/client/QueueActiveTimer';
 import ClientLanding from '@/components/client/ClientLanding';
+import BookingDateTimePicker from '@/components/client/BookingDateTimePicker';
 import { ClientSalonError, ClientSalonLoading, clientBrandStyles } from '@/components/client/ClientSalonShell';
 import { getSalonCache, readClientSession, setSalonCache } from '@/lib/client/salon-cache';
 
@@ -71,7 +72,6 @@ const generateTimeSlots = (professional: any, selectedDate: string, serviceDurat
 const isCustomDomain = isCustomDomainHost();
 
 export default function PublicSalonPage() {
-  const todayStr = new Date().toISOString().split('T')[0];
   const params = useParams<{ salonSlug?: string }>();
   const salonSlug = params?.salonSlug;
   const router = useRouter();
@@ -79,6 +79,7 @@ export default function PublicSalonPage() {
   const [loading, setLoading] = useState(() => !getSalonCache(salonSlug));
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(() => readClientSession());
+  const [loyalty, setLoyalty] = useState<any>(null);
 
   const [isDark, setIsDark] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem('theme') !== 'light' : true,
@@ -121,7 +122,6 @@ export default function PublicSalonPage() {
   const [loadingBookingData, setLoadingBookingData] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
 
-
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<any>(null);
@@ -148,11 +148,34 @@ export default function PublicSalonPage() {
     if (sessionUser) setCurrentUser(sessionUser);
   }, []);
 
+  useEffect(() => {
+    const salonId = data?.salon?.id;
+    if (!currentUser || !salonId || !sessionStorage.getItem('client_token')) {
+      setLoyalty(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/loyalty/me?salonId=${encodeURIComponent(salonId)}`));
+        if (!res.ok) return;
+        const payload = await res.json();
+        if (!cancelled) setLoyalty(payload);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, data?.salon?.id]);
+
   const handleLogout = () => {
     sessionStorage.removeItem('client_token');
     sessionStorage.removeItem('client_user');
     sessionStorage.removeItem('client_refreshToken');
     setCurrentUser(null);
+    setLoyalty(null);
     setSelectedService(null);
     setSelectedProfessional(null);
     setSelectedDate('');
@@ -645,17 +668,23 @@ export default function PublicSalonPage() {
             {logoUrl ? (
               <img src={logoUrl} alt={brandName} className="mx-auto mb-3 h-12 w-12 rounded-lg object-cover shadow-lg" />
             ) : (
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white shadow-lg">
+              <div
+                className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg text-white shadow-lg"
+                style={{ backgroundColor: primaryColor || '#d5a85c' }}
+              >
                 <Scissors size={24} className="-rotate-45" />
               </div>
             )}
-            <span className="mx-auto mb-2 inline-block rounded bg-gradient-to-r from-indigo-500 to-pink-500 px-2 py-0.5 text-[8px] font-bold tracking-wide text-white">
+            <span
+              className="mx-auto mb-2 inline-block rounded px-2 py-0.5 text-[8px] font-bold tracking-wide text-white"
+              style={{ backgroundColor: primaryColor || '#d5a85c' }}
+            >
               {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} · AGENDA ONLINE
             </span>
             <h1 className="text-lg font-bold text-white">{salon.name}</h1>
             {salon.address && (
               <p className="mx-auto mt-2 flex max-w-md items-center justify-center gap-1.5 text-xs text-slate-400">
-                <MapPin size={12} className="shrink-0 text-indigo-400" />
+                <MapPin size={12} className="shrink-0" style={{ color: primaryColor || '#d5a85c' }} />
                 <span>{salon.address}</span>
               </p>
             )}
@@ -710,6 +739,56 @@ export default function PublicSalonPage() {
             ) : (
               <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_minmax(240px,280px)]">
                 <div className="space-y-3.5">
+
+                  {loyalty ? (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <h3 className="flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-amber-200/80">
+                          <Gift className="h-3.5 w-3.5 text-amber-300" />
+                          SEUS CORTES &amp; PRÊMIOS
+                        </h3>
+                        {loyalty.availableCount > 0 ? (
+                          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-300">
+                            {loyalty.availableCount} disponível{loyalty.availableCount > 1 ? 'is' : ''}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mb-3 text-sm font-bold text-white">
+                        {loyalty.completedCuts} corte{loyalty.completedCuts === 1 ? '' : 's'}
+                        <span className="ml-2 text-[10px] font-medium text-slate-400">
+                          ({loyalty.loyaltyResetMode === 'MONTHLY' ? 'reinicia todo mês' : 'acúmulo infinito'})
+                        </span>
+                      </p>
+                      {loyalty.rewards?.length ? (
+                        <div className="space-y-2">
+                          {loyalty.rewards.map((reward: any) => {
+                            const pct = Math.min(
+                              100,
+                              Math.round((reward.progressInCycle / reward.cutsRequired) * 100),
+                            );
+                            return (
+                              <div key={reward.rewardId} className="rounded-lg border border-slate-700 bg-[#1d2a3e]/80 p-2.5">
+                                <div className="mb-1.5 flex items-center justify-between gap-2">
+                                  <p className="text-[11px] font-bold text-slate-100">{reward.title}</p>
+                                  <span className="text-[10px] font-bold text-amber-300">
+                                    {reward.progressInCycle}/{reward.cutsRequired}
+                                  </span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                                  <div className="h-full rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
+                                </div>
+                                {reward.description ? (
+                                  <p className="mt-1.5 text-[10px] text-slate-400">{reward.description}</p>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400">Nenhum prêmio configurado pelo salão ainda.</p>
+                      )}
+                    </div>
+                  ) : null}
                   
                   {/* SELEÇÃO DE SERVIÇO */}
                   <div className="rounded-xl border border-slate-700 bg-[#1d2a3e] p-4">
@@ -807,59 +886,28 @@ export default function PublicSalonPage() {
                   </div>
 
                   {/* SELEÇÃO DE DATA E HORÁRIO */}
-                  <div className="rounded-xl border border-slate-700 bg-[#1d2a3e] p-4">
-                    <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-400">
-                      <span className="text-emerald-400">3</span> DATA E HORÁRIO
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="mb-2 block text-[8px] font-bold uppercase tracking-wide text-slate-400">Escolha a data</label>
-                        <input
-                          type="date"
-                          min={todayStr}
-                          value={selectedDate}
-                          onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(''); }}
-                          disabled={!selectedProfessional}
-                          className="h-9 rounded-md border border-slate-600 bg-[#142035] px-2.5 text-[10px] font-semibold text-white outline-none focus:border-indigo-400 disabled:opacity-50"
-                        />
-                        {!selectedProfessional && (
-                          <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-extrabold mt-1.5">Selecione o profissional primeiro para ativar o calendário.</p>
-                        )}
-                      </div>
-
-                      {selectedProfessional && selectedDate && (
-                        <div>
-                          <label className="block text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 mb-2">Horários Disponíveis</label>
-                          {loadingSlots ? (
-                            <div className="py-6 flex justify-center"><div className="w-6 h-6 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div></div>
-                          ) : timeSlots.length === 0 ? (
-                            <p className="text-sm text-gray-550 dark:text-slate-400 italic">Fora do horário de expediente deste profissional.</p>
-                          ) : (
-                            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                              {timeSlots.map((slot: any) => (
-                                <button
-                                  key={slot.time}
-                                  type="button"
-                                  disabled={!slot.available}
-                                  onClick={() => setSelectedTime(slot.time)}
-                                  className={`py-2 px-1 rounded-xl text-xs font-extrabold transition-all border ${
-                                    !slot.available
-                                      ? 'bg-gray-100 dark:bg-slate-900 border-gray-200 dark:border-slate-850 text-gray-400 dark:text-slate-600 cursor-not-allowed line-through'
-                                      : selectedTime === slot.time
-                                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 dark:border-indigo-500 shadow-md shadow-indigo-500/25 scale-105 active:scale-95'
-                                      : 'bg-white dark:bg-slate-800 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-900/60 active:scale-95'
-                                  }`}
-                                >
-                                  {slot.time}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <BookingDateTimePicker
+                    brandColor={primaryColor || '#d5a85c'}
+                    openWeekdays={
+                      Array.isArray(data?.salon?.openWeekdays) && data.salon.openWeekdays.length
+                        ? data.salon.openWeekdays
+                        : [1, 2, 3, 4, 5, 6]
+                    }
+                    closedDayMessage={
+                      data?.salon?.closedDayMessage ||
+                      'Neste dia o barbeiro está de folga. Escolha outro dia para o corte.'
+                    }
+                    selectedDate={selectedDate}
+                    onSelectDate={(value) => {
+                      setSelectedDate(value);
+                      setSelectedTime('');
+                    }}
+                    selectedTime={selectedTime}
+                    onSelectTime={setSelectedTime}
+                    timeSlots={timeSlots}
+                    loadingSlots={loadingSlots}
+                    disabled={!selectedProfessional}
+                  />
 
                 </div>
 
@@ -1038,11 +1086,17 @@ export default function PublicSalonPage() {
           {logoUrl ? (
             <img src={logoUrl} alt={brandName} className="w-20 h-20 object-cover rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-none mb-4 hover:scale-105 transition-all duration-300" />
           ) : (
-            <div className="p-3 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl text-white shadow-xl shadow-indigo-500/20 mb-4 hover:scale-105 hover:rotate-6 transition-all duration-300">
+            <div
+              className="p-3 rounded-2xl text-white shadow-xl mb-4 hover:scale-105 transition-all duration-300"
+              style={{ backgroundColor: primaryColor || '#d5a85c' }}
+            >
               <Scissors size={32} />
             </div>
           )}
-          <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded-md mb-2">
+          <span
+            className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-white rounded-md mb-2"
+            style={{ backgroundColor: primaryColor || '#d5a85c' }}
+          >
             {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} • FILA DINÂMICA
           </span>
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white transition-colors">

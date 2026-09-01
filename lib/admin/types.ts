@@ -1,4 +1,4 @@
-export type AdminTab = 'services' | 'agenda' | 'financeiro' | 'equipe' | 'estoque' | 'fila' | 'salao'
+export type AdminTab = 'services' | 'agenda' | 'financeiro' | 'equipe' | 'estoque' | 'fila' | 'salao' | 'clientes'
 
 export type Product = {
   id: string
@@ -7,6 +7,7 @@ export type Product = {
   stockQuantity: number
   minStockAlert: number
   isActive: boolean
+  isReward?: boolean
   description?: string | null
 }
 
@@ -45,6 +46,8 @@ export type FinancialDashboard = {
   totalRevenue: number
   totalCommissions: number
   netProfit: number
+  completedCuts?: number
+  period?: { from: string | null; to: string | null }
   recentRecords: Array<{
     id: string
     amount: number
@@ -89,6 +92,8 @@ export type SalonSettings = {
   address?: string | null
   openTime?: string
   closeTime?: string
+  openWeekdays?: number[]
+  closedDayMessage?: string | null
   instagramUrl?: string | null
   queueMode?: boolean
   queueAutoAdvance?: boolean
@@ -101,6 +106,7 @@ export type SalonSettings = {
   ownerId?: string
   productCommissionEnabled?: boolean
   productCommissionRate?: number
+  loyaltyResetMode?: 'LIFETIME' | 'MONTHLY'
   tenant?: {
     id?: string
     name?: string
@@ -133,4 +139,46 @@ export type AdminDashboardProps = {
   salonId?: string
   primaryColor?: string
   useMock?: boolean
+}
+
+export type LoyaltyRewardType = 'CUSTOM_TEXT' | 'FREE_CUT' | 'PRODUCT'
+
+export type LoyaltyReward = {
+  id: string
+  title: string
+  description?: string | null
+  cutsRequired: number
+  rewardType: LoyaltyRewardType
+  productId?: string | null
+  isActive: boolean
+  product?: { id: string; name: string; stockQuantity: number; isReward?: boolean } | null
+}
+
+export type SalonCustomer = {
+  id: string
+  userId: string
+  name: string
+  email: string
+  phone?: string | null
+  isActive: boolean
+  completedCuts: number
+  availableRewards: Array<{
+    earnId: string
+    rewardId: string
+    title: string
+    rewardType: LoyaltyRewardType
+    cutsAtEarn: number
+    periodKey: string
+  }>
+}
+
+export type CustomersListResponse = {
+  loyaltyResetMode: 'LIFETIME' | 'MONTHLY'
+  periodKey: string
+  summary: {
+    totalCustomers: number
+    totalCutsInPeriod: number
+    availableRewards: number
+  }
+  customers: SalonCustomer[]
 }

@@ -100,6 +100,10 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
     setError('')
     try {
       if (modal === 'create') {
+        if (!form.password || form.password.length < 8) {
+          setError('Informe uma senha com pelo menos 8 caracteres.')
+          return
+        }
         await createProfessional({
           salonId,
           name: form.name,
@@ -108,7 +112,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
           commissionRate: Number(form.commissionRate),
           workStart: form.workStart,
           workEnd: form.workEnd,
-          password: form.password || undefined,
+          password: form.password,
         })
       } else if (editing) {
         await updateProfessional(editing.id, {

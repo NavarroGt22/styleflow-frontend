@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, inputClass, labelClass, sectionClass } from '../ui/AdminUi'
 import type { AdminTabProps, Product } from '@/lib/admin/types'
-import { createProduct, fetchProducts, sellProduct } from '@/lib/admin/api'
+import { createProduct, fetchProducts, sellProduct, updateProduct } from '@/lib/admin/api'
 
 export default function AdminStockTab({ salonId, lightMode = false }: AdminTabProps) {
   const [items, setItems] = useState<Product[]>([])
@@ -13,6 +13,7 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
   const [name, setName] = useState('')
   const [price, setPrice] = useState('25')
   const [stock, setStock] = useState('10')
+  const [isReward, setIsReward] = useState(false)
   const [saving, setSaving] = useState(false)
 
   async function load() {
@@ -42,8 +43,15 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
     setSaving(true)
     setError('')
     try {
-      await createProduct({ salonId, name, price: Number(price), stockQuantity: Number(stock) })
+      await createProduct({
+        salonId,
+        name,
+        price: Number(price),
+        stockQuantity: Number(stock),
+        isReward,
+      })
       setName('')
+      setIsReward(false)
       setShowForm(false)
       await load()
     } catch (err) {
@@ -60,6 +68,15 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao vender.')
+    }
+  }
+
+  async function toggleReward(product: Product) {
+    try {
+      await updateProduct(product.id, { isReward: !product.isReward })
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar prêmio.')
     }
   }
 
@@ -95,6 +112,15 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
               {saving ? 'Salvando...' : 'Salvar'}
             </AdminButton>
           </div>
+          <label className={`sm:col-span-4 flex cursor-pointer items-center gap-2 text-xs ${lightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+            <input
+              type="checkbox"
+              checked={isReward}
+              onChange={(e) => setIsReward(e.target.checked)}
+              className="size-4 rounded border-indigo-300 text-indigo-600"
+            />
+            Disponível como prêmio de fidelidade
+          </label>
         </form>
       ) : null}
       {loading ? (
@@ -107,15 +133,27 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
               className={`flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between ${lightMode ? 'border-slate-200' : 'border-slate-600'}`}
             >
               <div>
-                <p className={`text-[11px] font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{product.name}</p>
+                <p className={`text-[11px] font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+                  {product.name}
+                  {product.isReward ? (
+                    <span className="ml-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold text-amber-300">
+                      Prêmio
+                    </span>
+                  ) : null}
+                </p>
                 <p className="text-[9px] text-slate-400">
                   R$ {product.price.toFixed(2)} · Estoque: {product.stockQuantity}
                   {product.stockQuantity <= product.minStockAlert ? ' · Baixo' : ''}
                 </p>
               </div>
-              <AdminButton onClick={() => handleSell(product)} disabled={product.stockQuantity < 1}>
-                Vender 1
-              </AdminButton>
+              <div className="flex flex-wrap gap-2">
+                <AdminButton variant="ghost" onClick={() => toggleReward(product)}>
+                  {product.isReward ? 'Remover prêmio' : 'Marcar prêmio'}
+                </AdminButton>
+                <AdminButton onClick={() => handleSell(product)} disabled={product.stockQuantity < 1}>
+                  Vender 1
+                </AdminButton>
+              </div>
             </article>
           ))}
         </div>

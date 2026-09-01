@@ -1,5 +1,16 @@
 import { authFetch } from '@/lib/api'
-import type { Appointment, FinancialDashboard, Product, Professional, QueueSession, SalonSettings, Service } from './types'
+import type {
+  Appointment,
+  CustomersListResponse,
+  FinancialDashboard,
+  LoyaltyReward,
+  LoyaltyRewardType,
+  Product,
+  Professional,
+  QueueSession,
+  SalonSettings,
+  Service,
+} from './types'
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = await response.json()
@@ -92,8 +103,15 @@ export async function completeAppointment(
   await parseJson(response)
 }
 
-export async function fetchFinancials(salonId: string): Promise<FinancialDashboard> {
-  const response = await authFetch(`/financials/salon/${salonId}`)
+export async function fetchFinancials(
+  salonId: string,
+  range?: { from?: string; to?: string },
+): Promise<FinancialDashboard> {
+  const params = new URLSearchParams()
+  if (range?.from) params.set('from', range.from)
+  if (range?.to) params.set('to', range.to)
+  const qs = params.toString()
+  const response = await authFetch(`/financials/salon/${salonId}${qs ? `?${qs}` : ''}`)
   return parseJson(response)
 }
 
@@ -121,7 +139,6 @@ export async function createProfessional(payload: {
     method: 'POST',
     body: JSON.stringify({
       ...payload,
-      password: payload.password || 'SenhaTemporaria123',
       workStart: payload.workStart || '09:00',
       workEnd: payload.workEnd || '18:00',
     }),
@@ -215,7 +232,8 @@ export async function updateSalon(salonId: string, data: Record<string, unknown>
     method: 'PUT',
     body: JSON.stringify(data),
   })
-  return parseJson(response)
+  const payload = await parseJson<SalonSettings & { establishment?: SalonSettings }>(response)
+  return payload.establishment ?? payload
 }
 
 export async function fetchProducts(salonId: string): Promise<Product[]> {
@@ -229,15 +247,91 @@ export async function createProduct(payload: {
   price: number
   stockQuantity: number
   minStockAlert?: number
+  isReward?: boolean
 }): Promise<Product> {
   const response = await authFetch('/products', {
     method: 'POST',
     body: JSON.stringify({
       ...payload,
       minStockAlert: payload.minStockAlert ?? 5,
+      isReward: payload.isReward === true,
     }),
   })
   return parseJson(response)
+}
+
+export async function updateProduct(
+  id: string,
+  payload: {
+    name?: string
+    price?: number
+    stockQuantity?: number
+    minStockAlert?: number
+    isActive?: boolean
+    isReward?: boolean
+  },
+): Promise<Product> {
+  const response = await authFetch(`/products/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
+export async function fetchCustomers(salonId: string, q?: string): Promise<CustomersListResponse> {
+  const params = new URLSearchParams()
+  if (q?.trim()) params.set('q', q.trim())
+  const qs = params.toString()
+  const response = await authFetch(`/customers/salon/${salonId}${qs ? `?${qs}` : ''}`)
+  return parseJson(response)
+}
+
+export async function fetchLoyaltyRewards(salonId: string): Promise<LoyaltyReward[]> {
+  const response = await authFetch(`/loyalty/rewards/salon/${salonId}`)
+  return parseJson(response)
+}
+
+export async function createLoyaltyReward(payload: {
+  salonId: string
+  title: string
+  description?: string
+  cutsRequired: number
+  rewardType?: LoyaltyRewardType
+  productId?: string | null
+}): Promise<LoyaltyReward> {
+  const response = await authFetch('/loyalty/rewards', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
+export async function updateLoyaltyReward(
+  id: string,
+  payload: {
+    title?: string
+    description?: string | null
+    cutsRequired?: number
+    rewardType?: LoyaltyRewardType
+    productId?: string | null
+    isActive?: boolean
+  },
+): Promise<LoyaltyReward> {
+  const response = await authFetch(`/loyalty/rewards/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
+export async function deleteLoyaltyReward(id: string): Promise<void> {
+  const response = await authFetch(`/loyalty/rewards/${id}`, { method: 'DELETE' })
+  await parseJson(response)
+}
+
+export async function redeemLoyaltyEarn(earnId: string): Promise<void> {
+  const response = await authFetch(`/loyalty/earns/${earnId}/redeem`, { method: 'POST' })
+  await parseJson(response)
 }
 
 export async function sellProduct(payload: {

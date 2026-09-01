@@ -22,8 +22,12 @@ import {
 } from '../ui/AdminUi'
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
 import { fetchSalon, normalizeInstagram, updateSalon } from '@/lib/admin/api'
+import WeekdayHoursEditor, {
+  DEFAULT_CLOSED_DAY_MESSAGE,
+  DEFAULT_OPEN_WEEKDAYS,
+} from '../WeekdayHoursEditor'
 
-type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila'
+type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila' | 'calendario'
 
 const subTabs: { id: SubTab; label: string; icon: typeof Store }[] = [
   { id: 'general', label: 'Dados Gerais', icon: Store },
@@ -31,6 +35,7 @@ const subTabs: { id: SubTab; label: string; icon: typeof Store }[] = [
   { id: 'expediente', label: 'Funcionamento', icon: Clock3 },
   { id: 'comissao', label: 'Comissões', icon: DollarSign },
   { id: 'fila', label: 'Fila & Agendamento', icon: Users },
+  { id: 'calendario', label: 'Calendário', icon: CalendarDays },
 ]
 
 const DEFAULT_WHATSAPP_TEMPLATE =
@@ -44,6 +49,15 @@ function checkboxClass(lightMode: boolean) {
   return `size-4 cursor-pointer rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 ${
     lightMode ? '' : 'border-slate-600 bg-slate-800'
   }`
+}
+
+function choiceCardClass(lightMode: boolean, selected: boolean) {
+  if (selected) {
+    return lightMode
+      ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-600'
+      : 'border-indigo-400/70 bg-indigo-950/50 ring-1 ring-indigo-400/50'
+  }
+  return lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-slate-800'
 }
 
 export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabProps) {
@@ -61,6 +75,8 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
     address: '',
     openTime: '09:00',
     closeTime: '18:00',
+    openWeekdays: DEFAULT_OPEN_WEEKDAYS as number[],
+    closedDayMessage: DEFAULT_CLOSED_DAY_MESSAGE,
     tenantName: '',
     customBrandName: '',
     slug: '',
@@ -79,6 +95,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
     queueNotifyAhead: '2',
     queueAllowSkip: false,
     whatsappTemplate: DEFAULT_WHATSAPP_TEMPLATE,
+    loyaltyResetMode: 'LIFETIME' as 'LIFETIME' | 'MONTHLY',
   })
 
   function applySalonData(data: SalonSettings) {
@@ -90,6 +107,10 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
       address: data.address || '',
       openTime: data.openTime || '09:00',
       closeTime: data.closeTime || '18:00',
+      openWeekdays: Array.isArray(data.openWeekdays) && data.openWeekdays.length
+        ? data.openWeekdays
+        : DEFAULT_OPEN_WEEKDAYS,
+      closedDayMessage: data.closedDayMessage || DEFAULT_CLOSED_DAY_MESSAGE,
       tenantName: data.tenant?.name || '',
       customBrandName: data.tenant?.customBrandName || '',
       slug: data.slug || '',
@@ -108,6 +129,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
       queueNotifyAhead: String(data.queueNotifyAhead ?? 2),
       queueAllowSkip: Boolean(data.queueAllowSkip),
       whatsappTemplate: data.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE,
+      loyaltyResetMode: data.loyaltyResetMode === 'MONTHLY' ? 'MONTHLY' : 'LIFETIME',
     })
   }
 
@@ -166,6 +188,8 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
         address: form.address,
         openTime: form.openTime,
         closeTime: form.closeTime,
+        openWeekdays: form.openWeekdays,
+        closedDayMessage: form.closedDayMessage.trim() || DEFAULT_CLOSED_DAY_MESSAGE,
         instagramUrl: normalizeInstagram(form.instagramUrl) || null,
         slug: form.slug,
         queueMode: form.queueMode,
@@ -185,6 +209,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
         logoUrl: form.logoUrl || null,
         heroImageUrl: form.heroImageUrl || null,
         faviconUrl: form.faviconUrl || null,
+        loyaltyResetMode: form.loyaltyResetMode,
       })
       applySalonData(updated)
       setSuccess('Configurações salvas com sucesso.')
@@ -221,7 +246,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
         {subTab === 'expediente' ? (
           <aside className={sectionClass(lightMode)}>
             <div className="mb-4 flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
+              <span className="grid size-10 place-items-center rounded-xl bg-slate-800 text-slate-200">
                 <Store className="size-5" />
               </span>
               <div>
@@ -240,7 +265,10 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
               </div>
               <div>
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Expediente do Salão</p>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-600 px-3 py-1 text-xs font-semibold text-slate-200"
+                  style={{ borderColor: `${form.primaryColor}55`, color: form.primaryColor }}
+                >
                   <Clock3 className="size-3.5" />
                   {form.openTime} às {form.closeTime}
                 </span>
@@ -381,24 +409,25 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
           ) : null}
 
           {subTab === 'expediente' ? (
-            <div className={`space-y-4 rounded-2xl border p-6 ${lightMode ? 'border-indigo-100 bg-indigo-50/50' : 'border-indigo-900/40 bg-indigo-950/20'}`}>
-              <h4 className={`flex items-center gap-2 font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
-                <Clock3 className="size-4 text-indigo-600" /> Expediente de Funcionamento do Estabelecimento
-              </h4>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className={labelClass(lightMode)}>Horário de Abertura</label>
-                  <input type="time" value={form.openTime} onChange={(e) => setForm({ ...form, openTime: e.target.value })} className={inputClass(lightMode)} />
-                </div>
-                <div>
-                  <label className={labelClass(lightMode)}>Horário de Fechamento</label>
-                  <input type="time" value={form.closeTime} onChange={(e) => setForm({ ...form, closeTime: e.target.value })} className={inputClass(lightMode)} />
-                </div>
-              </div>
-              <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Este horário define o expediente geral. Clientes só poderão agendar cortes dentro deste intervalo de tempo.
-              </p>
-            </div>
+            <WeekdayHoursEditor
+              lightMode={lightMode}
+              brandColor={form.primaryColor || '#d5a85c'}
+              openWeekdays={form.openWeekdays}
+              onToggleDay={(day) => {
+                setForm((current) => {
+                  const set = new Set(current.openWeekdays)
+                  if (set.has(day)) set.delete(day)
+                  else set.add(day)
+                  return { ...current, openWeekdays: Array.from(set).sort((a, b) => a - b) }
+                })
+              }}
+              openTime={form.openTime}
+              closeTime={form.closeTime}
+              onChangeOpenTime={(value) => setForm({ ...form, openTime: value })}
+              onChangeCloseTime={(value) => setForm({ ...form, closeTime: value })}
+              closedDayMessage={form.closedDayMessage}
+              onChangeClosedDayMessage={(value) => setForm({ ...form, closedDayMessage: value })}
+            />
           ) : null}
 
           {subTab === 'comissao' ? (
@@ -431,7 +460,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <button type="button" onClick={() => setForm({ ...form, queueMode: false })} className={`rounded-2xl border-2 p-4 text-left transition ${!form.queueMode ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-600' : lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-slate-800'}`}>
+                <button type="button" onClick={() => setForm({ ...form, queueMode: false })} className={`rounded-2xl border-2 p-4 text-left transition ${choiceCardClass(lightMode, !form.queueMode)}`}>
                   <div className="mb-2 flex items-center justify-between">
                     <CalendarDays className={`size-5 ${!form.queueMode ? 'text-indigo-600' : 'text-slate-400'}`} />
                     <span className={`grid size-4 place-items-center rounded-full border-2 ${!form.queueMode ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>{!form.queueMode ? <span className="size-1.5 rounded-full bg-white" /> : null}</span>
@@ -439,7 +468,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
                   <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Agenda Comercial (Hora Fixa)</p>
                   <p className={`mt-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>Clientes reservam horários fixos. O sistema realiza verificação estrita de choque de horários (anti-clash), bloqueando novos agendamentos no mesmo período.</p>
                 </button>
-                <button type="button" onClick={() => setForm({ ...form, queueMode: true })} className={`rounded-2xl border-2 p-4 text-left transition ${form.queueMode ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-600' : lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-slate-800'}`}>
+                <button type="button" onClick={() => setForm({ ...form, queueMode: true })} className={`rounded-2xl border-2 p-4 text-left transition ${choiceCardClass(lightMode, form.queueMode)}`}>
                   <div className="mb-2 flex items-center justify-between">
                     <Users className={`size-5 ${form.queueMode ? 'text-indigo-600' : 'text-slate-400'}`} />
                     <span className={`grid size-4 place-items-center rounded-full border-2 ${form.queueMode ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>{form.queueMode ? <span className="size-1.5 rounded-full bg-white" /> : null}</span>
@@ -487,6 +516,42 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
                   </label>
                 </div>
               ) : null}
+            </div>
+          ) : null}
+
+          {subTab === 'calendario' ? (
+            <div className={`space-y-6 rounded-2xl border p-6 ${lightMode ? 'border-indigo-100 bg-indigo-50/50' : 'border-indigo-900/40 bg-indigo-950/20'}`}>
+              <div>
+                <h4 className={`flex items-center gap-2 font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+                  <CalendarDays className="size-4 text-indigo-600" /> Calendário de Fidelidade
+                </h4>
+                <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Defina se a contagem de cortes para prêmios reinicia todo mês ou continua infinita (dias corridos).
+                </p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, loyaltyResetMode: 'LIFETIME' })}
+                  className={`rounded-2xl border-2 p-4 text-left transition ${choiceCardClass(lightMode, form.loyaltyResetMode === 'LIFETIME')}`}
+                >
+                  <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Infinito (lifetime)</p>
+                  <p className={`mt-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Os cortes acumulam para sempre. Ex.: a cada 10 cortes o 11º é grátis — o ciclo não zera no mês.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, loyaltyResetMode: 'MONTHLY' })}
+                  className={`rounded-2xl border-2 p-4 text-left transition ${choiceCardClass(lightMode, form.loyaltyResetMode === 'MONTHLY')}`}
+                >
+                  <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Reset por mês</p>
+                  <p className={`mt-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    A contagem reinicia no dia 1 de cada mês. Prêmios do mês anterior não carregam para o próximo.
+                  </p>
+                </button>
+              </div>
             </div>
           ) : null}
 

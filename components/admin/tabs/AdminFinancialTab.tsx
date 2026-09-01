@@ -1,6 +1,6 @@
 'use client'
 
-import { Download, Scissors, ShoppingCart } from 'lucide-react'
+import { CalendarDays, Download, Scissors, ShoppingCart } from 'lucide-react'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   AdminButton,
@@ -25,6 +25,37 @@ function money(value: number) {
   return `R$ ${value.toFixed(2).replace('.', ',')}`
 }
 
+function toYmd(date: Date) {
+  return date.toISOString().slice(0, 10)
+}
+
+type PeriodPreset = 'hoje' | 'ontem' | 'semana' | 'mes' | 'sempre' | 'custom'
+
+function rangeForPreset(preset: PeriodPreset): { from?: string; to?: string } {
+  const now = new Date()
+  const today = toYmd(now)
+  if (preset === 'sempre') return {}
+  if (preset === 'hoje') return { from: today, to: today }
+  if (preset === 'ontem') {
+    const d = new Date(now)
+    d.setDate(d.getDate() - 1)
+    const y = toYmd(d)
+    return { from: y, to: y }
+  }
+  if (preset === 'semana') {
+    const d = new Date(now)
+    const day = d.getDay()
+    const diff = day === 0 ? 6 : day - 1
+    d.setDate(d.getDate() - diff)
+    return { from: toYmd(d), to: today }
+  }
+  if (preset === 'mes') {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    return { from: toYmd(start), to: today }
+  }
+  return {}
+}
+
 export default function AdminFinancialTab({ salonId, lightMode = false }: AdminTabProps) {
   const [data, setData] = useState<FinancialDashboard | null>(null)
   const [products, setProducts] = useState<Product[]>([])
@@ -33,12 +64,25 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
   const [error, setError] = useState('')
   const [closing, setClosing] = useState(false)
   const [selling, setSelling] = useState(false)
+  const [period, setPeriod] = useState<PeriodPreset>('sempre')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
   const [pos, setPos] = useState({
     productId: '',
     professionalId: '',
     quantity: '1',
     paymentMethod: 'PIX',
   })
+
+  const activeRange = useMemo(() => {
+    if (period === 'custom') {
+      return {
+        from: customFrom || undefined,
+        to: customTo || undefined,
+      }
+    }
+    return rangeForPreset(period)
+  }, [period, customFrom, customTo])
 
   async function load() {
     if (!salonId) {
@@ -50,7 +94,7 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
     setError('')
     try {
       const [financials, productList, professionals] = await Promise.all([
-        fetchFinancials(salonId),
+        fetchFinancials(salonId, activeRange),
         fetchProducts(salonId),
         fetchProfessionals(salonId),
       ])
@@ -69,7 +113,8 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
 
   useEffect(() => {
     load()
-  }, [salonId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salonId, period, customFrom, customTo])
 
   const selectedProduct = useMemo(
     () => products.find((p) => p.id === pos.productId) ?? null,
@@ -78,6 +123,14 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
   const quantity = Math.max(1, Number(pos.quantity) || 1)
   const unitPrice = selectedProduct?.price ?? 0
   const subtotal = unitPrice * quantity
+
+  const presets: { id: PeriodPreset; label: string }[] = [
+    { id: 'hoje', label: 'Hoje' },
+    { id: 'ontem', label: 'Ontem' },
+    { id: 'semana', label: 'Esta semana' },
+    { id: 'mes', label: 'Este mês' },
+    { id: 'sempre', label: 'Sempre' },
+  ]
 
   function downloadCsv() {
     if (!data) return
@@ -93,6 +146,7 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
       ['Faturamento Total', String(data.totalRevenue)],
       ['Comissões', String(data.totalCommissions)],
       ['Lucro Líquido', String(data.netProfit)],
+      ['Cortes concluídos', String(data.completedCuts ?? 0)],
     ]
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -148,13 +202,77 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
             Fechamento de Caixa Diário
           </h3>
           <p className={`mt-1 text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-            Seus lucros de hoje. Ao fechar o salão, baixe o relatório (os dados resetam à meia-noite).
+            Filtre por período para ver faturamento e cortes concluídos.
           </p>
         </div>
         <AdminButton variant="success" onClick={handleClose} disabled={closing || loading}>
           <Download className="size-4" />
           {closing ? 'Fechando...' : 'Fechar Caixa & Baixar CSV'}
         </AdminButton>
+      </div>
+
+      <div className={sectionClass(lightMode)}>
+        <div className="mb-3 flex items-center gap-2">
+          <CalendarDays className="size-4 text-indigo-400" />
+          <h4 className={`text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Período</h4>
+        </div>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {presets.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setPeriod(item.id)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                period === item.id
+                  ? 'border-indigo-500 bg-indigo-500/20 text-indigo-200'
+                  : lightMode
+                    ? 'border-slate-200 text-slate-600'
+                    : 'border-slate-600 text-slate-300'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setPeriod('custom')}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+              period === 'custom'
+                ? 'border-indigo-500 bg-indigo-500/20 text-indigo-200'
+                : lightMode
+                  ? 'border-slate-200 text-slate-600'
+                  : 'border-slate-600 text-slate-300'
+            }`}
+          >
+            Personalizado
+          </button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={labelClass(lightMode)}>Data inicial</label>
+            <input
+              type="date"
+              value={period === 'custom' ? customFrom : activeRange.from || ''}
+              onChange={(e) => {
+                setPeriod('custom')
+                setCustomFrom(e.target.value)
+              }}
+              className={inputClass(lightMode)}
+            />
+          </div>
+          <div>
+            <label className={labelClass(lightMode)}>Data final</label>
+            <input
+              type="date"
+              value={period === 'custom' ? customTo : activeRange.to || ''}
+              onChange={(e) => {
+                setPeriod('custom')
+                setCustomTo(e.target.value)
+              }}
+              className={inputClass(lightMode)}
+            />
+          </div>
+        </div>
       </div>
 
       {error ? <AdminError message={error} /> : null}
@@ -164,7 +282,7 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
       ) : data ? (
         <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <AdminStat lightMode={lightMode} label="Faturamento Total" value={money(data.totalRevenue)} />
               <AdminStat
                 lightMode={lightMode}
@@ -173,6 +291,11 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
                 tone="danger"
               />
               <AdminStat lightMode={lightMode} label="Lucro Líquido (Seu)" value={money(data.netProfit)} tone="success" />
+              <AdminStat
+                lightMode={lightMode}
+                label="Cortes concluídos"
+                value={String(data.completedCuts ?? 0)}
+              />
             </div>
 
             <div className={sectionClass(lightMode)}>
@@ -201,10 +324,7 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
                   ))}
                 </div>
               ) : (
-                <AdminEmpty
-                  lightMode={lightMode}
-                  text="Nenhum valor em caixa ainda. Conclua agendamentos para gerar receitas!"
-                />
+                <AdminEmpty lightMode={lightMode} text="Nenhum valor no período selecionado." />
               )}
             </div>
           </div>

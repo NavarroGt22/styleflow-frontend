@@ -40,10 +40,16 @@ export default function AdminLoginForm() {
   const [info, setInfo] = useState('')
   const [lockoutRemainingMs, setLockoutRemainingMs] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [isLocalHost, setIsLocalHost] = useState(false)
 
   const sessionExpired = searchParams.get('reason') === 'session_expired'
   const lockout = getLoginLockout(email)
-  const isLocked = lockout.locked || lockoutRemainingMs > 0
+  const isLocked = !isLocalHost && (lockout.locked || lockoutRemainingMs > 0)
+
+  useEffect(() => {
+    const host = window.location.hostname
+    setIsLocalHost(host === 'localhost' || host === '127.0.0.1')
+  }, [])
 
   useEffect(() => {
     if (sessionExpired) {
@@ -51,7 +57,23 @@ export default function AdminLoginForm() {
     }
   }, [sessionExpired])
 
+  // Em localhost, limpa lockout para não travar o ambiente de teste
   useEffect(() => {
+    if (!isLocalHost) return
+    clearLoginLockout('admin.teste@leleco.com.br')
+    if (email.trim()) clearLoginLockout(email)
+    setLockoutRemainingMs(0)
+    setError((prev) =>
+      prev.includes('bloqueada') || prev.includes('Bloqueio') || prev.includes('Aguarde') ? '' : prev,
+    )
+  }, [email, isLocalHost])
+
+  useEffect(() => {
+    if (isLocalHost) {
+      setLockoutRemainingMs(0)
+      return
+    }
+
     const current = getLoginLockout(email)
     if (!current.locked) {
       setLockoutRemainingMs(0)
@@ -65,15 +87,19 @@ export default function AdminLoginForm() {
     }, 1000)
 
     return () => window.clearInterval(timer)
-  }, [email])
+  }, [email, isLocalHost])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
     setInfo(sessionExpired ? 'Por segurança, confirme sua senha novamente. A sessão do painel expira a cada 10 minutos.' : '')
 
+    if (isLocalHost) {
+      clearLoginLockout(email)
+    }
+
     const currentLockout = getLoginLockout(email)
-    if (currentLockout.locked) {
+    if (!isLocalHost && currentLockout.locked) {
       setLockoutRemainingMs(currentLockout.remainingMs)
       setError(`Muitas tentativas incorretas. Aguarde ${formatLockoutRemaining(currentLockout.remainingMs)} para tentar novamente.`)
       return
@@ -97,6 +123,9 @@ export default function AdminLoginForm() {
         }
 
         if (response.status === 401) {
+          if (isLocalHost) {
+            throw new Error(data.error || 'E-mail ou senha incorretos. Em localhost use admin.teste@leleco.com.br / 12345678.')
+          }
           const nextLockout = recordFailedLogin(email)
           if (nextLockout.locked) {
             setLockoutRemainingMs(nextLockout.remainingMs)
@@ -106,6 +135,11 @@ export default function AdminLoginForm() {
             data.error ||
               `E-mail ou senha incorretos. Restam ${nextLockout.attemptsLeft} tentativa(s) antes do bloqueio.`,
           )
+        }
+
+        if (response.status === 429 && isLocalHost) {
+          clearLoginLockout(email)
+          throw new Error(data.error || 'Muitas tentativas. Em localhost o bloqueio foi limpo — tente de novo.')
         }
 
         throw new Error(data.error || 'Não foi possível entrar.')
@@ -144,11 +178,11 @@ export default function AdminLoginForm() {
       <main className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-8">
         <div className="relative w-full max-w-md animate-[fade-in-up_700ms_ease-out_both]">
           <div className="mb-8 flex items-center gap-4">
-            <div className="flex size-14 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-lg shadow-indigo-500/20">
+            <div className="flex size-14 items-center justify-center rounded-xl bg-slate-700 text-white shadow-lg shadow-black/20">
               <Scissors className="size-6 -rotate-45 text-white" strokeWidth={1.5} />
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-semibold tracking-[0.3em] text-indigo-300">STYLEFLOW</p>
+              <p className="mb-1 text-[10px] font-semibold tracking-[0.3em] text-slate-400">STYLEFLOW</p>
               <p className="font-serif text-xl tracking-wide text-white">Painel Admin</p>
             </div>
           </div>
@@ -158,7 +192,7 @@ export default function AdminLoginForm() {
               <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Área restrita</p>
               <h1 className="font-serif text-4xl leading-tight tracking-[-0.03em] text-white sm:text-[2.6rem]">
                 Bem-vindo ao{' '}
-                <span className="bg-gradient-to-r from-indigo-300 to-fuchsia-300 bg-clip-text italic text-transparent">
+                <span className="italic text-slate-300">
                   painel.
                 </span>
               </h1>
@@ -219,7 +253,7 @@ export default function AdminLoginForm() {
               <button
                 type="submit"
                 disabled={loading || isLocked}
-                className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:-translate-y-0.5 hover:brightness-110 disabled:pointer-events-none disabled:opacity-60"
+                className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-900 shadow-lg shadow-black/20 transition-all hover:-translate-y-0.5 hover:bg-white disabled:pointer-events-none disabled:opacity-60"
               >
                 {loading ? 'Entrando...' : 'Entrar no painel'}
                 {!loading ? (
