@@ -1,4 +1,5 @@
 const CACHE_PREFIX = 'sf_public_salon_'
+const CACHE_VERSION = 'v2'
 const MAX_AGE_MS = 10 * 60 * 1000
 
 type CachedSalon = {
@@ -7,7 +8,7 @@ type CachedSalon = {
 }
 
 function cacheKey(salonSlug?: string) {
-  return `${CACHE_PREFIX}${salonSlug || 'default'}`
+  return `${CACHE_PREFIX}${CACHE_VERSION}_${salonSlug || 'default'}`
 }
 
 export function getSalonCache(salonSlug?: string): unknown | null {

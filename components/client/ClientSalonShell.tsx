@@ -7,20 +7,17 @@ type Props = {
   message?: string
 }
 
-export function ClientSalonLoading({ accent = '#d5a85c', message = 'Carregando...' }: Props) {
+export function ClientSalonLoading({ accent = '#d5a85c', message = 'Carregando painel...' }: Props) {
   return (
     <div
-      className="flex min-h-screen flex-col items-center justify-center bg-[#0b1224] p-4 text-slate-300"
+      className="flex min-h-screen flex-col items-center justify-center bg-[#0b0d0e] p-4 text-slate-300"
       style={{ '--brand': accent } as React.CSSProperties}
     >
-      <div className="relative h-14 w-14">
-        <div className="absolute inset-0 rounded-full border-4 border-white/10" />
-        <div
-          className="absolute inset-0 animate-spin rounded-full border-4 border-t-transparent"
-          style={{ borderColor: 'var(--brand)', borderTopColor: 'transparent' }}
-        />
-      </div>
-      <p className="mt-4 text-sm font-medium text-slate-400">{message}</p>
+      <div
+        className="h-10 w-10 rotate-45 rounded-md animate-pulse"
+        style={{ backgroundColor: accent }}
+      />
+      <p className="mt-5 text-sm font-medium text-slate-400">{message}</p>
     </div>
   )
 }

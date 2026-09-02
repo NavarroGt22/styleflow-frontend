@@ -236,6 +236,17 @@ export async function updateSalon(salonId: string, data: Record<string, unknown>
   return payload.establishment ?? payload
 }
 
+export async function testSalonWhatsApp(
+  salonId: string,
+  phone: string
+): Promise<{ message: string; phone: string; gatewayStatus: number }> {
+  const response = await authFetch(`/establishments/${salonId}/whatsapp/test`, {
+    method: 'POST',
+    body: JSON.stringify({ phone }),
+  })
+  return parseJson(response)
+}
+
 export async function fetchProducts(salonId: string): Promise<Product[]> {
   const response = await authFetch(`/products/salon/${salonId}`)
   return parseJson(response)

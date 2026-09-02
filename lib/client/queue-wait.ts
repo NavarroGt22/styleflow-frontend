@@ -8,7 +8,7 @@ type QueueEntry = {
   serviceName?: string;
   serviceDuration?: number;
   status?: string;
-  userId?: string;
+  isCurrentUser?: boolean;
 };
 
 function entryDuration(entry: QueueEntry, services?: QueueService[]): number {

@@ -98,7 +98,7 @@ export default function BookingDateTimePicker({
 
   return (
     <div
-      className="rounded-xl border border-slate-700 bg-[#1d2a3e] p-4"
+      className="rounded-xl border border-white/10 bg-[#1a1816] p-4"
       style={{ ['--brand' as string]: brandColor }}
     >
       <style>{`
@@ -189,10 +189,10 @@ export default function BookingDateTimePicker({
                       ? {
                           backgroundColor: brandColor,
                           borderColor: brandColor,
-                          color: '#0b1224',
+                          color: '#111',
                         }
                       : {
-                          backgroundColor: '#142035',
+                          backgroundColor: 'rgba(0,0,0,0.3)',
                           borderColor: withAlpha(brandColor, 0.35),
                           color: '#e2e8f0',
                         }
@@ -264,8 +264,8 @@ export default function BookingDateTimePicker({
                         !slot.available
                           ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-600 line-through'
                           : selected
-                            ? 'text-[#0b1224]'
-                            : 'bg-[#142035] text-slate-200 hover:opacity-90'
+                            ? 'text-[#111]'
+                            : 'bg-black/30 text-slate-200 hover:opacity-90'
                       }`}
                       style={
                         slot.available

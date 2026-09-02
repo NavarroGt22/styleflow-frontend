@@ -3,19 +3,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from '@/lib/client/toast';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Scissors, Clock, Users, AlertCircle, Check, CheckCircle, Sun, Moon, MapPin, Gift } from 'lucide-react';
-import InstagramIcon from '@/components/icons/InstagramIcon';
+import { Clock, AlertCircle, Check, CheckCircle, Gift } from 'lucide-react';
 import { secureFetch as fetch } from '@/lib/client/api';
 import { useTenantBranding, type TenantBranding } from '@/lib/client/useTenant';
 import { apiUrl, wsUrl } from '@/lib/client/config';
 import { isCustomDomainHost } from '@/lib/client/domains';
-import { computeQueueWaitMinutes } from '@/lib/client/queue-wait';
-import { QueueActiveTimer } from '@/components/client/QueueActiveTimer';
 import ClientLanding from '@/components/client/ClientLanding';
 import BookingDateTimePicker from '@/components/client/BookingDateTimePicker';
 import { ClientSalonError, ClientSalonLoading, clientBrandStyles } from '@/components/client/ClientSalonShell';
-import { getSalonCache, readClientSession, setSalonCache } from '@/lib/client/salon-cache';
+import { ClientTopBar } from '@/components/client/ClientTopBar';
+import { BookingHero } from '@/components/client/booking/BookingHero';
+import { DynamicQueueSection } from '@/components/client/queue/DynamicQueueSection';
+import type { QueueSession } from '@/components/client/queue/types';
+import { readClientSession, setSalonCache } from '@/lib/client/salon-cache';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -75,8 +75,8 @@ export default function PublicSalonPage() {
   const params = useParams<{ salonSlug?: string }>();
   const salonSlug = params?.salonSlug;
   const router = useRouter();
-  const [data, setData] = useState<any>(() => getSalonCache(salonSlug));
-  const [loading, setLoading] = useState(() => !getSalonCache(salonSlug));
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(() => readClientSession());
   const [loyalty, setLoyalty] = useState<any>(null);
@@ -88,10 +88,10 @@ export default function PublicSalonPage() {
   useEffect(() => {
     document.documentElement.classList.add('dark');
     if (isDark) {
-      document.body.classList.add('bg-[#0b1224]', 'text-white');
+      document.body.classList.add('bg-[#0b0d0e]', 'text-white');
       localStorage.setItem('theme', 'dark');
     } else {
-      document.body.classList.remove('bg-[#0b1224]', 'text-white');
+      document.body.classList.remove('bg-[#0b0d0e]', 'text-white');
       localStorage.setItem('theme', 'light');
     }
   }, [isDark]);
@@ -216,8 +216,8 @@ export default function PublicSalonPage() {
         : apiUrl('/queue/public');
       const res = await fetch(fetchUrl, {
         headers: {
-          'X-Custom-Host': window.location.host
-        }
+          'X-Custom-Host': window.location.host,
+        },
       });
       if (!res.ok) {
         if (res.status === 404) {
@@ -543,7 +543,7 @@ export default function PublicSalonPage() {
 
   if (loading) {
     const cached = data?.tenant?.primaryColor as string | undefined;
-    return <ClientSalonLoading accent={cached || '#d5a85c'} message="Carregando agenda..." />;
+    return <ClientSalonLoading accent={cached || '#d5a85c'} />;
   }
 
   if (error || !data) {
@@ -621,117 +621,73 @@ export default function PublicSalonPage() {
       busySlots
     );
 
+    const brand = primaryColor || '#d5a85c';
+
     return (
-      <div className="min-h-screen bg-[#0b1224] px-4 py-8 text-slate-100 transition-colors duration-300 sm:px-6">
+      <div className="min-h-screen bg-[#0b0d0e] px-4 py-8 text-slate-100 transition-colors duration-300 sm:px-6">
         {unitPicker}
         {primaryColor ? <style>{clientBrandStyles(primaryColor)}</style> : null}
         <div className="mx-auto max-w-6xl">
-          
-          {/* BARRA DO CLIENTE — fixa no scroll */}
-          <div className="sticky top-0 z-40 -mx-4 mb-5 flex items-center justify-between rounded-none border-b border-slate-700 bg-[#0b1224]/95 px-4 py-3 text-[10px] font-bold backdrop-blur-md sm:-mx-6 sm:px-6">
-            <div className="flex items-center gap-2.5">
-              <span className={`h-2 w-2 rounded-full ${currentUser ? 'animate-pulse bg-emerald-400' : 'animate-pulse bg-indigo-400'}`} />
-              <span className="text-slate-300">
-                {currentUser ? `Cliente: ${currentUser.name}` : 'Acesso de Visitante'}
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => setIsDark(!isDark)}
-                className="flex cursor-pointer items-center justify-center rounded-full border-none bg-slate-700/80 p-2 text-slate-300 transition hover:bg-slate-600"
-                title="Mudar tema"
-              >
-                {isDark ? <Sun size={15} /> : <Moon size={15} />}
-              </button>
+          <ClientTopBar
+            currentUser={currentUser}
+            brandColor={brand}
+            isDark={isDark}
+            onToggleTheme={() => setIsDark(!isDark)}
+            onLogout={handleLogout}
+            salonSlug={salonSlug}
+            isCustomDomain={isCustomDomain}
+          />
 
-              {currentUser ? (
-                <button 
-                  onClick={handleLogout}
-                  className="text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-650 dark:text-red-400 dark:hover:text-red-300 transition-all cursor-pointer border-none bg-transparent"
-                >
-                  Sair
-                </button>
-              ) : (
-                <Link 
-                  href={isCustomDomain ? `/login` : `/app/${salonSlug}/login`}
-                  className="text-xs font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
-                >
-                  Entrar / Cadastrar
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {/* HEADER DO ESTABELECIMENTO */}
-          <header className="mb-6 border-b border-slate-700 pb-5 text-center">
-            {logoUrl ? (
-              <img src={logoUrl} alt={brandName} className="mx-auto mb-3 h-12 w-12 rounded-lg object-cover shadow-lg" />
-            ) : (
-              <div
-                className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg text-white shadow-lg"
-                style={{ backgroundColor: primaryColor || '#d5a85c' }}
-              >
-                <Scissors size={24} className="-rotate-45" />
-              </div>
-            )}
-            <span
-              className="mx-auto mb-2 inline-block rounded px-2 py-0.5 text-[8px] font-bold tracking-wide text-white"
-              style={{ backgroundColor: primaryColor || '#d5a85c' }}
-            >
-              {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} · AGENDA ONLINE
-            </span>
-            <h1 className="text-lg font-bold text-white">{salon.name}</h1>
-            {salon.address && (
-              <p className="mx-auto mt-2 flex max-w-md items-center justify-center gap-1.5 text-xs text-slate-400">
-                <MapPin size={12} className="shrink-0" style={{ color: primaryColor || '#d5a85c' }} />
-                <span>{salon.address}</span>
-              </p>
-            )}
-            <p className="mt-2 text-[10px] text-slate-500">
-              Escolha seu serviço, profissional e reserve seu horário em poucos cliques.
-            </p>
-          </header>
+          <BookingHero
+            brandName={brandName}
+            salonName={salon.name}
+            salonAddress={salon.address}
+            logoUrl={logoUrl}
+            brandColor={brand}
+            mode="booking"
+          />
 
           {currentUser ? (
             /* WIZARD DE AGENDAMENTO COMERCIAL (LOGADO) */
             bookingSuccess ? (
               /* CARD DE AGENDAMENTO CONFIRMADO */
-              <div className="max-w-md mx-auto bg-white dark:bg-slate-800 p-8 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 text-center shadow-xl animate-fade-in">
-                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-md shadow-emerald-500/10">
+              <div className="mx-auto max-w-md animate-fade-in rounded-2xl border border-emerald-500/30 bg-[#1a1816] p-8 text-center shadow-xl">
+                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 shadow-md">
                   <CheckCircle size={32} />
                 </div>
-                <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">Reserva Confirmada!</h2>
-                <p className="text-gray-500 dark:text-slate-400 text-sm leading-relaxed mb-6">
+                <h2 className="mb-2 text-2xl font-black text-white">Reserva Confirmada!</h2>
+                <p className="mb-6 text-sm leading-relaxed text-slate-400">
                   Seu horário foi agendado com sucesso no StyleFlow.
                 </p>
 
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl text-left border border-gray-150 dark:border-slate-700/60 mb-6 space-y-3">
-                  <div className="flex justify-between items-center text-xs font-bold">
-                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Serviço</span>
-                    <span className="text-gray-800 dark:text-slate-200">{bookingSuccess.service.name}</span>
+                <div className="mb-6 space-y-3 rounded-xl border border-white/10 bg-black/30 p-5 text-left">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="uppercase tracking-wider text-slate-500">Serviço</span>
+                    <span className="text-slate-200">{bookingSuccess.service.name}</span>
                   </div>
-                  <div className="flex justify-between items-center text-xs font-bold">
-                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Profissional</span>
-                    <span className="text-gray-800 dark:text-slate-200">{bookingSuccess.professional.user.name}</span>
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="uppercase tracking-wider text-slate-500">Profissional</span>
+                    <span className="text-slate-200">{bookingSuccess.professional.user.name}</span>
                   </div>
-                  <div className="flex justify-between items-center text-xs font-bold">
-                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Data</span>
-                    <span className="text-gray-800 dark:text-slate-200">{new Date(bookingSuccess.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="uppercase tracking-wider text-slate-500">Data</span>
+                    <span className="text-slate-200">{new Date(bookingSuccess.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                   </div>
-                  <div className="flex justify-between items-center text-xs font-bold">
-                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Horário</span>
-                    <span className="text-indigo-600 dark:text-indigo-400 text-sm">{bookingSuccess.time}</span>
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="uppercase tracking-wider text-slate-500">Horário</span>
+                    <span className="text-sm client-accent-text">{bookingSuccess.time}</span>
                   </div>
-                  <div className="flex justify-between items-center text-xs font-bold border-t border-gray-200 dark:border-slate-700 pt-3">
-                    <span className="text-gray-400 dark:text-slate-500 uppercase tracking-wider">Valor</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 text-sm font-black">R$ {bookingSuccess.service.price.toFixed(2)}</span>
+                  <div className="flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold">
+                    <span className="uppercase tracking-wider text-slate-500">Valor</span>
+                    <span className="text-sm font-black client-accent-text">R$ {bookingSuccess.service.price.toFixed(2)}</span>
                   </div>
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => setBookingSuccess(null)}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3.5 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95 border-none cursor-pointer"
+                  className="w-full cursor-pointer rounded-xl border-none py-3.5 text-sm font-extrabold text-[#111] shadow-lg transition-all active:scale-95"
+                  style={{ backgroundColor: brand }}
                 >
                   Novo Agendamento
                 </button>
@@ -791,52 +747,66 @@ export default function PublicSalonPage() {
                   ) : null}
                   
                   {/* SELEÇÃO DE SERVIÇO */}
-                  <div className="rounded-xl border border-slate-700 bg-[#1d2a3e] p-4">
+                  <div className="rounded-xl border border-white/10 bg-[#1a1816] p-4">
                     <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-400">
-                      <span className="text-emerald-400">1</span> SELECIONE O SERVIÇO
+                      <span className="client-accent-text">1</span> SELECIONE O SERVIÇO
                     </h3>
                     {loadingBookingData ? (
-                      <div className="py-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div></div>
+                      <div className="flex justify-center py-8">
+                        <div
+                          className="h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+                          style={{ borderColor: brand, borderTopColor: 'transparent' }}
+                        />
+                      </div>
                     ) : services.length === 0 ? (
-                      <p className="text-sm text-gray-550 dark:text-slate-400 font-medium italic">Nenhum serviço disponível no catálogo no momento.</p>
+                      <p className="text-sm font-medium italic text-slate-400">Nenhum serviço disponível no catálogo no momento.</p>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        {services.map((s) => (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {services.map((s) => {
+                          const selected = selectedService?.id === s.id;
+                          return (
                           <div
                             key={s.id}
                             onClick={() => { setSelectedService(s); setSelectedTime(''); }}
-                            className={`relative cursor-pointer rounded-lg border p-2.5 text-left transition-colors ${
-                              selectedService?.id === s.id
-                                ? 'border-indigo-400 bg-indigo-950/40 ring-1 ring-indigo-400'
-                                : 'border-slate-600 bg-[#1d2a3e] hover:border-slate-400'
+                            className={`relative cursor-pointer rounded-lg border p-3 text-left transition-colors ${
+                              selected
+                                ? 'ring-1'
+                                : 'border-white/10 bg-black/20 hover:border-white/20'
                             }`}
+                            style={selected ? { borderColor: brand, boxShadow: `0 0 0 1px ${brand}40` } : undefined}
                           >
-                            {selectedService?.id === s.id && (
-                              <Check className="absolute right-2 top-2 h-3 w-3 text-indigo-300" />
+                            {selected && (
+                              <Check className="absolute right-2 top-2 h-3 w-3 client-accent-text" />
                             )}
-                            <h4 className="text-[10px] font-bold text-white">{s.name}</h4>
-                            <div className="mt-3 flex items-center justify-between text-[8px] font-bold">
+                            <h4 className="text-sm font-bold text-white">{s.name}</h4>
+                            <div className="mt-2 flex items-center justify-between text-[10px] font-bold">
                               <span className="flex items-center gap-1 text-slate-400">
                                 <Clock size={10} />
                                 {s.duration} min
                               </span>
-                              <span className="text-emerald-400">R$ {s.price.toFixed(2)}</span>
+                              <span className="client-accent-text">R$ {s.price.toFixed(2)}</span>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
 
                   {/* SELEÇÃO DE PROFISSIONAL */}
-                  <div className="rounded-xl border border-slate-700 bg-[#1d2a3e] p-4">
+                  <div className="rounded-xl border border-white/10 bg-[#1a1816] p-4">
                     <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-400">
-                      <span className="text-emerald-400">2</span> SELECIONE O PROFISSIONAL
+                      <span className="client-accent-text">2</span> SELECIONE O PROFISSIONAL
                     </h3>
                     {loadingBookingData ? (
-                      <div className="py-8 flex justify-center"><div className="w-8 h-8 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div></div>
+                      <div className="flex justify-center py-8">
+                        <div
+                          className="h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+                          style={{ borderColor: brand, borderTopColor: 'transparent' }}
+                        />
+                      </div>
                     ) : professionals.length === 0 ? (
-                      <p className="text-sm text-gray-550 dark:text-slate-400 font-medium italic">Nenhum profissional disponível no momento.</p>
+                      <p className="text-sm font-medium italic text-slate-400">Nenhum profissional disponível no momento.</p>
                     ) : (
                       <div className="space-y-3">
                         <select
@@ -846,7 +816,8 @@ export default function PublicSalonPage() {
                             setSelectedProfessional(pro);
                             setSelectedTime('');
                           }}
-                          className="h-9 w-full rounded-md border border-slate-600 bg-[#142035] px-2.5 text-[10px] font-semibold text-white outline-none focus:border-indigo-400"
+                          className="h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs font-semibold text-white outline-none focus:ring-1"
+                          style={{ '--tw-ring-color': brand } as React.CSSProperties}
                         >
                           <option value="" disabled>Selecione um profissional...</option>
                           {professionals.map((p) => (
@@ -859,7 +830,7 @@ export default function PublicSalonPage() {
                         </select>
 
                         {selectedProfessional && lastProfessionalId === selectedProfessional.id && (
-                          <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                          <p className="flex items-center gap-1.5 text-xs font-bold client-accent-text">
                             <span className="text-base">★</span>
                             Seu último barbeiro — já selecionado para você
                           </p>
@@ -874,7 +845,10 @@ export default function PublicSalonPage() {
                           const hasCustomDuration = custom.customDuration !== null && custom.customDuration !== selectedService.duration;
                           if (!hasCustomPrice && !hasCustomDuration) return null;
                           return (
-                            <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/40 dark:border-indigo-950/30 text-xs text-indigo-700 dark:text-indigo-300 font-bold">
+                            <div
+                              className="rounded-xl border p-3 text-xs font-bold"
+                              style={{ borderColor: `${brand}40`, backgroundColor: `${brand}12`, color: brand }}
+                            >
                               Valores personalizados deste profissional:
                               {hasCustomPrice && <span className="ml-2">R$ {custom.customPrice.toFixed(2)}</span>}
                               {hasCustomDuration && <span className="ml-2">⏱️ {custom.customDuration} min</span>}
@@ -912,8 +886,8 @@ export default function PublicSalonPage() {
                 </div>
 
                 <aside>
-                  <div className="rounded-xl border border-slate-700 bg-[#1d2a3e] p-4 lg:sticky lg:top-[4.5rem] lg:z-30">
-                    <h3 className="mb-4 border-b border-slate-600 pb-3 text-[10px] font-bold tracking-wide text-white">
+                  <div className="rounded-xl border border-white/10 bg-[#1a1816] p-4 lg:sticky lg:top-[4.5rem] lg:z-30">
+                    <h3 className="mb-4 border-b border-white/10 pb-3 text-[10px] font-bold uppercase tracking-widest client-accent-text">
                       RESUMO DA RESERVA
                     </h3>
                     
@@ -946,9 +920,9 @@ export default function PublicSalonPage() {
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Horário</span>
                         <span className="block text-right text-base font-bold text-[var(--brand,#d5a85c)]">{selectedTime || 'Não selecionado'}</span>
                       </div>
-                      <div className="space-y-1 border-t border-slate-600 pt-3">
+                      <div className="space-y-1 border-t border-white/10 pt-3">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total</span>
-                        <span className="block text-right text-lg font-bold text-emerald-400">
+                        <span className="block text-right text-xl font-bold client-accent-text">
                           R$ {displayService ? displayService.price.toFixed(2) : '0,00'}
                         </span>
                       </div>
@@ -957,7 +931,8 @@ export default function PublicSalonPage() {
                     <button
                       onClick={handleSchedule}
                       disabled={bookingLoading || !selectedService || !selectedProfessional || !selectedDate || !selectedTime}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-500/25 transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none flex items-center justify-center gap-2 border-none cursor-pointer"
+                      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-none py-3.5 px-6 text-sm font-black uppercase tracking-wider text-[#111] shadow-lg transition-all duration-300 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
+                      style={{ backgroundColor: brand }}
                     >
                       {bookingLoading ? (
                         <>
@@ -1004,318 +979,37 @@ export default function PublicSalonPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 transition-colors duration-300">
+    <div className="min-h-screen bg-[#0b0d0e] py-10 px-4 transition-colors duration-300">
       {unitPicker}
-      {primaryColor && (
-        <style>{`
-          :root {
-            --brand-primary: ${primaryColor};
-          }
-          .bg-indigo-600 {
-            background-color: var(--brand-primary) !important;
-          }
-          .text-indigo-600 {
-            color: var(--brand-primary) !important;
-          }
-          .border-indigo-600 {
-            border-color: var(--brand-primary) !important;
-          }
-          .bg-indigo-50 {
-            background-color: var(--brand-primary)15 !important;
-          }
-          .text-indigo-500 {
-            color: var(--brand-primary) !important;
-          }
-          .bg-indigo-5050 {
-            background-color: var(--brand-primary)10 !important;
-          }
-          .bg-indigo-50\\/50 {
-            background-color: var(--brand-primary)10 !important;
-          }
-          .bg-indigo-500 {
-            background-color: var(--brand-primary) !important;
-          }
-          .focus\\:ring-indigo-500:focus {
-            --tw-ring-color: var(--brand-primary) !important;
-          }
-          .hover\\:bg-indigo-700:hover {
-            filter: brightness(0.9) !important;
-          }
-        `}</style>
-      )}
+      {primaryColor && <style>{clientBrandStyles(primaryColor)}</style>}
       <div className="max-w-4xl mx-auto">
-        
-        {/* BARRA DO CLIENTE — fixa no scroll */}
-        <div className="sticky top-0 z-40 -mx-4 mb-6 flex items-center justify-between border-b border-gray-200 bg-white/95 px-4 py-3.5 backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/95 sm:-mx-6 sm:px-6">
-          <div className="flex items-center gap-2.5">
-            <span className={`w-2 h-2 rounded-full ${currentUser ? 'bg-emerald-500 animate-pulse' : 'bg-indigo-500 animate-pulse'}`}></span>
-            <span className="text-xs font-extrabold text-gray-500 dark:text-slate-400">
-              {currentUser ? `Cliente: ${currentUser.name}` : 'Acesso de Visitante'}
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <button 
-              type="button"
-              onClick={() => setIsDark(!isDark)}
-              className="p-2 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-600 transition-all cursor-pointer border-none flex items-center justify-center"
-              title="Mudar Tema"
-            >
-              {isDark ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
+        <ClientTopBar
+          currentUser={currentUser}
+          brandColor={primaryColor || '#d5a85c'}
+          isDark={isDark}
+          onToggleTheme={() => setIsDark(!isDark)}
+          onLogout={handleLogout}
+          salonSlug={salonSlug}
+          isCustomDomain={isCustomDomain}
+        />
 
-            {currentUser ? (
-              <button 
-                onClick={handleLogout}
-                className="text-xs font-black uppercase tracking-wider text-red-500 hover:text-red-650 dark:text-red-400 dark:hover:text-red-300 transition-all cursor-pointer border-none bg-transparent"
-              >
-                Sair
-              </button>
-            ) : (
-              <Link 
-                href={isCustomDomain ? `/login` : `/app/${salonSlug}/login`}
-                className="text-xs font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
-              >
-                Entrar / Cadastrar
-              </Link>
-            )}
-          </div>
-        </div>
+        <DynamicQueueSection
+          queues={queues as QueueSession[]}
+          brandColor={primaryColor || '#d5a85c'}
+          brandName={brandName}
+          currentUser={currentUser}
+          salonSlug={salonSlug}
+          isCustomDomain={isCustomDomain}
+          onJoin={(queue) => {
+            setActiveQueueSession(queue);
+            setIsJoinModalOpen(true);
+            setJoinQueueError(null);
+          }}
+          onLeave={handleLeaveQueue}
+        />
 
-        {/* HEADER */}
-        <header className="flex flex-col items-center justify-center text-center mb-10 pb-6 border-b border-gray-200 dark:border-slate-800">
-          {logoUrl ? (
-            <img src={logoUrl} alt={brandName} className="w-20 h-20 object-cover rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-none mb-4 hover:scale-105 transition-all duration-300" />
-          ) : (
-            <div
-              className="p-3 rounded-2xl text-white shadow-xl mb-4 hover:scale-105 transition-all duration-300"
-              style={{ backgroundColor: primaryColor || '#d5a85c' }}
-            >
-              <Scissors size={32} />
-            </div>
-          )}
-          <span
-            className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-white rounded-md mb-2"
-            style={{ backgroundColor: primaryColor || '#d5a85c' }}
-          >
-            {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} • FILA DINÂMICA
-          </span>
-          <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white transition-colors">
-            {salon.name}
-          </h1>
-          {salon.address && (
-            <p className="mt-2 inline-flex items-center justify-center gap-1.5 text-sm text-gray-500 dark:text-slate-400 max-w-md mx-auto">
-              <MapPin size={14} className="shrink-0 text-indigo-500" />
-              <span>{salon.address}</span>
-            </p>
-          )}
-          <p className="text-sm text-gray-555 dark:text-slate-400 mt-2">
-            Acompanhe a fila de hoje em tempo real. Os tempos são estimados de forma inteligente.
-          </p>
-
-          {(salon.phone || salon.instagramUrl) && (
-            <div className="flex items-center justify-center gap-3 mt-5 flex-wrap animate-fade-in">
-              {salon.phone && (
-                <a 
-                  href={`https://wa.me/55${salon.phone.replace(/\D/g, '')}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-extrabold transition-all duration-300 shadow-sm shadow-emerald-500/30 hover:scale-105 active:scale-95"
-                >
-                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.504-5.729-1.464L0 24zm6.59-4.846c1.6.95 3.197 1.451 4.793 1.457 5.485.002 9.95-4.461 9.953-9.946.002-2.657-1.032-5.155-2.906-7.03C16.615 1.76 14.12 .727 11.46.727 5.973.727 1.507 5.19 1.504 10.677c0 1.682.449 3.322 1.302 4.773L1.879 21.05l5.768-1.512-.1 1.616z" />
-                  </svg>
-                  <span>WhatsApp</span>
-                </a>
-              )}
-              {salon.instagramUrl && (
-                <a 
-                  href={formatInstagramUrl(salon.instagramUrl)} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:from-purple-600 hover:via-pink-600 hover:to-orange-600 text-white rounded-full text-xs font-extrabold transition-all duration-300 shadow-sm shadow-pink-500/30 hover:scale-105 active:scale-95"
-                >
-                  <InstagramIcon size={14} />
-                  <span>Instagram</span>
-                </a>
-              )}
-            </div>
-          )}
-        </header>
-
-        {/* LISTA DE FILAS POR PROFISSIONAL */}
-        <div className="space-y-8">
-          {queues.length === 0 ? (
-            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl text-center border border-gray-150 dark:border-slate-700 shadow-sm">
-              <Users size={40} className="text-gray-450 dark:text-slate-550 mx-auto mb-4" />
-              <h3 className="font-bold text-gray-950 dark:text-white">Nenhuma fila aberta hoje</h3>
-              <p className="text-sm text-gray-550 dark:text-slate-400 mt-1">
-                Os barbeiros ainda não iniciaram os atendimentos por fila hoje.
-              </p>
-            </div>
-          ) : (
-            queues.map((q: any) => {
-              const inProgressEntry = q.entries.find((e: any) => e.status === 'IN_PROGRESS');
-              const waitingEntries = q.entries.filter((e: any) => e.status === 'WAITING');
-              const userEntry = currentUser ? q.entries.find((e: any) => e.userId === currentUser.id && ['IN_PROGRESS', 'WAITING'].includes(e.status)) : null;
-
-              const totalWaitMinutes = computeQueueWaitMinutes({
-                waitingEntries,
-                inProgressEntry,
-                queueServices: q.services,
-                userEntry,
-              });
-
-              return (
-                <div key={q.sessionId} className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-xl overflow-hidden transition-all duration-300">
-                  {/* CABEÇALHO DO PROFISSIONAL */}
-                  <div className="p-6 bg-indigo-50/50 dark:bg-indigo-950/20 border-b border-gray-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">{q.professionalName}</h2>
-                      <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-500 dark:text-slate-400 font-medium">
-                        <Users size={14} className="text-indigo-500" />
-                        <span>{waitingEntries.length} {waitingEntries.length === 1 ? 'cliente aguardando' : 'clientes aguardando'}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
-                      <div className="px-4 py-2 bg-white dark:bg-slate-700 rounded-xl border border-gray-200/60 dark:border-slate-600 flex items-center gap-2 text-xs font-bold text-gray-750 dark:text-slate-200">
-                        <Clock size={14} className="text-indigo-500" />
-                        <span>Espera estimada: ~{totalWaitMinutes} min</span>
-                      </div>
-
-                      {/* Botão de Entrar/Sair da Fila */}
-                      {userEntry ? (
-                        <div className="flex items-center gap-2">
-                          <span className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                            userEntry.status === 'IN_PROGRESS' 
-                              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' 
-                              : 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 animate-pulse'
-                          }`}>
-                            {userEntry.status === 'IN_PROGRESS' 
-                              ? 'Sua Vez!' 
-                              : `${waitingEntries.findIndex((e: any) => e.userId === currentUser.id) + 1}º da Fila`}
-                          </span>
-                          <button
-                            onClick={() => handleLeaveQueue(q.sessionId)}
-                            className="px-4 py-2 bg-red-500 hover:bg-red-650 text-white rounded-xl text-xs font-extrabold transition-all duration-300 shadow-sm shadow-red-500/30 hover:scale-105 active:scale-95 cursor-pointer border-none"
-                          >
-                            Sair da Fila
-                          </button>
-                        </div>
-                      ) : (
-                        currentUser ? (
-                          <button
-                            onClick={() => {
-                              setActiveQueueSession(q);
-                              setIsJoinModalOpen(true);
-                              setJoinQueueError(null);
-                            }}
-                            className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 shadow-md shadow-indigo-500/20 hover:scale-105 active:scale-95 cursor-pointer border-none"
-                          >
-                            Entrar na Fila
-                          </button>
-                        ) : (
-                          <Link
-                            href={isCustomDomain ? `/login` : `/app/${salonSlug}/login`}
-                            className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 shadow-md shadow-indigo-500/20 hover:scale-105 active:scale-95 text-center flex items-center justify-center decoration-none no-underline"
-                          >
-                            Entrar na Fila
-                          </Link>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  {/* ELEMENTOS DA FILA */}
-                  <div className="p-6 space-y-6">
-                    {/* CLIENTE ATUAL (EM PROGRESSO) */}
-                    {inProgressEntry ? (
-                      <div className="p-5 bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-950/30 dark:to-indigo-900/10 rounded-2xl border border-indigo-200/50 dark:border-indigo-800/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-bold text-sm tracking-wide shadow-md shadow-indigo-600/10">
-                            ATUAL
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400">Atendimento em Andamento</span>
-                            <h3 className="font-extrabold text-gray-900 dark:text-white text-lg mt-0.5">
-                              {inProgressEntry.customerName}
-                              {currentUser && inProgressEntry.userId === currentUser.id && (
-                                <span className="ml-2 px-2 py-0.5 text-[9px] bg-emerald-500 text-white rounded-md uppercase font-black tracking-wider">Você</span>
-                              )}
-                            </h3>
-                            <p className="text-xs text-gray-500 dark:text-slate-400 font-medium mt-0.5">{inProgressEntry.serviceName}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 bg-white dark:bg-slate-800/90 px-4 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800">
-                          <span className="text-xs font-bold text-gray-400 dark:text-slate-500">Cronômetro:</span>
-                          <QueueActiveTimer entry={inProgressEntry} />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-xl border border-dashed border-gray-200 dark:border-slate-700 text-center text-sm font-medium text-gray-500 dark:text-slate-400">
-                        Nenhum atendimento ativo no momento.
-                      </div>
-                    )}
-
-                    {/* LISTA DE ESPERA */}
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                        Próximos na Fila
-                      </h4>
-
-                      {waitingEntries.length === 0 ? (
-                        <p className="text-sm font-medium text-gray-550 dark:text-slate-400 italic pl-3">A fila está vazia. Seja o próximo!</p>
-                      ) : (
-                        <div className="grid grid-cols-1 gap-2.5">
-                          {waitingEntries.map((entry: any, index: number) => {
-                            const estTime = new Date(entry.estimatedStart).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                            const isMe = currentUser && entry.userId === currentUser.id;
-                            return (
-                              <div key={entry.id} className={`p-4 bg-white dark:bg-slate-800 border rounded-xl flex items-center justify-between hover:border-indigo-200 dark:hover:border-indigo-900/60 transition-colors shadow-sm ${
-                                isMe ? 'border-indigo-500 dark:border-indigo-500 ring-2 ring-indigo-500/20' : 'border-gray-100 dark:border-slate-700'
-                              }`}>
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                                    isMe ? 'bg-indigo-600 text-white animate-pulse' : 'bg-slate-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'
-                                  }`}>
-                                    {index + 1}º
-                                  </div>
-                                  <div>
-                                    <h5 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                                      {entry.customerName}
-                                      {isMe && (
-                                        <span className="px-2 py-0.5 text-[9px] bg-indigo-600 text-white rounded-md uppercase font-black tracking-wider animate-pulse">Você</span>
-                                      )}
-                                    </h5>
-                                    <p className="text-[11px] font-medium text-gray-500 dark:text-slate-400 mt-0.5">{entry.serviceName}</p>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                                    isMe 
-                                      ? 'bg-indigo-600 text-white border-indigo-600' 
-                                      : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/30'
-                                  }`}>
-                                    Previsão: {estTime}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* BOTTOM METRICS */}
         <footer className="mt-16 text-center">
-          <p className="text-xs text-gray-400 dark:text-slate-500">
+          <p className="text-xs text-slate-500">
             Painel STYLEFLOW • Todos os direitos reservados.
           </p>
         </footer>

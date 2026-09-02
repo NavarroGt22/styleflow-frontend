@@ -103,6 +103,8 @@ export type SalonSettings = {
   queueAllowSkip?: boolean
   queueSkipTimeoutMin?: number
   whatsappTemplate?: string | null
+  whatsappGatewayUrl?: string | null
+  whatsappGatewayToken?: string | null
   ownerId?: string
   productCommissionEnabled?: boolean
   productCommissionRate?: number
