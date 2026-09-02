@@ -23,7 +23,7 @@ export default function AdminPageShell({
   return (
     <div
       style={style}
-      className={`relative min-h-screen overflow-hidden text-white ${
+      className={`relative min-h-screen overflow-x-hidden text-white ${
         isClient ? 'bg-[#0b1224]' : 'bg-[#0a0e1a]'
       } ${className}`}
     >

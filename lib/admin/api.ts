@@ -90,6 +90,19 @@ export async function updateAppointmentStatus(id: string, status: string): Promi
   await parseJson(response)
 }
 
+export async function blockAppointment(payload: {
+  salonId: string
+  professionalId: string
+  startTime: string
+  endTime: string
+}): Promise<void> {
+  const response = await authFetch('/appointments/block', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  await parseJson(response)
+}
+
 export async function completeAppointment(
   id: string,
   finalPrice: number,
@@ -297,6 +310,17 @@ export async function fetchCustomers(salonId: string, q?: string): Promise<Custo
   return parseJson(response)
 }
 
+export async function updateCustomer(
+  customerId: string,
+  payload: { name: string; phone?: string | null; salonId: string },
+): Promise<{ id: string; name: string; phone?: string | null }> {
+  const response = await authFetch(`/customers/${customerId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
 export async function fetchLoyaltyRewards(salonId: string): Promise<LoyaltyReward[]> {
   const response = await authFetch(`/loyalty/rewards/salon/${salonId}`)
   return parseJson(response)
@@ -309,12 +333,91 @@ export async function createLoyaltyReward(payload: {
   cutsRequired: number
   rewardType?: LoyaltyRewardType
   productId?: string | null
+  groupId?: string | null
 }): Promise<LoyaltyReward> {
   const response = await authFetch('/loyalty/rewards', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
   return parseJson(response)
+}
+
+export type ClientGroup = {
+  id: string
+  name: string
+  color: string
+  description?: string | null
+  isActive: boolean
+  sortOrder: number
+  autoAssign: boolean
+  criteriaType?: 'CUTS' | 'REWARDS' | null
+  criteriaValue?: number | null
+  resetMode: 'LIFETIME' | 'MONTHLY'
+  _count?: { members: number; rewards: number }
+  rewards?: LoyaltyReward[]
+}
+
+export type SalonCoupon = {
+  id: string
+  code: string
+  name: string
+  percentOff: number
+  maxUsesTotal?: number | null
+  maxUsesPerUser?: number | null
+  isActive: boolean
+  _count?: { redemptions: number }
+}
+
+export async function fetchClientGroups(salonId: string): Promise<ClientGroup[]> {
+  const response = await authFetch(`/client-groups/salon/${salonId}`)
+  return parseJson(response)
+}
+
+export async function createClientGroup(payload: Record<string, unknown>): Promise<ClientGroup> {
+  const response = await authFetch('/client-groups', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
+export async function updateClientGroup(id: string, payload: Record<string, unknown>): Promise<ClientGroup> {
+  const response = await authFetch(`/client-groups/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
+export async function deleteClientGroup(id: string): Promise<void> {
+  const response = await authFetch(`/client-groups/${id}`, { method: 'DELETE' })
+  await parseJson(response)
+}
+
+export async function fetchCoupons(salonId: string): Promise<SalonCoupon[]> {
+  const response = await authFetch(`/coupons/salon/${salonId}`)
+  return parseJson(response)
+}
+
+export async function createCoupon(payload: Record<string, unknown>): Promise<SalonCoupon> {
+  const response = await authFetch('/coupons', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
+export async function updateCoupon(id: string, payload: Record<string, unknown>): Promise<SalonCoupon> {
+  const response = await authFetch(`/coupons/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
+export async function deleteCoupon(id: string): Promise<void> {
+  const response = await authFetch(`/coupons/${id}`, { method: 'DELETE' })
+  await parseJson(response)
 }
 
 export async function updateLoyaltyReward(

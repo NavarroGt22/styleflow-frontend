@@ -26,6 +26,8 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
   const [tenant, setTenant] = useState<TenantBranding | null>(cachedSalon?.tenant ?? null)
   const [salonName, setSalonName] = useState(cachedSalon?.salon?.name ?? '')
   const [salonAddress, setSalonAddress] = useState(cachedSalon?.salon?.address ?? '')
+  const [billingLocked, setBillingLocked] = useState(false)
+  const [billingMessage, setBillingMessage] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [error, setError] = useState('')
@@ -53,8 +55,17 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
       try {
         const url = salonSlug ? apiUrl(`/queue/public/${salonSlug}`) : apiUrl('/queue/public')
         const res = await fetch(url, { headers: { 'X-Custom-Host': window.location.host } })
+        if (res.status === 402) {
+          const body = await res.json().catch(() => ({}))
+          setBillingLocked(true)
+          setBillingMessage(
+            body.error || 'Este salão está temporariamente indisponível. Tente novamente mais tarde.'
+          )
+          return
+        }
         if (!res.ok) return
         const json = await res.json()
+        setBillingLocked(false)
         if (json?.tenant) setTenant(json.tenant)
         if (json?.salon?.name) setSalonName(json.salon.name)
         if (json?.salon?.address) setSalonAddress(json.salon.address)
@@ -114,6 +125,19 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
   }
 
   const isLogin = mode === 'login'
+
+  if (billingLocked) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#0b0d0e] px-5 py-8 text-[#f5f5f4]">
+        <div className="w-full max-w-md rounded-2xl border border-red-500/20 bg-[#1d2a3e] p-8 text-center">
+          <h1 className="mb-2 text-xl font-bold">Salão indisponível</h1>
+          <p className="text-sm text-slate-400">
+            {billingMessage || 'Este salão está temporariamente indisponível. Tente novamente mais tarde.'}
+          </p>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main

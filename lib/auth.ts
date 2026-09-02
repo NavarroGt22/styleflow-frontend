@@ -26,8 +26,8 @@ const REFRESH_KEY = 'refreshToken'
 const USER_KEY = 'user'
 const ADMIN_AUTH_AT_KEY = 'adminAuthenticatedAt'
 
-/** Sessão admin expira após 10 min — exige nova senha ao voltar do /app para /admin */
-export const ADMIN_SESSION_MAX_MS = 10 * 60 * 1000
+/** Sessão admin expira após 30 min — exige nova senha ao voltar do /app para /admin */
+export const ADMIN_SESSION_MAX_MS = 30 * 60 * 1000
 
 export function getSessionToken(): string | null {
   if (typeof window === 'undefined') return null

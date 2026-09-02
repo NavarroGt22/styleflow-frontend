@@ -134,22 +134,48 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
 
   function downloadCsv() {
     if (!data) return
-    const rows = [
-      ['Tipo', 'Descrição', 'Valor', 'Data'],
-      ...data.recentRecords.map((record) => [
-        record.isExpense ? 'Saída' : 'Entrada',
-        record.appointment?.service?.name || record.productSale?.product?.name || 'Movimentação',
+    const cutRows = data.recentRecords
+      .filter((record) => !record.isExpense && record.appointment)
+      .map((record) => [
+        'Corte',
+        record.appointment?.service?.name || 'Serviço',
+        record.appointment?.professional?.user?.name || '',
         String(record.amount),
         new Date(record.createdAt).toLocaleString('pt-BR'),
-      ]),
+      ])
+    const productRows = data.recentRecords
+      .filter((record) => !record.isExpense && record.productSale)
+      .map((record) => [
+        'Produto',
+        record.productSale?.product?.name || 'Produto',
+        record.productSale?.professional?.user?.name || '',
+        String(record.amount),
+        new Date(record.createdAt).toLocaleString('pt-BR'),
+      ])
+    const otherRows = data.recentRecords
+      .filter((record) => record.isExpense || (!record.appointment && !record.productSale))
+      .map((record) => [
+        record.isExpense ? 'Saída' : 'Entrada',
+        record.appointment?.service?.name || record.productSale?.product?.name || 'Movimentação',
+        '',
+        String(record.amount),
+        new Date(record.createdAt).toLocaleString('pt-BR'),
+      ])
+
+    const rows = [
+      ['Tipo', 'Descrição', 'Profissional', 'Valor', 'Data'],
+      ...cutRows,
+      ...productRows,
+      ...otherRows,
       [],
-      ['Faturamento Total', String(data.totalRevenue)],
-      ['Comissões', String(data.totalCommissions)],
-      ['Lucro Líquido', String(data.netProfit)],
-      ['Cortes concluídos', String(data.completedCuts ?? 0)],
+      ['Resumo', '', '', '', ''],
+      ['Faturamento Total', '', '', String(data.totalRevenue), ''],
+      ['Comissões', '', '', String(data.totalCommissions), ''],
+      ['Lucro Líquido', '', '', String(data.netProfit), ''],
+      ['Cortes concluídos (caixa aberto)', '', '', String(data.completedCuts ?? 0), ''],
     ]
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -304,7 +330,7 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
               </h4>
               {data.recentRecords.length ? (
                 <div className="space-y-2">
-                  {data.recentRecords.map((record) => (
+                  {data.recentRecords.slice(0, 20).map((record) => (
                     <div
                       key={record.id}
                       className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm ${
@@ -322,6 +348,11 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
                       </span>
                     </div>
                   ))}
+                  {data.recentRecords.length > 20 ? (
+                    <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Mostrando 20 de {data.recentRecords.length}. O CSV de fechamento inclui todos.
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <AdminEmpty lightMode={lightMode} text="Nenhum valor no período selecionado." />

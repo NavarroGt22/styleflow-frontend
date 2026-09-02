@@ -11,7 +11,7 @@ import {
   Plus,
   Scissors,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import AdminCheckoutModal from '../AdminCheckoutModal'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminModal, inputClass, labelClass } from '../ui/AdminUi'
 import type { AdminTabProps, Appointment, Professional, QueueEntry, QueueSession, Service } from '@/lib/admin/types'
@@ -74,6 +74,7 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
   const [walkInService, setWalkInService] = useState('')
   const [checkoutApt, setCheckoutApt] = useState<Appointment | null>(null)
   const [checkoutAction, setCheckoutAction] = useState<'complete' | 'completeAndNext' | null>(null)
+  const autoFinishTriggeredRef = useRef<string | null>(null)
 
   async function loadBase() {
     if (!salonId) {
@@ -127,6 +128,31 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
     () => (session?.entries ?? []).find((e) => e.status === 'IN_PROGRESS') ?? null,
     [session],
   )
+
+  // Finalização automática ao fim do tempo do serviço (quando queueAutoAdvance estiver ativo)
+  useEffect(() => {
+    if (!salon?.queueAutoAdvance || !activeEntry || checkoutApt) {
+      if (!activeEntry) autoFinishTriggeredRef.current = null
+      return
+    }
+    if (autoFinishTriggeredRef.current === activeEntry.id) return
+
+    const durationMin = entryDuration(activeEntry)
+    const startMs = activeEntry.actualStart ? new Date(activeEntry.actualStart).getTime() : NaN
+    if (!Number.isFinite(startMs)) return
+
+    const check = () => {
+      if (Date.now() - startMs >= durationMin * 60 * 1000) {
+        autoFinishTriggeredRef.current = activeEntry.id
+        openCheckout(activeEntry, 'complete')
+        setError('Tempo do serviço encerrado. Confirme o pagamento para o valor entrar no financeiro.')
+      }
+    }
+
+    check()
+    const id = window.setInterval(check, 1000)
+    return () => window.clearInterval(id)
+  }, [salon?.queueAutoAdvance, activeEntry, checkoutApt])
 
   const publicUrl =
     typeof window !== 'undefined' && (salonSlug || salon?.slug)
@@ -212,7 +238,9 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
           Para utilizar o sistema de fila de atendimento dinâmico (sem hora marcada) com estimativas reativas de tempo
           e painel público de vitrine de clientes, ative o Modo Fila nas configurações do salão.
         </p>
-        <AdminButton onClick={() => onNavigateTab?.('salao')}>Ir para Configurações do Salão</AdminButton>
+        <AdminButton onClick={() => onNavigateTab?.('salao', { salonSubTab: 'fila' })}>
+          Ir para Configurações do Salão
+        </AdminButton>
       </div>
     )
   }

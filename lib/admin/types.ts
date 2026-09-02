@@ -53,8 +53,14 @@ export type FinancialDashboard = {
     amount: number
     isExpense: boolean
     createdAt: string
-    appointment?: { service?: { name?: string } }
-    productSale?: { product?: { name?: string } }
+    appointment?: {
+      service?: { name?: string }
+      professional?: { user?: { name?: string } }
+    }
+    productSale?: {
+      product?: { name?: string }
+      professional?: { user?: { name?: string } }
+    }
   }>
 }
 
@@ -63,7 +69,8 @@ export type AdminTabProps = {
   lightMode?: boolean
   ownerUserId?: string
   salonSlug?: string
-  onNavigateTab?: (tab: AdminTab) => void
+  initialSalonSubTab?: 'general' | 'temas' | 'expediente' | 'comissao' | 'fila'
+  onNavigateTab?: (tab: AdminTab, options?: { salonSubTab?: 'general' | 'temas' | 'expediente' | 'comissao' | 'fila' }) => void
 }
 
 export type QueueEntry = {
@@ -152,6 +159,7 @@ export type LoyaltyReward = {
   cutsRequired: number
   rewardType: LoyaltyRewardType
   productId?: string | null
+  groupId?: string | null
   isActive: boolean
   product?: { id: string; name: string; stockQuantity: number; isReward?: boolean } | null
 }

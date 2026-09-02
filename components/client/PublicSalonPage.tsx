@@ -125,6 +125,16 @@ export default function PublicSalonPage() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<any>(null);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    name: string;
+    percentOff: number;
+    discountAmount: number;
+    quotedPrice: number;
+    originalPrice: number;
+  } | null>(null);
 
   const { brandName, primaryColor, logoUrl, faviconUrl } = useTenantBranding(data?.tenant);
 
@@ -220,10 +230,14 @@ export default function PublicSalonPage() {
         },
       });
       if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 402 || body.code === 'BILLING_LOCKED') {
+          throw new Error('Este salão está temporariamente indisponível. Tente novamente mais tarde.')
+        }
         if (res.status === 404) {
           throw new Error('Fila pública ou estabelecimento não disponível.');
         }
-        throw new Error('Erro ao carregar a fila de atendimento.');
+        throw new Error(body.error || 'Erro ao carregar a fila de atendimento.');
       }
       const json = await res.json();
       setData(json);
@@ -385,13 +399,16 @@ export default function PublicSalonPage() {
       : selectedService.duration;
     const end = new Date(start.getTime() + duration * 60000);
 
-    const payload = {
+    const payload: Record<string, string> = {
       salonId: data.salon.id,
       professionalId: selectedProfessional.id,
       serviceId: selectedService.id,
       startTime: start.toISOString(),
       endTime: end.toISOString()
     };
+    if (appliedCoupon?.code) {
+      payload.couponCode = appliedCoupon.code;
+    }
 
     try {
       const res = await fetch(apiUrl('/appointments'), {
@@ -920,10 +937,71 @@ export default function PublicSalonPage() {
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Horário</span>
                         <span className="block text-right text-base font-bold text-[var(--brand,#d5a85c)]">{selectedTime || 'Não selecionado'}</span>
                       </div>
+                      <div className="space-y-2 border-t border-white/10 pt-3">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cupom</span>
+                        <div className="flex gap-2">
+                          <input
+                            value={couponCode}
+                            onChange={(e) => {
+                              setCouponCode(e.target.value)
+                              setAppliedCoupon(null)
+                            }}
+                            placeholder="Código"
+                            className="h-10 flex-1 rounded-lg border border-white/10 bg-[#0b0d0e] px-3 text-sm text-white outline-none focus:border-[var(--brand,#d5a85c)]"
+                          />
+                          <button
+                            type="button"
+                            disabled={couponLoading || !couponCode.trim() || !displayService}
+                            onClick={async () => {
+                              if (!displayService || !data?.salon?.id) return
+                              const token = sessionStorage.getItem('client_token')
+                              if (!token) {
+                                setBookingError('Entre na conta para aplicar o cupom.')
+                                return
+                              }
+                              setCouponLoading(true)
+                              setBookingError(null)
+                              try {
+                                const res = await fetch(apiUrl('/coupons/validate'), {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${token}`,
+                                  },
+                                  body: JSON.stringify({
+                                    salonId: data.salon.id,
+                                    code: couponCode,
+                                    servicePrice: displayService.price,
+                                  }),
+                                })
+                                const json = await res.json()
+                                if (!res.ok) throw new Error(json.error || 'Cupom inválido')
+                                setAppliedCoupon(json)
+                              } catch (err) {
+                                setAppliedCoupon(null)
+                                setBookingError(err instanceof Error ? err.message : 'Cupom inválido')
+                              } finally {
+                                setCouponLoading(false)
+                              }
+                            }}
+                            className="rounded-lg border border-white/15 px-3 text-xs font-bold uppercase tracking-wide text-[var(--brand,#d5a85c)] disabled:opacity-40"
+                          >
+                            {couponLoading ? '...' : 'Aplicar'}
+                          </button>
+                        </div>
+                        {appliedCoupon ? (
+                          <p className="text-xs text-emerald-400">
+                            {appliedCoupon.code}: -{appliedCoupon.percentOff}% (−R$ {appliedCoupon.discountAmount.toFixed(2)})
+                          </p>
+                        ) : null}
+                      </div>
                       <div className="space-y-1 border-t border-white/10 pt-3">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total</span>
                         <span className="block text-right text-xl font-bold client-accent-text">
-                          R$ {displayService ? displayService.price.toFixed(2) : '0,00'}
+                          R${' '}
+                          {displayService
+                            ? (appliedCoupon?.quotedPrice ?? displayService.price).toFixed(2)
+                            : '0,00'}
                         </span>
                       </div>
                     </div>

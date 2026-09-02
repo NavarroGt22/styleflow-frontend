@@ -171,8 +171,11 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
       {loading ? (
         <AdminLoading lightMode={lightMode} />
       ) : team.length ? (
-        <div className={`overflow-x-auto rounded-2xl border ${lightMode ? 'border-slate-200' : 'border-slate-600'}`}>
-          <table className="min-w-full text-left text-sm">
+        <div
+          className={`scrollbar-none overflow-x-auto overscroll-x-contain rounded-2xl border touch-pan-x [-webkit-overflow-scrolling:touch] ${lightMode ? 'border-slate-200' : 'border-slate-600'}`}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <table className="min-w-[720px] w-full text-left text-sm">
             <thead className={lightMode ? 'bg-slate-50 text-slate-500' : 'bg-[#142035] text-slate-400'}>
               <tr className="text-xs font-semibold uppercase tracking-wide">
                 <th className="px-4 py-3">Nome</th>

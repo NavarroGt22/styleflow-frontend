@@ -27,15 +27,14 @@ import WeekdayHoursEditor, {
   DEFAULT_OPEN_WEEKDAYS,
 } from '../WeekdayHoursEditor'
 
-type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila' | 'calendario'
+type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila'
 
-const subTabs: { id: SubTab; label: string; icon: typeof Store }[] = [
-  { id: 'general', label: 'Dados Gerais', icon: Store },
-  { id: 'temas', label: 'Estilo / Temas', icon: Palette },
-  { id: 'expediente', label: 'Funcionamento', icon: Clock3 },
-  { id: 'comissao', label: 'Comissões', icon: DollarSign },
-  { id: 'fila', label: 'Fila & Agendamento', icon: Users },
-  { id: 'calendario', label: 'Calendário', icon: CalendarDays },
+const subTabs: { id: SubTab; label: string; shortLabel: string; icon: typeof Store }[] = [
+  { id: 'general', label: 'Dados Gerais', shortLabel: 'Dados', icon: Store },
+  { id: 'temas', label: 'Estilo / Temas', shortLabel: 'Temas', icon: Palette },
+  { id: 'expediente', label: 'Funcionamento', shortLabel: 'Horário', icon: Clock3 },
+  { id: 'comissao', label: 'Comissões', shortLabel: 'Comissão', icon: DollarSign },
+  { id: 'fila', label: 'Fila & Agendamento', shortLabel: 'Fila', icon: Users },
 ]
 
 const DEFAULT_WHATSAPP_TEMPLATE =
@@ -74,9 +73,17 @@ function choiceCardClass(lightMode: boolean, selected: boolean) {
   return lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-slate-800'
 }
 
-export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabProps) {
+export default function AdminSalonTab({
+  salonId,
+  lightMode = false,
+  initialSalonSubTab,
+}: AdminTabProps) {
   const [salon, setSalon] = useState<SalonSettings | null>(null)
-  const [subTab, setSubTab] = useState<SubTab>('general')
+  const [subTab, setSubTab] = useState<SubTab>(initialSalonSubTab ?? 'general')
+
+  useEffect(() => {
+    if (initialSalonSubTab) setSubTab(initialSalonSubTab)
+  }, [initialSalonSubTab])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -251,12 +258,12 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       <div>
-        <h3 className={`text-lg font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+        <h3 className={`text-base font-bold sm:text-lg ${lightMode ? 'text-slate-900' : 'text-white'}`}>
           Configurações do Salão
         </h3>
-        <p className={`mt-1 text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+        <p className={`mt-0.5 text-xs sm:mt-1 sm:text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
           Atualize os dados comerciais e o horário de funcionamento geral do seu salão.
         </p>
       </div>
@@ -264,19 +271,19 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
       {error ? <AdminError message={error} /> : null}
       {success ? <p className="text-sm font-semibold text-emerald-600">{success}</p> : null}
 
-      <div className={`grid gap-4 ${subTab === 'expediente' ? 'lg:grid-cols-[280px_1fr]' : ''}`}>
+      <div className={`grid gap-3 sm:gap-4 ${subTab === 'expediente' ? 'lg:grid-cols-[280px_1fr]' : ''}`}>
         {subTab === 'expediente' ? (
           <aside className={sectionClass(lightMode)}>
-            <div className="mb-4 flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-slate-800 text-slate-200">
-                <Store className="size-5" />
+            <div className="mb-3 flex items-center gap-2.5 sm:mb-4 sm:gap-3">
+              <span className="grid size-9 place-items-center rounded-xl bg-slate-800 text-slate-200 sm:size-10">
+                <Store className="size-4 sm:size-5" />
               </span>
               <div>
-                <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{form.name || 'Salão'}</p>
+                <p className={`text-sm font-bold sm:text-base ${lightMode ? 'text-slate-900' : 'text-white'}`}>{form.name || 'Salão'}</p>
                 <p className="text-xs text-slate-500">@{form.slug || 'slug'}</p>
               </div>
             </div>
-            <div className="space-y-3 text-sm">
+            <div className="space-y-2.5 text-sm sm:space-y-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">WhatsApp Comercial</p>
                 <p className={lightMode ? 'text-slate-700' : 'text-slate-300'}>{form.phone || 'Não cadastrado'}</p>
@@ -301,7 +308,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
                 href={whatsappLink}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-sm font-semibold text-emerald-600 hover:bg-emerald-50"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 sm:mt-5 sm:py-2.5"
               >
                 <MessageCircle className="size-4" />
                 Testar Link do WhatsApp
@@ -311,15 +318,18 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
         ) : null}
 
         <form onSubmit={handleSubmit} className={sectionClass(lightMode)}>
-          <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
-            {subTabs.map(({ id, label, icon: Icon }) => {
+          <div
+            className="mb-3 flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x scrollbar-none sm:mb-5 sm:gap-2 sm:pb-2 [-webkit-overflow-scrolling:touch]"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            {subTabs.map(({ id, label, shortLabel, icon: Icon }) => {
               const active = subTab === id
               return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setSubTab(id)}
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition sm:gap-2 sm:rounded-xl sm:px-3.5 sm:py-2.5 sm:text-sm ${
                     active
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
                       : lightMode
@@ -327,15 +337,16 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
                         : 'bg-[#142035] text-slate-400 hover:text-white'
                   }`}
                 >
-                  <Icon className="size-4" />
-                  {label}
+                  <Icon className="size-3.5 sm:size-4" />
+                  <span className="sm:hidden">{shortLabel}</span>
+                  <span className="hidden sm:inline">{label}</span>
                 </button>
               )
             })}
           </div>
 
           {subTab === 'general' ? (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
               <div>
                 <label className={labelClass(lightMode)}>Nome do Salão/Barbearia</label>
                 <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass(lightMode)} />
@@ -386,7 +397,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
               <p className={`text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                 Personalize a landing page dos clientes: história, foto, cor e slug da URL pública.
               </p>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                 <div>
                   <label className={labelClass(lightMode)}>Nome da Conta / Marca</label>
                   <input value={form.tenantName} onChange={(e) => setForm({ ...form, tenantName: e.target.value })} className={inputClass(lightMode)} />
@@ -481,22 +492,22 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
                 </p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <button type="button" onClick={() => setForm({ ...form, queueMode: false })} className={`rounded-2xl border-2 p-4 text-left transition ${choiceCardClass(lightMode, !form.queueMode)}`}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <CalendarDays className={`size-5 ${!form.queueMode ? 'text-indigo-600' : 'text-slate-400'}`} />
-                    <span className={`grid size-4 place-items-center rounded-full border-2 ${!form.queueMode ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>{!form.queueMode ? <span className="size-1.5 rounded-full bg-white" /> : null}</span>
+              <div className="grid gap-2.5 md:grid-cols-2 sm:gap-3">
+                <button type="button" onClick={() => setForm({ ...form, queueMode: false })} className={`rounded-xl border-2 p-3 text-left transition sm:rounded-2xl sm:p-4 ${choiceCardClass(lightMode, !form.queueMode)}`}>
+                  <div className="mb-1.5 flex items-center justify-between sm:mb-2">
+                    <CalendarDays className={`size-4 sm:size-5 ${!form.queueMode ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <span className={`grid size-3.5 place-items-center rounded-full border-2 sm:size-4 ${!form.queueMode ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>{!form.queueMode ? <span className="size-1.5 rounded-full bg-white" /> : null}</span>
                   </div>
-                  <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Agenda Comercial (Hora Fixa)</p>
-                  <p className={`mt-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>Clientes reservam horários fixos. O sistema realiza verificação estrita de choque de horários (anti-clash), bloqueando novos agendamentos no mesmo período.</p>
+                  <p className={`text-sm font-bold sm:text-base ${lightMode ? 'text-slate-900' : 'text-white'}`}>Agenda Comercial (Hora Fixa)</p>
+                  <p className={`mt-1.5 text-[11px] leading-relaxed sm:mt-2 sm:text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>Clientes reservam horários fixos. O sistema realiza verificação estrita de choque de horários (anti-clash), bloqueando novos agendamentos no mesmo período.</p>
                 </button>
-                <button type="button" onClick={() => setForm({ ...form, queueMode: true })} className={`rounded-2xl border-2 p-4 text-left transition ${choiceCardClass(lightMode, form.queueMode)}`}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <Users className={`size-5 ${form.queueMode ? 'text-indigo-600' : 'text-slate-400'}`} />
-                    <span className={`grid size-4 place-items-center rounded-full border-2 ${form.queueMode ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>{form.queueMode ? <span className="size-1.5 rounded-full bg-white" /> : null}</span>
+                <button type="button" onClick={() => setForm({ ...form, queueMode: true })} className={`rounded-xl border-2 p-3 text-left transition sm:rounded-2xl sm:p-4 ${choiceCardClass(lightMode, form.queueMode)}`}>
+                  <div className="mb-1.5 flex items-center justify-between sm:mb-2">
+                    <Users className={`size-4 sm:size-5 ${form.queueMode ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <span className={`grid size-3.5 place-items-center rounded-full border-2 sm:size-4 ${form.queueMode ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>{form.queueMode ? <span className="size-1.5 rounded-full bg-white" /> : null}</span>
                   </div>
-                  <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Fila Dinâmica (Ordem de Chegada)</p>
-                  <p className={`mt-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>Clientes agendam um horário preferencial livremente (sem bloqueio de colisão). O sistema gerencia uma fila sequencial reativa no dia por profissional, com estimativas de tempo ao vivo.</p>
+                  <p className={`text-sm font-bold sm:text-base ${lightMode ? 'text-slate-900' : 'text-white'}`}>Fila Dinâmica (Ordem de Chegada)</p>
+                  <p className={`mt-1.5 text-[11px] leading-relaxed sm:mt-2 sm:text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>Clientes agendam um horário preferencial livremente (sem bloqueio de colisão). O sistema gerencia uma fila sequencial reativa no dia por profissional, com estimativas de tempo ao vivo.</p>
                 </button>
               </div>
 
@@ -520,7 +531,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
                     Notificar cliente por WhatsApp
                   </label>
                   {form.queueNotifyClient ? (
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                       <div>
                         <label className={labelClass(lightMode)}>Notificar quantas pessoas antes? (Posição)</label>
                         <input type="number" min={1} max={20} value={form.queueNotifyAhead} onChange={(e) => setForm({ ...form, queueNotifyAhead: e.target.value })} className={inputClass(lightMode)} />
@@ -635,43 +646,7 @@ export default function AdminSalonTab({ salonId, lightMode = false }: AdminTabPr
             </div>
           ) : null}
 
-          {subTab === 'calendario' ? (
-            <div className={`space-y-6 rounded-2xl border p-6 ${lightMode ? 'border-indigo-100 bg-indigo-50/50' : 'border-indigo-900/40 bg-indigo-950/20'}`}>
-              <div>
-                <h4 className={`flex items-center gap-2 font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
-                  <CalendarDays className="size-4 text-indigo-600" /> Calendário de Fidelidade
-                </h4>
-                <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Defina se a contagem de cortes para prêmios reinicia todo mês ou continua infinita (dias corridos).
-                </p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, loyaltyResetMode: 'LIFETIME' })}
-                  className={`rounded-2xl border-2 p-4 text-left transition ${choiceCardClass(lightMode, form.loyaltyResetMode === 'LIFETIME')}`}
-                >
-                  <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Infinito (lifetime)</p>
-                  <p className={`mt-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                    Os cortes acumulam para sempre. Ex.: a cada 10 cortes o 11º é grátis — o ciclo não zera no mês.
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, loyaltyResetMode: 'MONTHLY' })}
-                  className={`rounded-2xl border-2 p-4 text-left transition ${choiceCardClass(lightMode, form.loyaltyResetMode === 'MONTHLY')}`}
-                >
-                  <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Reset por mês</p>
-                  <p className={`mt-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                    A contagem reinicia no dia 1 de cada mês. Prêmios do mês anterior não carregam para o próximo.
-                  </p>
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="mt-6 flex justify-end">
+          <div className="mt-4 flex justify-end sm:mt-6">
             <AdminButton type="submit" disabled={saving}>{saving ? 'Salvando...' : 'Salvar Configurações'}</AdminButton>
           </div>
         </form>

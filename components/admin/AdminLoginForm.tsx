@@ -53,7 +53,7 @@ export default function AdminLoginForm() {
 
   useEffect(() => {
     if (sessionExpired) {
-      setInfo('Por segurança, confirme sua senha novamente. A sessão do painel expira a cada 10 minutos.')
+      setInfo('Por segurança, confirme sua senha novamente. A sessão do painel expira a cada 30 minutos.')
     }
   }, [sessionExpired])
 
@@ -92,7 +92,7 @@ export default function AdminLoginForm() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
-    setInfo(sessionExpired ? 'Por segurança, confirme sua senha novamente. A sessão do painel expira a cada 10 minutos.' : '')
+    setInfo(sessionExpired ? 'Por segurança, confirme sua senha novamente. A sessão do painel expira a cada 30 minutos.' : '')
 
     if (isLocalHost) {
       clearLoginLockout(email)
@@ -157,6 +157,16 @@ export default function AdminLoginForm() {
 
       clearLoginLockout(email)
       setSession(data.token, data.refreshToken, user as Parameters<typeof setSession>[2])
+
+      if (user.role === 'SUPER_ADMIN') {
+        const next = searchParams.get('next')
+        if (next?.startsWith('/platform/')) {
+          router.replace(next)
+          return
+        }
+        router.replace('/platform/super')
+        return
+      }
 
       const next = searchParams.get('next')
       if (next?.startsWith('/admin/')) {

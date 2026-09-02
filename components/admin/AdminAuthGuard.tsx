@@ -77,6 +77,12 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
           <p className="text-sm text-slate-400">
             O pagamento da plataforma está em atraso. Peça ao suporte StyleFlow para liberar o acesso no Super Admin.
           </p>
+          <p className="text-sm text-slate-300">
+            Contato:{' '}
+            <a href="mailto:rafaelnavarro.ti@gmail.com" className="font-semibold text-indigo-300 underline">
+              rafaelnavarro.ti@gmail.com
+            </a>
+          </p>
           <button
             type="button"
             onClick={() => router.push('/login')}

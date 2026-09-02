@@ -4,18 +4,18 @@ import type { ReactNode } from 'react'
 
 export function sectionClass(lightMode: boolean) {
   return lightMode
-    ? 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5'
-    : 'rounded-2xl border border-slate-700 bg-[#1d2a3e] p-4 sm:p-5'
+    ? 'rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-5'
+    : 'rounded-xl border border-slate-700 bg-[#1d2a3e] p-3 sm:rounded-2xl sm:p-5'
 }
 
 export function inputClass(lightMode: boolean) {
   return lightMode
-    ? 'h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'
-    : 'h-11 w-full rounded-xl border border-slate-600 bg-[#142035] px-3.5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20'
+    ? 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 sm:h-11 sm:rounded-xl sm:px-3.5 sm:text-sm'
+    : 'h-10 w-full rounded-lg border border-slate-600 bg-[#142035] px-3 text-[13px] text-white outline-none placeholder:text-slate-500 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 sm:h-11 sm:rounded-xl sm:px-3.5 sm:text-sm'
 }
 
 export function labelClass(lightMode: boolean) {
-  return `mb-1.5 block text-sm font-semibold ${lightMode ? 'text-slate-700' : 'text-slate-300'}`
+  return `mb-1 block text-xs font-semibold sm:mb-1.5 sm:text-sm ${lightMode ? 'text-slate-700' : 'text-slate-300'}`
 }
 
 export function AdminLoading({ lightMode, text = 'Carregando...' }: { lightMode?: boolean; text?: string }) {
