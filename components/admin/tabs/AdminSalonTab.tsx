@@ -319,7 +319,7 @@ export default function AdminSalonTab({
 
         <form onSubmit={handleSubmit} className={sectionClass(lightMode)}>
           <div
-            className="mb-3 flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x scrollbar-none sm:mb-5 sm:gap-2 sm:pb-2 [-webkit-overflow-scrolling:touch]"
+            className="mb-3 flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none sm:mb-5 sm:gap-2 sm:pb-2 [-webkit-overflow-scrolling:touch]"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
             {subTabs.map(({ id, label, shortLabel, icon: Icon }) => {

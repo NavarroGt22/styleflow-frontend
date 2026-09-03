@@ -180,7 +180,7 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
   return (
     <section className="space-y-4">
       <div
-        className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x scrollbar-none [-webkit-overflow-scrolling:touch]"
+        className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none [-webkit-overflow-scrolling:touch]"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {tabs.map((tab) => (

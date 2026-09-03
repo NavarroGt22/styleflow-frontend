@@ -383,7 +383,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
               lightMode ? 'border-gray-100 bg-white' : 'border-slate-700 bg-slate-800'
             }`}
           >
-            <div className="scrollbar-none overflow-x-auto touch-pan-x [-webkit-overflow-scrolling:touch]">
+            <div className="scrollbar-none overflow-x-auto [-webkit-overflow-scrolling:touch]">
               <table className="w-full min-w-[720px] border-collapse text-left">
                 <thead>
                   <tr

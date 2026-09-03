@@ -7,6 +7,7 @@ import {
   AdminEmpty,
   AdminError,
   AdminLoading,
+  AdminStat,
   inputClass,
   labelClass,
   sectionClass,
@@ -153,6 +154,11 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
   async function handleSearch(event: FormEvent) {
     event.preventDefault()
     await load(query)
+  }
+
+  async function handleClearSearch() {
+    setQuery('')
+    await load('')
   }
 
   async function handleCreateGroup(event: FormEvent) {
@@ -329,7 +335,7 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
   return (
     <section className="space-y-4">
       <div
-        className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 touch-pan-x scrollbar-none [-webkit-overflow-scrolling:touch]"
+        className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none [-webkit-overflow-scrolling:touch]"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {tabs.map((tab) => (
@@ -358,10 +364,32 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
           <div>
             <h3 className={`text-lg font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Lista de Clientes</h3>
             <p className={`mt-1 text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              Cortes no período · busque por nome ou telefone
+              Cortes no período atual (
+              {data.loyaltyResetMode === 'MONTHLY' ? 'mensal' : 'infinito'}
+              ) · busque por nome ou telefone
             </p>
           </div>
-          <form onSubmit={handleSearch} className="flex gap-2">
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <AdminStat
+              lightMode={lightMode}
+              label="Total de Clientes"
+              value={String(data.summary.totalCustomers)}
+            />
+            <AdminStat
+              lightMode={lightMode}
+              label="Cortes no Período"
+              value={String(data.summary.totalCutsInPeriod)}
+            />
+            <AdminStat
+              lightMode={lightMode}
+              tone="success"
+              label="Prêmios Disponíveis"
+              value={String(data.summary.availableRewards)}
+            />
+          </div>
+
+          <form onSubmit={handleSearch} className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -371,118 +399,209 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                 className={`${inputClass(lightMode)} pl-9`}
               />
             </div>
-            <AdminButton type="submit">Buscar</AdminButton>
+            <div className="flex gap-2">
+              <AdminButton type="submit" className="flex-1 sm:flex-none">
+                Buscar
+              </AdminButton>
+              <AdminButton type="button" variant="ghost" className="flex-1 sm:flex-none" onClick={handleClearSearch}>
+                Limpar
+              </AdminButton>
+            </div>
           </form>
+
           <div className={`${sectionClass(lightMode)} overflow-hidden p-0`}>
             {!data.customers.length ? (
               <div className="p-4">
                 <AdminEmpty lightMode={lightMode} text="Nenhum cliente encontrado." />
               </div>
             ) : (
-              <div className="scrollbar-none overflow-x-auto touch-pan-x [-webkit-overflow-scrolling:touch]">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr
-                      className={`border-b text-left text-[11px] font-bold uppercase tracking-wide ${
-                        lightMode ? 'border-slate-200 text-slate-500' : 'border-slate-700 text-slate-500'
-                      }`}
-                    >
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Telefone</th>
-                      <th className="px-4 py-3">Cortes</th>
-                      <th className="px-4 py-3">Prêmios</th>
-                      <th className="px-4 py-3">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.customers.map((customer) => (
-                      <tr
-                        key={customer.id}
-                        className={`border-b last:border-0 ${lightMode ? 'border-slate-100' : 'border-slate-700/80'}`}
-                      >
-                        {editingCustomerId === customer.id ? (
-                          <td colSpan={5} className="px-4 py-3">
-                            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
-                              <div>
-                                <label className={labelClass(lightMode)}>Nome</label>
-                                <input
-                                  value={editName}
-                                  onChange={(e) => setEditName(e.target.value)}
-                                  className={inputClass(lightMode)}
-                                  required
-                                />
-                              </div>
-                              <div>
-                                <label className={labelClass(lightMode)}>Telefone</label>
-                                <input
-                                  value={editPhone}
-                                  onChange={(e) => setEditPhone(e.target.value)}
-                                  placeholder="(11) 99999-9999"
-                                  className={inputClass(lightMode)}
-                                />
-                              </div>
-                              <div className="flex items-end">
-                                <AdminButton type="button" disabled={savingCustomer} onClick={saveCustomerEdit}>
-                                  {savingCustomer ? 'Salvando...' : 'Salvar'}
-                                </AdminButton>
-                              </div>
-                              <div className="flex items-end">
-                                <AdminButton type="button" variant="ghost" onClick={() => setEditingCustomerId(null)}>
-                                  Cancelar
-                                </AdminButton>
-                              </div>
-                            </div>
-                          </td>
-                        ) : (
-                          <>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-3">
-                                <div className="grid size-9 place-items-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-300">
-                                  {initials(customer.name)}
-                                </div>
-                                <p className={`font-semibold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
-                                  {customer.name}
-                                </p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-slate-400">
+              <>
+                {/* Mobile: cards — scroll vertical da página livre */}
+                <ul className={`divide-y sm:hidden ${lightMode ? 'divide-slate-100' : 'divide-slate-700/80'}`}>
+                  {data.customers.map((customer) => (
+                    <li key={customer.id} className="px-3 py-3">
+                      {editingCustomerId === customer.id ? (
+                        <div className="grid gap-2">
+                          <div>
+                            <label className={labelClass(lightMode)}>Nome</label>
+                            <input
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              className={inputClass(lightMode)}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className={labelClass(lightMode)}>Telefone</label>
+                            <input
+                              value={editPhone}
+                              onChange={(e) => setEditPhone(e.target.value)}
+                              placeholder="(11) 99999-9999"
+                              className={inputClass(lightMode)}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <AdminButton type="button" disabled={savingCustomer} onClick={saveCustomerEdit}>
+                              {savingCustomer ? 'Salvando...' : 'Salvar'}
+                            </AdminButton>
+                            <AdminButton type="button" variant="ghost" onClick={() => setEditingCustomerId(null)}>
+                              Cancelar
+                            </AdminButton>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-3">
+                          <div className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-300">
+                            {initials(customer.name)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className={`truncate font-semibold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+                              {customer.name}
+                            </p>
+                            <p className="mt-0.5 truncate text-xs text-slate-400">
                               <Phone className="mr-1 inline size-3" />
                               {formatPhone(customer.phone)}
-                            </td>
-                            <td className="px-4 py-3 font-semibold tabular-nums text-emerald-400">
+                            </p>
+                            {customer.availableRewards.length ? (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {customer.availableRewards.map((earn) => (
+                                  <button
+                                    key={earn.earnId}
+                                    type="button"
+                                    className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300"
+                                    onClick={() => redeemLoyaltyEarn(earn.earnId).then(() => load())}
+                                  >
+                                    <Gift className="size-3" />
+                                    {earn.title}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-2">
+                            <span className="text-base font-bold tabular-nums text-emerald-400">
                               {customer.completedCuts}
-                            </td>
-                            <td className="px-4 py-3 text-slate-400">
-                              {customer.availableRewards.length
-                                ? customer.availableRewards.map((earn) => (
-                                    <button
-                                      key={earn.earnId}
-                                      type="button"
-                                      className="mr-1 inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300"
-                                      onClick={() => redeemLoyaltyEarn(earn.earnId).then(() => load())}
-                                    >
-                                      <Gift className="size-3" />
-                                      {earn.title}
-                                    </button>
-                                  ))
-                                : '—'}
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                onClick={() => startEditCustomer(customer)}
-                                className="inline-flex items-center gap-1 rounded-lg bg-slate-700/80 px-2.5 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-600"
-                              >
-                                <Pencil className="size-3.5" /> Editar
-                              </button>
-                            </td>
-                          </>
-                        )}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => startEditCustomer(customer)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-slate-700/80 px-2 py-1 text-[11px] font-semibold text-slate-100"
+                            >
+                              <Pencil className="size-3" /> Editar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Desktop: tabela */}
+                <div className="hidden scrollbar-none overflow-x-auto sm:block [-webkit-overflow-scrolling:touch]">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr
+                        className={`border-b text-left text-[11px] font-bold uppercase tracking-wide ${
+                          lightMode ? 'border-slate-200 text-slate-500' : 'border-slate-700 text-slate-500'
+                        }`}
+                      >
+                        <th className="px-4 py-3">Cliente</th>
+                        <th className="px-4 py-3">Telefone</th>
+                        <th className="px-4 py-3">Cortes</th>
+                        <th className="px-4 py-3">Prêmios</th>
+                        <th className="px-4 py-3">Ações</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {data.customers.map((customer) => (
+                        <tr
+                          key={customer.id}
+                          className={`border-b last:border-0 ${lightMode ? 'border-slate-100' : 'border-slate-700/80'}`}
+                        >
+                          {editingCustomerId === customer.id ? (
+                            <td colSpan={5} className="px-4 py-3">
+                              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
+                                <div>
+                                  <label className={labelClass(lightMode)}>Nome</label>
+                                  <input
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className={inputClass(lightMode)}
+                                    required
+                                  />
+                                </div>
+                                <div>
+                                  <label className={labelClass(lightMode)}>Telefone</label>
+                                  <input
+                                    value={editPhone}
+                                    onChange={(e) => setEditPhone(e.target.value)}
+                                    placeholder="(11) 99999-9999"
+                                    className={inputClass(lightMode)}
+                                  />
+                                </div>
+                                <div className="flex items-end">
+                                  <AdminButton type="button" disabled={savingCustomer} onClick={saveCustomerEdit}>
+                                    {savingCustomer ? 'Salvando...' : 'Salvar'}
+                                  </AdminButton>
+                                </div>
+                                <div className="flex items-end">
+                                  <AdminButton type="button" variant="ghost" onClick={() => setEditingCustomerId(null)}>
+                                    Cancelar
+                                  </AdminButton>
+                                </div>
+                              </div>
+                            </td>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="grid size-9 place-items-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-300">
+                                    {initials(customer.name)}
+                                  </div>
+                                  <p className={`font-semibold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+                                    {customer.name}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-slate-400">
+                                <Phone className="mr-1 inline size-3" />
+                                {formatPhone(customer.phone)}
+                              </td>
+                              <td className="px-4 py-3 font-semibold tabular-nums text-emerald-400">
+                                {customer.completedCuts}
+                              </td>
+                              <td className="px-4 py-3 text-slate-400">
+                                {customer.availableRewards.length
+                                  ? customer.availableRewards.map((earn) => (
+                                      <button
+                                        key={earn.earnId}
+                                        type="button"
+                                        className="mr-1 inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300"
+                                        onClick={() => redeemLoyaltyEarn(earn.earnId).then(() => load())}
+                                      >
+                                        <Gift className="size-3" />
+                                        {earn.title}
+                                      </button>
+                                    ))
+                                  : '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <button
+                                  type="button"
+                                  onClick={() => startEditCustomer(customer)}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-slate-700/80 px-2.5 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-600"
+                                >
+                                  <Pencil className="size-3.5" /> Editar
+                                </button>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </>
@@ -606,7 +725,7 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
           </form>
 
           <div className={`${sectionClass(lightMode)} overflow-hidden p-0`}>
-            <div className="scrollbar-none overflow-x-auto touch-pan-x [-webkit-overflow-scrolling:touch]">
+            <div className="scrollbar-none overflow-x-auto [-webkit-overflow-scrolling:touch]">
               <table className="w-full text-sm">
                 <thead>
                   <tr className={`border-b text-left text-[11px] font-bold uppercase tracking-wide ${lightMode ? 'border-slate-200 text-slate-500' : 'border-slate-700 text-slate-500'}`}>
