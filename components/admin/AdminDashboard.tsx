@@ -78,6 +78,12 @@ export default function AdminDashboard({
   const resolvedUnit = unitName ?? salonFromSession?.name ?? 'Leleco Barbers'
   const resolvedOwner = ownerName ?? sessionUser?.name ?? 'Joel'
   const brandUpper = resolvedBrand.toUpperCase()
+  const canUseInventory =
+    sessionUser?.role === 'SUPER_ADMIN' ||
+    sessionUser?.tenant?.level === 'PRO' ||
+    sessionUser?.tenant?.level === 'ENTERPRISE' ||
+    Boolean(sessionUser?.tenant?.inventoryEnabled)
+  const visibleTabs = tabs.filter((tab) => tab.id !== 'estoque' || canUseInventory)
 
   const [resolvedSalonId, setResolvedSalonId] = useState<string | undefined>(salonId ?? salonFromSession?.id)
   const [fetchedBrandColor, setFetchedBrandColor] = useState<string | null>(null)
@@ -310,7 +316,7 @@ export default function AdminDashboard({
                   </button>
                 </div>
                 <nav aria-label="Navegação administrativa mobile" className="flex-1 space-y-1 overflow-y-auto p-3">
-                  {tabs.map(({ id, label, icon: Icon }) => {
+                  {visibleTabs.map(({ id, label, icon: Icon }) => {
                     const selected = activeTab === id
                     return (
                       <button
@@ -348,7 +354,7 @@ export default function AdminDashboard({
               lightMode ? 'border-gray-200' : 'border-slate-700'
             }`}
           >
-            {tabs.map(({ id, label, icon: Icon }) => {
+            {visibleTabs.map(({ id, label, icon: Icon }) => {
               const selected = activeTab === id
               return (
                 <button

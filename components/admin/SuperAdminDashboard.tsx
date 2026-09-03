@@ -45,6 +45,7 @@ type TenantRow = {
   salonsCount: number
   primarySalonSlug: string | null
   owner: { name: string; email: string } | null
+  inventoryEnabled?: boolean
   billing: {
     currentDue: number
     currentPaid: number
@@ -153,6 +154,7 @@ export default function SuperAdminDashboard() {
   const [planLevel, setPlanLevel] = useState<TenantLevel>('BASIC')
   const [planMonthlyFee, setPlanMonthlyFee] = useState('')
   const [planDueDate, setPlanDueDate] = useState(defaultDueDateInput())
+  const [planInventoryEnabled, setPlanInventoryEnabled] = useState(false)
   const [savingPlan, setSavingPlan] = useState(false)
   const [showDeleted, setShowDeleted] = useState(false)
 
@@ -342,6 +344,7 @@ export default function SuperAdminDashboard() {
     setPlanLevel(tenant.level as TenantLevel)
     setPlanMonthlyFee(String(tenant.monthlyFee))
     setPlanDueDate(tenant.billing.dueDate || defaultDueDateInput())
+    setPlanInventoryEnabled(Boolean(tenant.inventoryEnabled))
   }
 
   async function handleSavePlan(e: FormEvent) {
@@ -355,6 +358,7 @@ export default function SuperAdminDashboard() {
           level: planLevel,
           monthlyFee: Number(planMonthlyFee.replace(',', '.')),
           dueDate: planDueDate || undefined,
+          inventoryEnabled: planInventoryEnabled,
         }),
       })
       const json = await res.json()
@@ -959,6 +963,17 @@ export default function SuperAdminDashboard() {
                   className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2"
                 />
               </div>
+              {planLevel !== 'PRO' && planLevel !== 'ENTERPRISE' ? (
+                <label className="flex items-start gap-2 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={planInventoryEnabled}
+                    onChange={(e) => setPlanInventoryEnabled(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>Add-on estoque (pago à parte). Só este tenant; demais BASIC continuam sem estoque.</span>
+                </label>
+              ) : null}
               <div className="flex gap-3">
                 <button
                   type="button"

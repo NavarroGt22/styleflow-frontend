@@ -269,6 +269,7 @@ export async function createProduct(payload: {
   salonId: string
   name: string
   price: number
+  costPrice?: number
   stockQuantity: number
   minStockAlert?: number
   isReward?: boolean
@@ -289,6 +290,7 @@ export async function updateProduct(
   payload: {
     name?: string
     price?: number
+    costPrice?: number | null
     stockQuantity?: number
     minStockAlert?: number
     isActive?: boolean
@@ -298,6 +300,19 @@ export async function updateProduct(
   const response = await authFetch(`/products/${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
+export async function softDeleteProduct(id: string): Promise<void> {
+  const response = await authFetch(`/products/${id}`, { method: 'DELETE' })
+  await parseJson(response)
+}
+
+export async function restockProduct(id: string, quantity: number): Promise<Product> {
+  const response = await authFetch(`/products/${id}/restock`, {
+    method: 'POST',
+    body: JSON.stringify({ quantity }),
   })
   return parseJson(response)
 }

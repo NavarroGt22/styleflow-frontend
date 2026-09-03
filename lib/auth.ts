@@ -18,6 +18,7 @@ export type SessionUser = {
     level?: string
     billingDueDate?: string | null
     primaryColor?: string | null
+    inventoryEnabled?: boolean
   }
 }
 

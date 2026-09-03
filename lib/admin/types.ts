@@ -4,11 +4,17 @@ export type Product = {
   id: string
   name: string
   price: number
+  costPrice?: number | null
   stockQuantity: number
   minStockAlert: number
   isActive: boolean
   isReward?: boolean
   description?: string | null
+  deletedAt?: string | null
+  soldQuantity?: number
+  revenue?: number
+  costTotal?: number
+  profit?: number
 }
 
 export type Service = {
