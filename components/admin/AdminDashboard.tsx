@@ -29,6 +29,7 @@ import AdminStockTab from './tabs/AdminStockTab'
 import AdminQueueTab from './tabs/AdminQueueTab'
 import AdminSalonTab from './tabs/AdminSalonTab'
 import AdminClientsTab from './tabs/AdminClientsTab'
+import AdminMarketingTab from './tabs/AdminMarketingTab'
 import AdminPageShell from './AdminPageShell'
 import type { AdminTab, AdminDashboardProps } from '@/lib/admin/types'
 import { clearSession, getSessionUser, resolveSalonForSlug } from '@/lib/auth'
@@ -44,6 +45,7 @@ const tabs: { id: AdminTab; label: string; icon: typeof Scissors }[] = [
   { id: 'equipe', label: 'Equipe', icon: Users },
   { id: 'estoque', label: 'Estoque', icon: Package },
   { id: 'fila', label: 'Fila Dinâmica', icon: Timer },
+  { id: 'marketing', label: 'Marketing', icon: MessageCircle },
   { id: 'salao', label: 'Salão', icon: Store },
 ]
 
@@ -232,6 +234,7 @@ export default function AdminDashboard({
             </button>
             <button
               type="button"
+              onClick={() => handleNavigateTab('marketing')}
               className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-[#10251f] transition hover:bg-emerald-400"
             >
               <MessageCircle className="size-3.5" />
@@ -396,6 +399,13 @@ export default function AdminDashboard({
                     salonSlug={salonSlug}
                     lightMode={lightMode}
                     onNavigateTab={handleNavigateTab}
+                  />
+                )}
+                {activeTab === 'marketing' && (
+                  <AdminMarketingTab
+                    salonId={resolvedSalonId}
+                    salonSlug={salonSlug}
+                    lightMode={lightMode}
                   />
                 )}
                 {activeTab === 'salao' && (

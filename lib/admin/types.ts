@@ -1,4 +1,4 @@
-export type AdminTab = 'services' | 'agenda' | 'financeiro' | 'equipe' | 'estoque' | 'fila' | 'salao' | 'clientes'
+export type AdminTab = 'services' | 'agenda' | 'financeiro' | 'equipe' | 'estoque' | 'fila' | 'salao' | 'clientes' | 'marketing'
 
 export type Product = {
   id: string
@@ -117,6 +117,7 @@ export type SalonSettings = {
   queueAllowClientView?: boolean
   queueNotifyClient?: boolean
   queueNotifyAhead?: number
+  appointmentRemindMinutes?: number
   queueAllowSkip?: boolean
   queueSkipTimeoutMin?: number
   whatsappTemplate?: string | null

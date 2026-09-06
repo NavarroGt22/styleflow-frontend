@@ -260,6 +260,36 @@ export async function testSalonWhatsApp(
   return parseJson(response)
 }
 
+export async function sendSalonWhatsAppManual(
+  salonId: string,
+  phone: string,
+  message: string
+): Promise<{ message: string; phone: string; gatewayStatus: number; info?: string }> {
+  const response = await authFetch(`/establishments/${salonId}/whatsapp/send`, {
+    method: 'POST',
+    body: JSON.stringify({ phone, message }),
+  })
+  return parseJson(response)
+}
+
+export async function broadcastSalonWhatsApp(
+  salonId: string,
+  payload: { message: string; target: 'group' | 'all'; groupId?: string }
+): Promise<{
+  ok: boolean
+  info: string
+  total: number
+  sent: number
+  failed: number
+  errors?: string[]
+}> {
+  const response = await authFetch(`/establishments/${salonId}/whatsapp/broadcast`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
 export async function fetchProducts(salonId: string): Promise<Product[]> {
   const response = await authFetch(`/products/salon/${salonId}`)
   return parseJson(response)

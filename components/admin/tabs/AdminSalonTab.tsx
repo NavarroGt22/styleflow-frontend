@@ -22,7 +22,7 @@ import {
   sectionClass,
 } from '../ui/AdminUi'
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
-import { fetchSalon, normalizeInstagram, testSalonWhatsApp, updateSalon } from '@/lib/admin/api'
+import { fetchSalon, normalizeInstagram, updateSalon } from '@/lib/admin/api'
 import WeekdayHoursEditor, {
   DEFAULT_CLOSED_DAY_MESSAGE,
   DEFAULT_OPEN_WEEKDAYS,
@@ -37,23 +37,6 @@ const subTabs: { id: SubTab; label: string; shortLabel: string; icon: typeof Sto
   { id: 'comissao', label: 'Comissões', shortLabel: 'Comissão', icon: DollarSign },
   { id: 'fila', label: 'Fila & Agendamento', shortLabel: 'Fila', icon: Users },
 ]
-
-const DEFAULT_WHATSAPP_TEMPLATE =
-  'Olá {cliente}, seu atendimento no {estabelecimento} está chegando! Você é o {posicao}º da fila com previsão para as {tempo}.'
-
-function formatNotificationMessage(
-  template: string,
-  cliente: string,
-  posicao: number | string,
-  tempo: string,
-  estabelecimento: string
-) {
-  return template
-    .replace(/{cliente}/g, cliente)
-    .replace(/{posicao}/g, String(posicao))
-    .replace(/{tempo}/g, tempo)
-    .replace(/{estabelecimento}/g, estabelecimento)
-}
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, '')
@@ -91,8 +74,6 @@ export default function AdminSalonTab({
   const [success, setSuccess] = useState('')
   const [cep, setCep] = useState('')
   const [geoBusy, setGeoBusy] = useState(false)
-  const [testPhone, setTestPhone] = useState('')
-  const [testingWebhook, setTestingWebhook] = useState(false)
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -119,12 +100,7 @@ export default function AdminSalonTab({
     queueMode: false,
     queueAutoAdvance: false,
     queueAllowClientView: true,
-    queueNotifyClient: false,
-    queueNotifyAhead: '2',
     queueAllowSkip: false,
-    whatsappTemplate: DEFAULT_WHATSAPP_TEMPLATE,
-    whatsappGatewayUrl: '',
-    whatsappGatewayToken: '',
     loyaltyResetMode: 'LIFETIME' as 'LIFETIME' | 'MONTHLY',
   })
 
@@ -159,12 +135,7 @@ export default function AdminSalonTab({
       queueMode: Boolean(data.queueMode),
       queueAutoAdvance: Boolean(data.queueAutoAdvance),
       queueAllowClientView: data.queueAllowClientView !== false,
-      queueNotifyClient: Boolean(data.queueNotifyClient),
-      queueNotifyAhead: String(data.queueNotifyAhead ?? 2),
       queueAllowSkip: Boolean(data.queueAllowSkip),
-      whatsappTemplate: data.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE,
-      whatsappGatewayUrl: data.whatsappGatewayUrl || '',
-      whatsappGatewayToken: data.whatsappGatewayToken || '',
       loyaltyResetMode: data.loyaltyResetMode === 'MONTHLY' ? 'MONTHLY' : 'LIFETIME',
     })
   }
@@ -309,12 +280,7 @@ export default function AdminSalonTab({
         queueMode: form.queueMode,
         queueAutoAdvance: form.queueAutoAdvance,
         queueAllowClientView: form.queueAllowClientView,
-        queueNotifyClient: form.queueNotifyClient,
-        queueNotifyAhead: Number(form.queueNotifyAhead) || 2,
         queueAllowSkip: form.queueAllowSkip,
-        whatsappTemplate: form.whatsappTemplate,
-        whatsappGatewayUrl: form.whatsappGatewayUrl.trim() || null,
-        whatsappGatewayToken: form.whatsappGatewayToken.trim() || null,
         productCommissionEnabled: form.productCommissionEnabled,
         productCommissionRate: Number(form.productCommissionRate) || 10,
         primaryColor: form.primaryColor,
@@ -698,120 +664,12 @@ export default function AdminSalonTab({
                   </div>
 
                   <label className={`flex cursor-pointer items-center gap-3 text-sm font-medium ${lightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                    <input type="checkbox" className={checkboxClass(lightMode)} checked={form.queueNotifyClient} onChange={(e) => setForm({ ...form, queueNotifyClient: e.target.checked })} />
-                    Notificar cliente por WhatsApp
-                  </label>
-                  {form.queueNotifyClient ? (
-                    <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
-                      <div>
-                        <label className={labelClass(lightMode)}>Notificar quantas pessoas antes? (Posição)</label>
-                        <input type="number" min={1} max={20} value={form.queueNotifyAhead} onChange={(e) => setForm({ ...form, queueNotifyAhead: e.target.value })} className={inputClass(lightMode)} />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className={labelClass(lightMode)}>Template de Mensagem do WhatsApp</label>
-                        <textarea value={form.whatsappTemplate} onChange={(e) => setForm({ ...form, whatsappTemplate: e.target.value })} rows={3} placeholder={DEFAULT_WHATSAPP_TEMPLATE} className={`${inputClass(lightMode)} h-auto py-3`} />
-                        <p className="mt-1 text-[11px] text-slate-400">Use {'{cliente}'}, {'{estabelecimento}'}, {'{posicao}'} e {'{tempo}'}.</p>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className={labelClass(lightMode)}>URL do webhook n8n</label>
-                        <input
-                          type="url"
-                          value={form.whatsappGatewayUrl}
-                          onChange={(e) => setForm({ ...form, whatsappGatewayUrl: e.target.value })}
-                          placeholder="https://seu-n8n.app/webhook/styleflow-whatsapp"
-                          className={inputClass(lightMode)}
-                        />
-                        <p className="mt-1 text-[11px] text-slate-400">
-                          Cole a URL de produção do workflow n8n. Ver guia em projeto-leitura/p3/WhatsApp-n8n-Evolution.md
-                        </p>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className={labelClass(lightMode)}>Token do gateway (opcional)</label>
-                        <input
-                          type="password"
-                          value={form.whatsappGatewayToken}
-                          onChange={(e) => setForm({ ...form, whatsappGatewayToken: e.target.value })}
-                          placeholder="Chave enviada no header apikey / Authorization"
-                          className={inputClass(lightMode)}
-                        />
-                      </div>
-                      <div className={`sm:col-span-2 rounded-xl border p-3 ${lightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-600 bg-[#142035]/60'}`}>
-                        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                          Testar automação
-                        </p>
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <input
-                            type="tel"
-                            value={testPhone}
-                            onChange={(e) => setTestPhone(e.target.value)}
-                            placeholder="(11) 99999-9999"
-                            className={inputClass(lightMode)}
-                          />
-                          <AdminButton
-                            type="button"
-                            disabled={testingWebhook || !salonId}
-                            onClick={async () => {
-                              const digits = onlyDigits(testPhone)
-                              if (digits.length < 10) {
-                                setError('Informe um celular válido com DDD para testar.')
-                                return
-                              }
-                              if (!form.whatsappGatewayUrl.trim()) {
-                                setError('Salve a URL do webhook n8n antes de testar.')
-                                return
-                              }
-                              setTestingWebhook(true)
-                              setError('')
-                              setSuccess('')
-                              try {
-                                if (salonId) {
-                                  await updateSalon(salonId, {
-                                    whatsappGatewayUrl: form.whatsappGatewayUrl.trim() || null,
-                                    whatsappGatewayToken: form.whatsappGatewayToken.trim() || null,
-                                    queueNotifyClient: form.queueNotifyClient,
-                                    whatsappTemplate: form.whatsappTemplate,
-                                  })
-                                }
-                                await testSalonWhatsApp(salonId!, digits)
-                                setSuccess('Webhook testado com sucesso. Verifique o WhatsApp do número informado.')
-                              } catch (err) {
-                                setError(err instanceof Error ? err.message : 'Falha ao testar webhook.')
-                              } finally {
-                                setTestingWebhook(false)
-                              }
-                            }}
-                          >
-                            {testingWebhook ? 'Enviando...' : 'Testar webhook'}
-                          </AdminButton>
-                          <AdminButton
-                            type="button"
-                            variant="ghost"
-                            onClick={() => {
-                              const digits = onlyDigits(testPhone || form.phone)
-                              if (digits.length < 10) {
-                                setError('Informe um celular válido com DDD para pré-visualizar.')
-                                return
-                              }
-                              const msg = formatNotificationMessage(
-                                form.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE,
-                                'Cliente Teste',
-                                form.queueNotifyAhead || 1,
-                                '15:30',
-                                form.name || 'Salão'
-                              )
-                              window.open(`https://wa.me/55${digits}?text=${encodeURIComponent(msg)}`, '_blank')
-                            }}
-                          >
-                            Pré-visualizar
-                          </AdminButton>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                  <label className={`flex cursor-pointer items-center gap-3 text-sm font-medium ${lightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <input type="checkbox" className={checkboxClass(lightMode)} checked={form.queueAllowSkip} onChange={(e) => setForm({ ...form, queueAllowSkip: e.target.checked })} />
                     Permitir pulo automático por ausência (No-show)
                   </label>
+                  <p className={`text-[11px] leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    WhatsApp, n8n e lembretes da agenda ficam na aba <strong>Marketing</strong>.
+                  </p>
                 </div>
               ) : null}
             </div>
