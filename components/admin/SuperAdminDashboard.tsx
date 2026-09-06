@@ -7,6 +7,7 @@ import {
   Calendar,
   DollarSign,
   ExternalLink,
+  Globe,
   Lock,
   LogOut,
   Plus,
@@ -39,6 +40,7 @@ type TenantRow = {
   slug: string
   level: keyof typeof TENANT_LEVEL_LABELS
   monthlyFee: number
+  customDomain: string | null
   clientDomain: string | null
   adminDomain: string | null
   isActive: boolean
@@ -57,6 +59,21 @@ type TenantRow = {
     totalPaid: number
     balance: number
   }
+}
+
+type DnsProvisionInfo = {
+  domain: string
+  status: string
+  nameservers?: string[]
+  checklist?: { apex: boolean; www: boolean; app: boolean; admin: boolean }
+  records?: Array<{ type: string; name: string; content: string; action: string }>
+  message?: string
+  error?: string
+  vercel?: { ok: boolean; domains?: string[]; error?: string }
+}
+
+function tenantHasCustomDns(t: Pick<TenantRow, 'customDomain' | 'clientDomain' | 'adminDomain'>) {
+  return Boolean(t.customDomain || t.clientDomain || t.adminDomain)
 }
 
 type UpcomingDue = {
@@ -158,6 +175,8 @@ export default function SuperAdminDashboard() {
   const [planInventoryEnabled, setPlanInventoryEnabled] = useState(false)
   const [savingPlan, setSavingPlan] = useState(false)
   const [showDeleted, setShowDeleted] = useState(false)
+  const [dnsModal, setDnsModal] = useState<{ tenantName: string; dns: DnsProvisionInfo } | null>(null)
+  const [provisioningDnsId, setProvisioningDnsId] = useState<string | null>(null)
 
   useEffect(() => {
     const user = getSessionUser()
@@ -242,13 +261,45 @@ export default function SuperAdminDashboard() {
 
       setShowCreate(false)
       setForm(emptyForm)
-      setNotice('Barbearia criada.')
+      if (json.dns) {
+        setDnsModal({ tenantName: form.name || 'Barbearia', dns: json.dns })
+        setNotice(
+          json.dns.status === 'error' || json.dns.status === 'skipped'
+            ? 'Barbearia criada. DNS não provisionado — veja o detalhe e tente de novo.'
+            : 'Barbearia criada. DNS provisionado — copie os nameservers para o cliente.'
+        )
+      } else {
+        setNotice('Barbearia criada.')
+      }
       await loadDashboard()
       await loadCopySources()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar')
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleProvisionDns(tenant: TenantRow) {
+    setProvisioningDnsId(tenant.id)
+    setError('')
+    try {
+      const res = await authFetch(`/admin/tenants/${tenant.id}/provision-dns`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      const json = await res.json()
+      if (!json.dns) throw new Error(json.error || 'Erro ao provisionar DNS')
+      setDnsModal({ tenantName: tenant.name, dns: json.dns })
+      setNotice(
+        json.dns.status === 'error' || json.dns.status === 'skipped'
+          ? json.dns.message || 'DNS não provisionado.'
+          : 'DNS sincronizado na Cloudflare.'
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao provisionar DNS')
+    } finally {
+      setProvisioningDnsId(null)
     }
   }
 
@@ -673,6 +724,17 @@ export default function SuperAdminDashboard() {
                                   >
                                     Alterar plano
                                   </button>
+                                  {tenantHasCustomDns(t) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleProvisionDns(t)}
+                                      disabled={provisioningDnsId === t.id}
+                                      className="inline-flex items-center justify-center gap-1 rounded bg-sky-600/20 px-2 py-1 text-xs text-sky-300 hover:bg-sky-600/30 disabled:opacity-50"
+                                    >
+                                      <Globe size={12} />
+                                      {provisioningDnsId === t.id ? 'DNS...' : 'Provisionar DNS'}
+                                    </button>
+                                  ) : null}
                                   <button
                                     type="button"
                                     onClick={() => toggleActive(t)}
@@ -790,6 +852,10 @@ export default function SuperAdminDashboard() {
                   placeholder="barbearia1.com"
                   className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2"
                 />
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  Com domínio raiz preenchido, o sistema cria A/@ + CNAME www/app/admin na Cloudflare (DNS only). O
+                  cliente ainda troca nameservers no registrador.
+                </p>
               </div>
               <div>
                 <label className="text-xs text-slate-400">Plano *</label>
@@ -1041,6 +1107,101 @@ export default function SuperAdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {dnsModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6">
+            <h2 className="mb-1 text-lg font-bold">DNS — {dnsModal.tenantName}</h2>
+            <p className="mb-4 text-sm text-slate-400">
+              Domínio <span className="font-mono text-slate-200">{dnsModal.dns.domain}</span> · status{' '}
+              <span className="font-semibold text-sky-300">{dnsModal.dns.status}</span>
+            </p>
+
+            {dnsModal.dns.message ? (
+              <p className="mb-4 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs text-slate-300">
+                {dnsModal.dns.message}
+              </p>
+            ) : null}
+
+            {dnsModal.dns.error ? (
+              <p className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                {dnsModal.dns.error}
+              </p>
+            ) : null}
+
+            {dnsModal.dns.nameservers?.length ? (
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Nameservers (cliente cola no registrador)
+                </p>
+                <ul className="space-y-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-emerald-300">
+                  {dnsModal.dns.nameservers.map((ns) => (
+                    <li key={ns}>{ns}</li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  O sistema não troca NS no Hostinger/registro — isso continua manual.
+                </p>
+              </div>
+            ) : null}
+
+            {dnsModal.dns.checklist ? (
+              <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
+                {(
+                  [
+                    ['apex', 'A @'],
+                    ['www', 'CNAME www'],
+                    ['app', 'CNAME app'],
+                    ['admin', 'CNAME admin'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div
+                    key={key}
+                    className={`rounded-lg border px-2 py-1.5 ${
+                      dnsModal.dns.checklist?.[key]
+                        ? 'border-emerald-500/30 text-emerald-300'
+                        : 'border-slate-700 text-slate-500'
+                    }`}
+                  >
+                    {dnsModal.dns.checklist?.[key] ? '✓' : '○'} {label}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {dnsModal.dns.records?.length ? (
+              <div className="mb-4 max-h-40 overflow-y-auto rounded-lg border border-slate-700 text-[11px]">
+                <table className="w-full">
+                  <thead className="bg-slate-800 text-slate-400">
+                    <tr>
+                      <th className="px-2 py-1 text-left">Tipo</th>
+                      <th className="px-2 py-1 text-left">Nome</th>
+                      <th className="px-2 py-1 text-left">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dnsModal.dns.records.map((r) => (
+                      <tr key={`${r.type}-${r.name}`} className="border-t border-slate-800 text-slate-300">
+                        <td className="px-2 py-1">{r.type}</td>
+                        <td className="px-2 py-1 font-mono">{r.name}</td>
+                        <td className="px-2 py-1">{r.action}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => setDnsModal(null)}
+              className="w-full rounded-lg bg-slate-700 py-2 text-sm font-bold hover:bg-slate-600"
+            >
+              Fechar
+            </button>
           </div>
         </div>
       ) : null}
