@@ -18,7 +18,7 @@ export function QueueEntryCard({ entry, index, brandColor }: Props) {
   return (
     <div
       className={`flex items-center justify-between rounded-xl border p-4 transition-colors ${
-        isMe ? '' : 'border-white/5'
+        isMe ? '' : 'border-slate-200 dark:border-white/5'
       }`}
       style={
         isMe
@@ -29,14 +29,16 @@ export function QueueEntryCard({ entry, index, brandColor }: Props) {
       <div className="flex items-center gap-3">
         <div
           className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ${
-            isMe ? 'text-[#111] animate-pulse' : 'bg-black/40 text-slate-300'
+            isMe
+              ? 'text-[#111] animate-pulse'
+              : 'bg-slate-100 text-slate-600 dark:bg-black/40 dark:text-slate-300'
           }`}
           style={isMe ? { backgroundColor: brandColor } : undefined}
         >
           {index + 1}º
         </div>
         <div>
-          <h5 className="flex items-center gap-2 text-sm font-bold text-white">
+          <h5 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
             {entry.customerName}
             {isMe && (
               <span
@@ -47,12 +49,16 @@ export function QueueEntryCard({ entry, index, brandColor }: Props) {
               </span>
             )}
           </h5>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-400">{entry.serviceName}</p>
+          <p className="mt-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            {entry.serviceName}
+          </p>
         </div>
       </div>
       <span
         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
-          isMe ? 'text-[#111] border-transparent' : 'border-white/10 text-slate-300 bg-black/30'
+          isMe
+            ? 'text-[#111] border-transparent'
+            : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-black/30 dark:text-slate-300'
         }`}
         style={isMe ? { backgroundColor: brandColor } : undefined}
       >

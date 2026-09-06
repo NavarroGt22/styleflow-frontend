@@ -23,19 +23,31 @@ export function ClientTopBar({
   isCustomDomain,
 }: Props) {
   return (
-    <div className="sticky top-0 z-40 -mx-4 mb-6 flex items-center justify-between border-b border-white/10 bg-[#0b0d0e]/95 px-4 py-3.5 backdrop-blur-md sm:-mx-6 sm:px-6">
+    <div
+      className={`sticky top-0 z-40 -mx-4 mb-6 flex items-center justify-between border-b px-4 py-3.5 backdrop-blur-md sm:-mx-6 sm:px-6 ${
+        isDark
+          ? 'border-white/10 bg-[#0b0d0e]/95'
+          : 'border-slate-200 bg-white/90'
+      }`}
+    >
       <div className="flex items-center gap-3">
         {currentUser ? (
           <>
             <div
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300"
+              className={`flex h-9 w-9 items-center justify-center rounded-full border ${
+                isDark ? 'border-white/10 bg-white/5 text-slate-300' : 'border-slate-200 bg-slate-100 text-slate-600'
+              }`}
               style={{ borderColor: `${brandColor}40` }}
             >
               <User size={16} style={{ color: brandColor }} />
             </div>
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs font-extrabold uppercase tracking-wide text-slate-300">
+              <span
+                className={`text-xs font-extrabold uppercase tracking-wide ${
+                  isDark ? 'text-slate-300' : 'text-slate-700'
+                }`}
+              >
                 Bem-vindo {currentUser.name}
               </span>
             </div>
@@ -46,7 +58,9 @@ export function ClientTopBar({
               className="h-2 w-2 rounded-full animate-pulse"
               style={{ backgroundColor: brandColor }}
             />
-            <span className="text-xs font-extrabold text-slate-400">Acesso de Visitante</span>
+            <span className={`text-xs font-extrabold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Acesso de Visitante
+            </span>
           </div>
         )}
       </div>
@@ -54,8 +68,13 @@ export function ClientTopBar({
         <button
           type="button"
           onClick={onToggleTheme}
-          className="flex cursor-pointer items-center justify-center rounded-full border-none bg-white/10 p-2 text-slate-400 transition-all hover:bg-white/15"
+          className={`flex cursor-pointer items-center justify-center rounded-full border-none p-2 transition-all ${
+            isDark
+              ? 'bg-white/10 text-slate-400 hover:bg-white/15'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
           title="Mudar tema"
+          aria-label={isDark ? 'Ativar tema claro' : 'Ativar tema escuro'}
         >
           {isDark ? <Sun size={15} /> : <Moon size={15} />}
         </button>

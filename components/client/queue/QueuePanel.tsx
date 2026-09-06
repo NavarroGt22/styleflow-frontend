@@ -5,7 +5,7 @@ import { Clock, Users } from 'lucide-react'
 import { computeQueueWaitMinutes } from '@/lib/client/queue-wait'
 import { QueueActiveBlock } from './QueueActiveBlock'
 import { QueueEntryCard } from './QueueEntryCard'
-import type { QueueEntry, QueueSession } from './types'
+import type { QueueSession } from './types'
 
 type Props = {
   queue: QueueSession
@@ -46,11 +46,13 @@ export function QueuePanel({
     : -1
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/5 bg-[#2a2622] shadow-xl">
-      <div className="flex flex-col gap-4 border-b border-white/5 p-6 sm:flex-row sm:items-center sm:justify-between">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-white/5 dark:bg-[#2a2622]">
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-6 dark:border-white/5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-display text-xl font-bold text-white">{queue.professionalName}</h2>
-          <div className="mt-1.5 flex items-center gap-2 text-xs font-medium text-slate-400">
+          <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white">
+            {queue.professionalName}
+          </h2>
+          <div className="mt-1.5 flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
             <Users size={14} style={{ color: brandColor }} />
             <span>
               {waitingEntries.length}{' '}
@@ -60,7 +62,7 @@ export function QueuePanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-xs font-bold text-slate-200">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700 dark:border-white/10 dark:bg-black/40 dark:text-slate-200">
             <Clock size={14} style={{ color: brandColor }} />
             <span>Espera estimada: ~{totalWaitMinutes} min</span>
           </div>
@@ -70,7 +72,7 @@ export function QueuePanel({
               <span
                 className={`rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider border ${
                   userEntry.status === 'IN_PROGRESS'
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    ? 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30 dark:text-emerald-400'
                     : 'animate-pulse border-transparent text-[#111]'
                 }`}
                 style={
@@ -122,7 +124,7 @@ export function QueuePanel({
           </h4>
 
           {waitingEntries.length === 0 ? (
-            <p className="pl-3 text-sm font-medium italic text-slate-400">
+            <p className="pl-3 text-sm font-medium italic text-slate-500 dark:text-slate-400">
               A fila está vazia. Seja o próximo!
             </p>
           ) : (

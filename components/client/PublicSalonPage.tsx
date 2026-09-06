@@ -87,15 +87,19 @@ export default function PublicSalonPage() {
   );
 
   useEffect(() => {
-    document.documentElement.classList.add('dark');
+    const root = document.documentElement
     if (isDark) {
-      document.body.classList.add('bg-[#0b0d0e]', 'text-white');
-      localStorage.setItem('theme', 'dark');
+      root.classList.add('dark')
+      document.body.classList.add('bg-[#0b0d0e]', 'text-white')
+      document.body.classList.remove('bg-slate-50', 'text-slate-900')
+      localStorage.setItem('theme', 'dark')
     } else {
-      document.body.classList.remove('bg-[#0b0d0e]', 'text-white');
-      localStorage.setItem('theme', 'light');
+      root.classList.remove('dark')
+      document.body.classList.remove('bg-[#0b0d0e]', 'text-white')
+      document.body.classList.add('bg-slate-50', 'text-slate-900')
+      localStorage.setItem('theme', 'light')
     }
-  }, [isDark]);
+  }, [isDark])
 
   // States para Agendamento Comercial
   const [services, setServices] = useState<any[]>([]);
@@ -642,7 +646,11 @@ export default function PublicSalonPage() {
     const brand = primaryColor || '#d5a85c';
 
     return (
-      <div className="min-h-screen bg-[#0b0d0e] px-4 py-8 text-slate-100 transition-colors duration-300 sm:px-6">
+      <div
+        className={`min-h-screen px-4 py-8 transition-colors duration-300 sm:px-6 ${
+          isDark ? 'bg-[#0b0d0e] text-slate-100' : 'bg-slate-50 text-slate-900'
+        }`}
+      >
         {unitPicker}
         {primaryColor ? <style>{clientBrandStyles(primaryColor)}</style> : null}
         <div className="mx-auto max-w-6xl">
@@ -669,33 +677,33 @@ export default function PublicSalonPage() {
             /* WIZARD DE AGENDAMENTO COMERCIAL (LOGADO) */
             bookingSuccess ? (
               /* CARD DE AGENDAMENTO CONFIRMADO */
-              <div className="mx-auto max-w-md animate-fade-in rounded-2xl border border-emerald-500/30 bg-[#1a1816] p-8 text-center shadow-xl">
-                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 shadow-md">
+              <div className="mx-auto max-w-md animate-fade-in rounded-2xl border border-emerald-500/30 bg-white p-8 text-center shadow-xl dark:bg-[#1a1816]">
+                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 shadow-md dark:text-emerald-400">
                   <CheckCircle size={32} />
                 </div>
-                <h2 className="mb-2 text-2xl font-black text-white">Reserva Confirmada!</h2>
-                <p className="mb-6 text-sm leading-relaxed text-slate-400">
+                <h2 className="mb-2 text-2xl font-black text-slate-900 dark:text-white">Reserva Confirmada!</h2>
+                <p className="mb-6 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
                   Seu horário foi agendado com sucesso no {PRODUCT_NAME}.
                 </p>
 
-                <div className="mb-6 space-y-3 rounded-xl border border-white/10 bg-black/30 p-5 text-left">
+                <div className="mb-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5 text-left dark:border-white/10 dark:bg-black/30">
                   <div className="flex items-center justify-between text-xs font-bold">
                     <span className="uppercase tracking-wider text-slate-500">Serviço</span>
-                    <span className="text-slate-200">{bookingSuccess.service.name}</span>
+                    <span className="text-slate-800 dark:text-slate-200">{bookingSuccess.service.name}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-bold">
                     <span className="uppercase tracking-wider text-slate-500">Profissional</span>
-                    <span className="text-slate-200">{bookingSuccess.professional.user.name}</span>
+                    <span className="text-slate-800 dark:text-slate-200">{bookingSuccess.professional.user.name}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-bold">
                     <span className="uppercase tracking-wider text-slate-500">Data</span>
-                    <span className="text-slate-200">{new Date(bookingSuccess.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                    <span className="text-slate-800 dark:text-slate-200">{new Date(bookingSuccess.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-bold">
                     <span className="uppercase tracking-wider text-slate-500">Horário</span>
                     <span className="text-sm client-accent-text">{bookingSuccess.time}</span>
                   </div>
-                  <div className="flex items-center justify-between border-t border-white/10 pt-3 text-xs font-bold">
+                  <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-xs font-bold dark:border-white/10">
                     <span className="uppercase tracking-wider text-slate-500">Valor</span>
                     <span className="text-sm font-black client-accent-text">R$ {bookingSuccess.service.price.toFixed(2)}</span>
                   </div>
@@ -715,21 +723,21 @@ export default function PublicSalonPage() {
                 <div className="space-y-3.5">
 
                   {loyalty ? (
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                    <div className="rounded-xl border border-amber-500/40 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
                       <div className="mb-3 flex items-center justify-between gap-2">
-                        <h3 className="flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-amber-200/80">
-                          <Gift className="h-3.5 w-3.5 text-amber-300" />
+                        <h3 className="flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-amber-800 dark:text-amber-200/80">
+                          <Gift className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
                           SEUS CORTES &amp; PRÊMIOS
                         </h3>
                         {loyalty.availableCount > 0 ? (
-                          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-300">
+                          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
                             {loyalty.availableCount} disponível{loyalty.availableCount > 1 ? 'is' : ''}
                           </span>
                         ) : null}
                       </div>
-                      <p className="mb-3 text-sm font-bold text-white">
+                      <p className="mb-3 text-sm font-bold text-slate-900 dark:text-white">
                         {loyalty.completedCuts} corte{loyalty.completedCuts === 1 ? '' : 's'}
-                        <span className="ml-2 text-[10px] font-medium text-slate-400">
+                        <span className="ml-2 text-[10px] font-medium text-slate-500 dark:text-slate-400">
                           ({loyalty.loyaltyResetMode === 'MONTHLY' ? 'reinicia todo mês' : 'acúmulo infinito'})
                         </span>
                       </p>
@@ -741,32 +749,32 @@ export default function PublicSalonPage() {
                               Math.round((reward.progressInCycle / reward.cutsRequired) * 100),
                             );
                             return (
-                              <div key={reward.rewardId} className="rounded-lg border border-slate-700 bg-[#1d2a3e]/80 p-2.5">
+                              <div key={reward.rewardId} className="rounded-lg border border-amber-200/80 bg-white p-2.5 dark:border-slate-700 dark:bg-[#1d2a3e]/80">
                                 <div className="mb-1.5 flex items-center justify-between gap-2">
-                                  <p className="text-[11px] font-bold text-slate-100">{reward.title}</p>
-                                  <span className="text-[10px] font-bold text-amber-300">
+                                  <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100">{reward.title}</p>
+                                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">
                                     {reward.progressInCycle}/{reward.cutsRequired}
                                   </span>
                                 </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                                <div className="h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-slate-800">
                                   <div className="h-full rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
                                 </div>
                                 {reward.description ? (
-                                  <p className="mt-1.5 text-[10px] text-slate-400">{reward.description}</p>
+                                  <p className="mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">{reward.description}</p>
                                 ) : null}
                               </div>
                             );
                           })}
                         </div>
                       ) : (
-                        <p className="text-[11px] text-slate-400">Nenhum prêmio configurado pelo salão ainda.</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Nenhum prêmio configurado pelo salão ainda.</p>
                       )}
                     </div>
                   ) : null}
                   
                   {/* SELEÇÃO DE SERVIÇO */}
-                  <div className="rounded-xl border border-white/10 bg-[#1a1816] p-4">
-                    <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-400">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#1a1816]">
+                    <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
                       <span className="client-accent-text">1</span> SELECIONE O SERVIÇO
                     </h3>
                     {loadingBookingData ? (
@@ -777,7 +785,7 @@ export default function PublicSalonPage() {
                         />
                       </div>
                     ) : services.length === 0 ? (
-                      <p className="text-sm font-medium italic text-slate-400">Nenhum serviço disponível no catálogo no momento.</p>
+                      <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">Nenhum serviço disponível no catálogo no momento.</p>
                     ) : (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {services.map((s) => {
@@ -789,16 +797,16 @@ export default function PublicSalonPage() {
                             className={`relative cursor-pointer rounded-lg border p-3 text-left transition-colors ${
                               selected
                                 ? 'ring-1'
-                                : 'border-white/10 bg-black/20 hover:border-white/20'
+                                : 'border-slate-200 bg-slate-50 hover:border-slate-300 dark:border-white/10 dark:bg-black/20 dark:hover:border-white/20'
                             }`}
                             style={selected ? { borderColor: brand, boxShadow: `0 0 0 1px ${brand}40` } : undefined}
                           >
                             {selected && (
                               <Check className="absolute right-2 top-2 h-3 w-3 client-accent-text" />
                             )}
-                            <h4 className="text-sm font-bold text-white">{s.name}</h4>
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-white">{s.name}</h4>
                             <div className="mt-2 flex items-center justify-between text-[10px] font-bold">
-                              <span className="flex items-center gap-1 text-slate-400">
+                              <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                                 <Clock size={10} />
                                 {s.duration} min
                               </span>
@@ -812,8 +820,8 @@ export default function PublicSalonPage() {
                   </div>
 
                   {/* SELEÇÃO DE PROFISSIONAL */}
-                  <div className="rounded-xl border border-white/10 bg-[#1a1816] p-4">
-                    <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-400">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#1a1816]">
+                    <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
                       <span className="client-accent-text">2</span> SELECIONE O PROFISSIONAL
                     </h3>
                     {loadingBookingData ? (
@@ -824,7 +832,7 @@ export default function PublicSalonPage() {
                         />
                       </div>
                     ) : professionals.length === 0 ? (
-                      <p className="text-sm font-medium italic text-slate-400">Nenhum profissional disponível no momento.</p>
+                      <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">Nenhum profissional disponível no momento.</p>
                     ) : (
                       <div className="space-y-3">
                         <select
@@ -834,7 +842,7 @@ export default function PublicSalonPage() {
                             setSelectedProfessional(pro);
                             setSelectedTime('');
                           }}
-                          className="h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-xs font-semibold text-white outline-none focus:ring-1"
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-1 dark:border-white/10 dark:bg-black/30 dark:text-white"
                           style={{ '--tw-ring-color': brand } as React.CSSProperties}
                         >
                           <option value="" disabled>Selecione um profissional...</option>
@@ -904,8 +912,8 @@ export default function PublicSalonPage() {
                 </div>
 
                 <aside>
-                  <div className="rounded-xl border border-white/10 bg-[#1a1816] p-4 lg:sticky lg:top-[4.5rem] lg:z-30">
-                    <h3 className="mb-4 border-b border-white/10 pb-3 text-[10px] font-bold uppercase tracking-widest client-accent-text">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 lg:sticky lg:top-[4.5rem] lg:z-30 dark:border-white/10 dark:bg-[#1a1816]">
+                    <h3 className="mb-4 border-b border-slate-100 pb-3 text-[10px] font-bold uppercase tracking-widest client-accent-text dark:border-white/10">
                       RESUMO DA RESERVA
                     </h3>
                     
@@ -918,19 +926,19 @@ export default function PublicSalonPage() {
                     <div className="space-y-3.5 text-sm mb-6">
                       <div className="space-y-1">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Serviço</span>
-                        <span className="block text-right font-medium leading-snug text-slate-200">{displayService ? displayService.name : 'Não selecionado'}</span>
+                        <span className="block text-right font-medium leading-snug text-slate-800 dark:text-slate-200">{displayService ? displayService.name : 'Não selecionado'}</span>
                       </div>
                       <div className="space-y-1">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Duração</span>
-                        <span className="block text-right font-medium text-slate-200">{displayService ? `${displayService.duration} min` : '-'}</span>
+                        <span className="block text-right font-medium text-slate-800 dark:text-slate-200">{displayService ? `${displayService.duration} min` : '-'}</span>
                       </div>
                       <div className="space-y-1">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Profissional</span>
-                        <span className="block text-right font-medium leading-snug text-slate-200">{selectedProfessional ? selectedProfessional.user.name : 'Não selecionado'}</span>
+                        <span className="block text-right font-medium leading-snug text-slate-800 dark:text-slate-200">{selectedProfessional ? selectedProfessional.user.name : 'Não selecionado'}</span>
                       </div>
                       <div className="space-y-1">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Data</span>
-                        <span className="block text-right font-medium text-slate-200">
+                        <span className="block text-right font-medium text-slate-800 dark:text-slate-200">
                           {selectedDate ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR') : 'Não selecionada'}
                         </span>
                       </div>
@@ -938,8 +946,8 @@ export default function PublicSalonPage() {
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Horário</span>
                         <span className="block text-right text-base font-bold text-[var(--brand,#d5a85c)]">{selectedTime || 'Não selecionado'}</span>
                       </div>
-                      <div className="space-y-2 border-t border-white/10 pt-3">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cupom</span>
+                      <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-white/10">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cupom</span>
                         <div className="flex gap-2">
                           <input
                             value={couponCode}
@@ -948,7 +956,7 @@ export default function PublicSalonPage() {
                               setAppliedCoupon(null)
                             }}
                             placeholder="Código"
-                            className="h-10 flex-1 rounded-lg border border-white/10 bg-[#0b0d0e] px-3 text-sm text-white outline-none focus:border-[var(--brand,#d5a85c)]"
+                            className="h-10 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-[var(--brand,#d5a85c)] dark:border-white/10 dark:bg-[#0b0d0e] dark:text-white"
                           />
                           <button
                             type="button"
@@ -985,19 +993,19 @@ export default function PublicSalonPage() {
                                 setCouponLoading(false)
                               }
                             }}
-                            className="rounded-lg border border-white/15 px-3 text-xs font-bold uppercase tracking-wide text-[var(--brand,#d5a85c)] disabled:opacity-40"
+                            className="rounded-lg border border-slate-200 px-3 text-xs font-bold uppercase tracking-wide text-[var(--brand,#d5a85c)] disabled:opacity-40 dark:border-white/15"
                           >
                             {couponLoading ? '...' : 'Aplicar'}
                           </button>
                         </div>
                         {appliedCoupon ? (
-                          <p className="text-xs text-emerald-400">
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400">
                             {appliedCoupon.code}: -{appliedCoupon.percentOff}% (−R$ {appliedCoupon.discountAmount.toFixed(2)})
                           </p>
                         ) : null}
                       </div>
-                      <div className="space-y-1 border-t border-white/10 pt-3">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total</span>
+                      <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</span>
                         <span className="block text-right text-xl font-bold client-accent-text">
                           R${' '}
                           {displayService
@@ -1029,7 +1037,7 @@ export default function PublicSalonPage() {
           ) : null}
 
           <footer className="mt-16 text-center">
-            <p className="text-xs text-gray-400 dark:text-slate-500">
+            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
               Painel {PRODUCT_NAME_UPPER} • Todos os direitos reservados.
             </p>
           </footer>
@@ -1058,7 +1066,11 @@ export default function PublicSalonPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0d0e] py-10 px-4 transition-colors duration-300">
+    <div
+      className={`min-h-screen py-10 px-4 transition-colors duration-300 ${
+        isDark ? 'bg-[#0b0d0e] text-slate-100' : 'bg-slate-50 text-slate-900'
+      }`}
+    >
       {unitPicker}
       {primaryColor && <style>{clientBrandStyles(primaryColor)}</style>}
       <div className="max-w-4xl mx-auto">
@@ -1088,7 +1100,7 @@ export default function PublicSalonPage() {
         />
 
         <footer className="mt-16 text-center">
-          <p className="text-xs text-slate-500">
+          <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             Painel {PRODUCT_NAME_UPPER} • Todos os direitos reservados.
           </p>
         </footer>

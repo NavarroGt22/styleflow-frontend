@@ -98,7 +98,7 @@ export default function BookingDateTimePicker({
 
   return (
     <div
-      className="rounded-xl border border-white/10 bg-[#1a1816] p-4"
+      className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#1a1816]"
       style={{ ['--brand' as string]: brandColor }}
     >
       <style>{`
@@ -140,7 +140,7 @@ export default function BookingDateTimePicker({
           }
         }
       `}</style>
-      <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-400">
+      <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
         <span
           className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border text-[9px] font-bold"
           style={{ borderColor: withAlpha(brandColor, 0.55), color: brandColor }}
@@ -152,7 +152,7 @@ export default function BookingDateTimePicker({
 
       <div className="space-y-4">
         <div>
-          <p className="mb-2 text-[8px] font-bold uppercase tracking-wide text-slate-400">
+          <p className="mb-2 text-[8px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Escolha a data
           </p>
 
@@ -183,7 +183,11 @@ export default function BookingDateTimePicker({
                   }}
                   className={`relative flex min-w-[52px] shrink-0 flex-col items-center rounded-xl border px-2.5 py-2.5 transition ${
                     inactive ? 'cursor-not-allowed opacity-35' : 'cursor-pointer'
-                  } ${closed && !selected ? 'line-through decoration-slate-500' : ''}`}
+                  } ${closed && !selected ? 'line-through decoration-slate-500' : ''} ${
+                    selected && !closed
+                      ? 'text-[#111]'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-transparent dark:bg-black/30 dark:text-slate-200'
+                  }`}
                   style={
                     selected && !closed
                       ? {
@@ -192,9 +196,7 @@ export default function BookingDateTimePicker({
                           color: '#111',
                         }
                       : {
-                          backgroundColor: 'rgba(0,0,0,0.3)',
                           borderColor: withAlpha(brandColor, 0.35),
-                          color: '#e2e8f0',
                         }
                   }
                 >
@@ -217,16 +219,17 @@ export default function BookingDateTimePicker({
           </div>
 
           {disabled ? (
-            <p className="mt-1.5 text-[10px] font-extrabold text-slate-400">{disabledHint}</p>
+            <p className="mt-1.5 text-[10px] font-extrabold text-slate-500 dark:text-slate-400">
+              {disabledHint}
+            </p>
           ) : null}
 
           {closedHint || (selectedDate && !openSet.has(new Date(`${selectedDate}T12:00:00`).getDay()) ? defaultClosedMsg : null) ? (
             <p
-              className="mt-2 rounded-lg border px-3 py-2 text-[11px] font-semibold"
+              className="mt-2 rounded-lg border px-3 py-2 text-[11px] font-semibold text-amber-800 dark:text-amber-200"
               style={{
                 borderColor: withAlpha(brandColor, 0.35),
                 backgroundColor: withAlpha(brandColor, 0.1),
-                color: '#fde68a',
               }}
             >
               {closedHint || defaultClosedMsg}
@@ -236,7 +239,7 @@ export default function BookingDateTimePicker({
 
         {!disabled && selectedDate && openSet.has(new Date(`${selectedDate}T12:00:00`).getDay()) ? (
           <div>
-            <p className="mb-2 text-[8px] font-bold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-[8px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Horários disponíveis
             </p>
             {loadingSlots ? (
@@ -247,7 +250,7 @@ export default function BookingDateTimePicker({
                 />
               </div>
             ) : timeSlots.length === 0 ? (
-              <p className="text-sm italic text-slate-400">
+              <p className="text-sm italic text-slate-500 dark:text-slate-400">
                 Fora do horário de expediente deste profissional.
               </p>
             ) : (
@@ -262,10 +265,10 @@ export default function BookingDateTimePicker({
                       onClick={() => onSelectTime(slot.time)}
                       className={`rounded-xl border px-1 py-2 text-xs font-extrabold transition ${
                         !slot.available
-                          ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-600 line-through'
+                          ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 line-through dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-600'
                           : selected
                             ? 'text-[#111]'
-                            : 'bg-black/30 text-slate-200 hover:opacity-90'
+                            : 'bg-slate-50 text-slate-700 hover:opacity-90 dark:bg-black/30 dark:text-slate-200'
                       }`}
                       style={
                         slot.available

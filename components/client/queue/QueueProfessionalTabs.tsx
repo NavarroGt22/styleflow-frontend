@@ -20,7 +20,9 @@ export function QueueProfessionalTabs({ queues, selectedSessionId, brandColor, o
             type="button"
             onClick={() => onSelect(q.sessionId)}
             className={`rounded-full px-5 py-2 text-sm font-bold transition-all cursor-pointer border-none ${
-              isActive ? 'text-[#111] shadow-md' : 'bg-[#1a1a1a] text-white hover:bg-[#252525]'
+              isActive
+                ? 'text-[#111] shadow-md'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-[#1a1a1a] dark:text-white dark:hover:bg-[#252525]'
             }`}
             style={isActive ? { backgroundColor: brandColor } : undefined}
           >

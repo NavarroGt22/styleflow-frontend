@@ -65,19 +65,19 @@ export function DynamicQueueSection({
         >
           {brandName ? brandName.toUpperCase() : PRODUCT_NAME_UPPER} • FILA DINÂMICA
         </span>
-        <h1 className="font-display text-3xl font-bold text-white sm:text-4xl">
+        <h1 className="font-display text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
           Acompanhe os Atendimentos
         </h1>
-        <p className="mt-2 max-w-lg text-sm text-slate-400">
+        <p className="mt-2 max-w-lg text-sm text-slate-500 dark:text-slate-400">
           Veja quem está sendo atendido e os próximos da fila em tempo real.
         </p>
       </header>
 
       {queues.length === 0 ? (
-        <div className="rounded-2xl border border-white/5 bg-[#2a2622] p-8 text-center">
-          <Users size={40} className="mx-auto mb-4 text-slate-500" />
-          <h3 className="font-bold text-white">Nenhuma fila aberta hoje</h3>
-          <p className="mt-1 text-sm text-slate-400">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center dark:border-white/5 dark:bg-[#2a2622]">
+          <Users size={40} className="mx-auto mb-4 text-slate-400 dark:text-slate-500" />
+          <h3 className="font-bold text-slate-900 dark:text-white">Nenhuma fila aberta hoje</h3>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Os barbeiros ainda não iniciaram os atendimentos por fila hoje.
           </p>
         </div>

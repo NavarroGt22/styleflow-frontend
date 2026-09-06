@@ -11,7 +11,7 @@ type Props = {
 export function QueueActiveBlock({ entry, brandColor }: Props) {
   if (!entry) {
     return (
-      <div className="rounded-xl border border-dashed border-white/10 bg-black/40 p-4 text-center text-sm font-medium text-slate-400">
+      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm font-medium text-slate-500 dark:border-white/10 dark:bg-black/40 dark:text-slate-400">
         Nenhum atendimento ativo no momento.
       </div>
     )
@@ -21,7 +21,7 @@ export function QueueActiveBlock({ entry, brandColor }: Props) {
 
   return (
     <div
-      className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/40 p-5 sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-black/40 sm:flex-row sm:items-center sm:justify-between"
       style={isMe ? { borderColor: `${brandColor}40` } : undefined}
     >
       <div className="flex items-center gap-4">
@@ -32,10 +32,10 @@ export function QueueActiveBlock({ entry, brandColor }: Props) {
           ATUAL
         </div>
         <div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
             Atendimento em Andamento
           </span>
-          <h3 className="mt-0.5 text-lg font-extrabold text-white">
+          <h3 className="mt-0.5 text-lg font-extrabold text-slate-900 dark:text-white">
             {entry.customerName}
             {isMe && (
               <span
@@ -46,10 +46,12 @@ export function QueueActiveBlock({ entry, brandColor }: Props) {
               </span>
             )}
           </h3>
-          <p className="mt-0.5 text-xs font-medium text-slate-400">{entry.serviceName}</p>
+          <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+            {entry.serviceName}
+          </p>
         </div>
       </div>
-      <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/50 px-4 py-2.5">
+      <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 dark:border-white/10 dark:bg-black/50">
         <span className="text-xs font-bold text-slate-500">Cronômetro:</span>
         <QueueActiveTimer entry={entry} />
       </div>

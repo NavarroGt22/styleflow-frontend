@@ -48,14 +48,16 @@ export function BookingHero({
       >
         {brandName ? brandName.toUpperCase() : PRODUCT_NAME_UPPER} • {badgeSuffix}
       </span>
-      <h1 className="font-display text-3xl font-bold text-white sm:text-4xl">{salonName}</h1>
+      <h1 className="font-display text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
+        {salonName}
+      </h1>
       {salonAddress && (
-        <p className="mx-auto mt-2 flex max-w-md items-center justify-center gap-1.5 text-sm text-slate-400">
+        <p className="mx-auto mt-2 flex max-w-md items-center justify-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
           <MapPin size={14} className="shrink-0" style={{ color: brandColor }} />
           <span>{salonAddress}</span>
         </p>
       )}
-      <p className="mt-2 text-sm text-slate-400">{subtitle}</p>
+      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
     </header>
   )
 }
