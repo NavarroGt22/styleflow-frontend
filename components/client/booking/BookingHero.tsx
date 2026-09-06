@@ -1,6 +1,7 @@
 'use client'
 
 import { Scissors, MapPin } from 'lucide-react'
+import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 
 type Props = {
   brandName?: string
@@ -45,7 +46,7 @@ export function BookingHero({
         className="mb-3 inline-block rounded-md px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-[#111]"
         style={{ backgroundColor: brandColor }}
       >
-        {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} • {badgeSuffix}
+        {brandName ? brandName.toUpperCase() : PRODUCT_NAME_UPPER} • {badgeSuffix}
       </span>
       <h1 className="font-display text-3xl font-bold text-white sm:text-4xl">{salonName}</h1>
       {salonAddress && (

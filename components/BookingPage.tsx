@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { CalendarDays, Check, Clock3, Scissors } from 'lucide-react'
+import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 
 type Service = { id: string; name: string; category: string; duration: number; price: number }
 
@@ -79,7 +80,7 @@ export default function BookingPage({ salonSlug = 'leleco' }: Props) {
             <button disabled={!complete} className="w-full rounded-md bg-emerald-500 px-2 py-2.5 text-[9px] font-bold text-[#10251f] transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">Confirmar Agendamento</button>
           </aside>
         </div>
-        <footer className="py-8 text-center text-[8px] text-slate-500">Painel STYLEFLOW · Todos os direitos reservados.</footer>
+        <footer className="py-8 text-center text-[8px] text-slate-500">Painel {PRODUCT_NAME_UPPER} · Todos os direitos reservados.</footer>
       </div>
     </main>
   )

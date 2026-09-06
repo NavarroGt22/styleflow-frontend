@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { getSessionUser, userCanAccessSalon, clearSession, isAdminSessionExpired } from '@/lib/auth'
+import { PRODUCT_NAME } from '@/lib/brand'
 import AdminPageShell from './AdminPageShell'
 
 type Props = {
@@ -75,7 +76,7 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
           </div>
           <h1 className="text-xl font-bold">Painel temporariamente bloqueado</h1>
           <p className="text-sm text-slate-400">
-            O pagamento da plataforma está em atraso. Peça ao suporte StyleFlow para liberar o acesso no Super Admin.
+            O pagamento da plataforma está em atraso. Peça ao suporte {PRODUCT_NAME} para liberar o acesso no Super Admin.
           </p>
           <p className="text-sm text-slate-300">
             Contato:{' '}

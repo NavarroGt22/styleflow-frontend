@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Users } from 'lucide-react'
+import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 import { QueuePanel } from './QueuePanel'
 import { QueueProfessionalTabs } from './QueueProfessionalTabs'
 import type { QueueSession } from './types'
@@ -62,7 +63,7 @@ export function DynamicQueueSection({
           className="mb-3 rounded-md px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-[#111]"
           style={{ backgroundColor: brandColor }}
         >
-          {brandName ? brandName.toUpperCase() : 'STYLEFLOW'} • FILA DINÂMICA
+          {brandName ? brandName.toUpperCase() : PRODUCT_NAME_UPPER} • FILA DINÂMICA
         </span>
         <h1 className="font-display text-3xl font-bold text-white sm:text-4xl">
           Acompanhe os Atendimentos

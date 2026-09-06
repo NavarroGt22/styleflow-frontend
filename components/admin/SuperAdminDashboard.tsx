@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { authFetch } from '@/lib/api'
 import { clearSession, getSessionUser } from '@/lib/auth'
+import { PRODUCT_NAME } from '@/lib/brand'
 import {
   BASE_DOMAIN,
   clientPublicUrl,
@@ -390,7 +391,7 @@ export default function SuperAdminDashboard() {
               <Shield size={22} />
             </div>
             <div>
-              <h1 className="text-lg font-bold">StyleFlow Master</h1>
+              <h1 className="text-lg font-bold">{PRODUCT_NAME} Master</h1>
               <p className="text-xs text-slate-400">SUPER_ADMIN — {userName}</p>
             </div>
           </div>

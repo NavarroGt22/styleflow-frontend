@@ -20,6 +20,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 import AdminServicesTab from './tabs/AdminServicesTab'
 import AdminAgendaTab from './tabs/AdminAgendaTab'
 import AdminFinancialTab from './tabs/AdminFinancialTab'
@@ -209,7 +210,7 @@ export default function AdminDashboard({
               className="mx-auto mb-1 w-fit rounded px-2 py-0.5 text-[8px] font-bold tracking-wide text-white"
               style={{ backgroundColor: 'var(--brand, #d5a85c)' }}
             >
-              {brandUpper} · STYLEFLOW
+              {brandUpper} · {PRODUCT_NAME_UPPER}
             </p>
             <h1 className={`text-lg font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{resolvedBrand}</h1>
             <p className={`mt-1 text-[9px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>

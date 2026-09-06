@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Clock, AlertCircle, Check, CheckCircle, Gift } from 'lucide-react';
 import { secureFetch as fetch } from '@/lib/client/api';
 import { useTenantBranding, type TenantBranding } from '@/lib/client/useTenant';
+import { PRODUCT_NAME, PRODUCT_NAME_UPPER } from '@/lib/brand';
 import { apiUrl, wsUrl } from '@/lib/client/config';
 import { isCustomDomainHost } from '@/lib/client/domains';
 import ClientLanding from '@/components/client/ClientLanding';
@@ -674,7 +675,7 @@ export default function PublicSalonPage() {
                 </div>
                 <h2 className="mb-2 text-2xl font-black text-white">Reserva Confirmada!</h2>
                 <p className="mb-6 text-sm leading-relaxed text-slate-400">
-                  Seu horário foi agendado com sucesso no StyleFlow.
+                  Seu horário foi agendado com sucesso no {PRODUCT_NAME}.
                 </p>
 
                 <div className="mb-6 space-y-3 rounded-xl border border-white/10 bg-black/30 p-5 text-left">
@@ -1029,7 +1030,7 @@ export default function PublicSalonPage() {
 
           <footer className="mt-16 text-center">
             <p className="text-xs text-gray-400 dark:text-slate-500">
-              Painel STYLEFLOW • Todos os direitos reservados.
+              Painel {PRODUCT_NAME_UPPER} • Todos os direitos reservados.
             </p>
           </footer>
         </div>
@@ -1088,7 +1089,7 @@ export default function PublicSalonPage() {
 
         <footer className="mt-16 text-center">
           <p className="text-xs text-slate-500">
-            Painel STYLEFLOW • Todos os direitos reservados.
+            Painel {PRODUCT_NAME_UPPER} • Todos os direitos reservados.
           </p>
         </footer>
 

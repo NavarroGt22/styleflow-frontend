@@ -1,4 +1,12 @@
+/**
+ * Domínio base para links de subdomínio.
+ * Até comprar meucorteja.com, mantenha env apontando para Vercel / placeholder.
+ * Default permanece placeholder legado para não gerar subdomínios inválidos.
+ */
 export const BASE_DOMAIN = process.env.NEXT_PUBLIC_BASE_DOMAIN ?? 'styleflow.com'
+
+/** Domínio futuro do produto (após DNS). */
+export const PRODUCT_DOMAIN = 'meucorteja.com'
 
 function normalizeOrigin(value: string | undefined): string {
   if (!value?.trim()) {
@@ -29,6 +37,7 @@ export function clientPublicUrl(salonSlug: string): string {
   return platformUrl(`/app/${salonSlug}`)
 }
 
+/** Domínios fictícios / legados — não usar como white-label real. */
 const PLACEHOLDER_DOMAIN_MARKERS = [
   'meusite.com',
   'seudominio.com',
@@ -53,6 +62,9 @@ export function isRealCustomDomain(domain?: string | null): boolean {
 
   const platformHost = PLATFORM_URL ? extractHostname(PLATFORM_URL) : ''
   if (platformHost && (host === platformHost || host.endsWith(`.${platformHost}`))) return false
+
+  // Apex do produto (meucorteja.com / subdomínios da plataforma) não é domínio white-label do salão
+  if (host === PRODUCT_DOMAIN || host.endsWith(`.${PRODUCT_DOMAIN}`)) return false
 
   return !PLACEHOLDER_DOMAIN_MARKERS.some((p) => host === p || host.endsWith(`.${p}`))
 }

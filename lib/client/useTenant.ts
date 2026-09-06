@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { PRODUCT_NAME } from '@/lib/brand'
 import { apiUrl } from './config'
 import { extractTenantSubdomain, isCustomDomainHost } from './domains'
 
@@ -23,7 +24,7 @@ export function useTenantBranding(tenant?: TenantBranding | null) {
   return useMemo(() => {
     if (!tenant) {
       return {
-        brandName: 'StyleFlow',
+        brandName: PRODUCT_NAME,
         primaryColor: undefined as string | undefined,
         logoUrl: undefined as string | undefined,
         faviconUrl: undefined as string | undefined,

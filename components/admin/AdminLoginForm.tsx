@@ -12,6 +12,7 @@ import {
   getLoginLockout,
   recordFailedLogin,
 } from '@/lib/admin/login-lockout'
+import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 import AdminPageShell from './AdminPageShell'
 
 const inputClass =
@@ -192,7 +193,7 @@ export default function AdminLoginForm() {
               <Scissors className="size-6 -rotate-45 text-white" strokeWidth={1.5} />
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-semibold tracking-[0.3em] text-slate-400">STYLEFLOW</p>
+              <p className="mb-1 text-[10px] font-semibold tracking-[0.3em] text-slate-400">{PRODUCT_NAME_UPPER}</p>
               <p className="font-serif text-xl tracking-wide text-white">Painel Admin</p>
             </div>
           </div>
