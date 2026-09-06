@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowUpRight, Loader2, MapPin, Scissors } from 'lucide-react'
 import { apiUrl } from '@/lib/client/config'
 import { getSalonCache, setSalonCache } from '@/lib/client/salon-cache'
-import { isCustomDomainHost, parseApiError, useTenantBranding } from '@/lib/client/useTenant'
+import { parseApiError, useTenantBranding } from '@/lib/client/useTenant'
 import type { TenantBranding } from '@/lib/client/useTenant'
 
 type ClientAuthProps = {
@@ -17,7 +17,6 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
   const params = useParams<{ salonSlug?: string }>()
   const salonSlug = params?.salonSlug
   const router = useRouter()
-  const isCustomDomain = isCustomDomainHost()
   const cachedSalon = getSalonCache(salonSlug) as {
     tenant?: TenantBranding
     salon?: { name?: string; address?: string }
@@ -37,9 +36,9 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
   const { brandName, primaryColor, logoUrl } = useTenantBranding(tenant)
   const accent = primaryColor || '#d5a85c'
 
-  const publicSalonPath = isCustomDomain ? '/' : `/app/${salonSlug}`
-  const loginPath = isCustomDomain ? '/login' : `/app/${salonSlug}/login`
-  const registerPath = isCustomDomain ? '/cadastro' : `/app/${salonSlug}/cadastro`
+  const publicSalonPath = salonSlug ? `/app/${salonSlug}` : '/'
+  const loginPath = salonSlug ? `/app/${salonSlug}/login` : '/login'
+  const registerPath = salonSlug ? `/app/${salonSlug}/cadastro` : '/cadastro'
   const alternatePath = mode === 'login' ? registerPath : loginPath
 
   useEffect(() => {

@@ -12,7 +12,6 @@ type Props = {
   brandColor: string
   currentUser: { id: string } | null
   salonSlug?: string
-  isCustomDomain: boolean
   onJoin: (queue: QueueSession) => void
   onLeave: (sessionId: string) => void
 }
@@ -22,7 +21,6 @@ export function QueuePanel({
   brandColor,
   currentUser,
   salonSlug,
-  isCustomDomain,
   onJoin,
   onLeave,
 }: Props) {
@@ -104,7 +102,7 @@ export function QueuePanel({
             </button>
           ) : (
             <Link
-              href={isCustomDomain ? '/login' : `/app/${salonSlug}/login`}
+              href={salonSlug ? `/app/${salonSlug}/login` : '/login'}
               className="flex items-center justify-center rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider text-[#111] no-underline shadow-md transition-all hover:scale-105 active:scale-95"
               style={{ backgroundColor: brandColor }}
             >

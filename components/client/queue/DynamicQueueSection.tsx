@@ -13,7 +13,6 @@ type Props = {
   brandName?: string
   currentUser: { id: string; name?: string } | null
   salonSlug?: string
-  isCustomDomain: boolean
   onJoin: (queue: QueueSession) => void
   onLeave: (sessionId: string) => void
 }
@@ -37,7 +36,6 @@ export function DynamicQueueSection({
   brandName,
   currentUser,
   salonSlug,
-  isCustomDomain,
   onJoin,
   onLeave,
 }: Props) {
@@ -95,7 +93,6 @@ export function DynamicQueueSection({
               brandColor={brandColor}
               currentUser={currentUser}
               salonSlug={salonSlug}
-              isCustomDomain={isCustomDomain}
               onJoin={onJoin}
               onLeave={onLeave}
             />

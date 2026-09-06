@@ -610,7 +610,7 @@ export default function PublicSalonPage() {
 
   if (!salon.queueMode) {
     if (!currentUser) {
-      const loginPath = isCustomDomain ? '/login' : `/app/${salonSlug}/login`;
+      const loginPath = salonSlug ? `/app/${salonSlug}/login` : '/login';
       const digits = salon.phone ? String(salon.phone).replace(/\D/g, '') : '';
       const whatsappUrl = digits
         ? `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}`
@@ -661,7 +661,6 @@ export default function PublicSalonPage() {
             onToggleTheme={() => setIsDark(!isDark)}
             onLogout={handleLogout}
             salonSlug={salonSlug}
-            isCustomDomain={isCustomDomain}
           />
 
           <BookingHero
@@ -1081,7 +1080,6 @@ export default function PublicSalonPage() {
           onToggleTheme={() => setIsDark(!isDark)}
           onLogout={handleLogout}
           salonSlug={salonSlug}
-          isCustomDomain={isCustomDomain}
         />
 
         <DynamicQueueSection
@@ -1090,7 +1088,6 @@ export default function PublicSalonPage() {
           brandName={brandName}
           currentUser={currentUser}
           salonSlug={salonSlug}
-          isCustomDomain={isCustomDomain}
           onJoin={(queue) => {
             setActiveQueueSession(queue);
             setIsJoinModalOpen(true);

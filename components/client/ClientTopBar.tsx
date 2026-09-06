@@ -10,7 +10,6 @@ type Props = {
   onToggleTheme: () => void
   onLogout?: () => void
   salonSlug?: string
-  isCustomDomain: boolean
 }
 
 export function ClientTopBar({
@@ -20,7 +19,6 @@ export function ClientTopBar({
   onToggleTheme,
   onLogout,
   salonSlug,
-  isCustomDomain,
 }: Props) {
   return (
     <div
@@ -88,7 +86,7 @@ export function ClientTopBar({
           </button>
         ) : (
           <Link
-            href={isCustomDomain ? '/login' : `/app/${salonSlug}/login`}
+            href={salonSlug ? `/app/${salonSlug}/login` : '/login'}
             className="text-xs font-black uppercase tracking-wider no-underline transition-all client-accent-text"
           >
             Entrar / Cadastrar
