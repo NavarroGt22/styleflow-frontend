@@ -76,6 +76,20 @@ export function resolveClientLink(salonSlug: string, storedDomain?: string | nul
   return clientPublicUrl(salonSlug)
 }
 
+/** URL fixa para QR da fila (não muda ao abrir/fechar sessão do dia). */
+export function resolveQueuePublicUrl(
+  salonSlug: string,
+  opts?: { clientDomain?: string | null; customDomain?: string | null }
+): string {
+  if (isRealCustomDomain(opts?.clientDomain)) {
+    return `https://${extractHostname(opts!.clientDomain!)}`
+  }
+  if (isRealCustomDomain(opts?.customDomain)) {
+    return `https://${extractHostname(opts!.customDomain!)}/app/${salonSlug}`
+  }
+  return clientPublicUrl(salonSlug)
+}
+
 export function resolveAdminLink(salonSlug: string, storedDomain?: string | null): string {
   if (isRealCustomDomain(storedDomain)) {
     const host = extractHostname(storedDomain!)

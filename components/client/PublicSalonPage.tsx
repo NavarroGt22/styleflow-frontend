@@ -9,6 +9,7 @@ import { useTenantBranding, type TenantBranding } from '@/lib/client/useTenant';
 import { PRODUCT_NAME, PRODUCT_NAME_UPPER } from '@/lib/brand';
 import { apiUrl, wsUrl } from '@/lib/client/config';
 import { isCustomDomainHost } from '@/lib/client/domains';
+import { getClientGeolocation } from '@/lib/client/geolocation';
 import ClientLanding from '@/components/client/ClientLanding';
 import BookingDateTimePicker from '@/components/client/BookingDateTimePicker';
 import { ClientSalonError, ClientSalonLoading, clientBrandStyles } from '@/components/client/ClientSalonShell';
@@ -475,13 +476,25 @@ export default function PublicSalonPage() {
     }
 
     try {
+      const body: { serviceId: string; lat?: number; lng?: number } = {
+        serviceId: selectedQueueService.id,
+      };
+
+      if (salon?.queueGeofenceRequired) {
+        setJoinQueueError('Obtendo sua localização…');
+        const coords = await getClientGeolocation();
+        body.lat = coords.lat;
+        body.lng = coords.lng;
+        setJoinQueueError(null);
+      }
+
       const res = await fetch(apiUrl(`/queue/${activeQueueSession.sessionId}/join`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ serviceId: selectedQueueService.id })
+        body: JSON.stringify(body)
       });
 
       const json = await res.json();
@@ -1146,6 +1159,11 @@ export default function PublicSalonPage() {
                     <label className="text-xs font-black uppercase tracking-wider text-gray-400 dark:text-slate-500 block mb-3">
                       Selecione o Serviço desejado
                     </label>
+                    {salon?.queueGeofenceRequired ? (
+                      <p className="mb-3 text-[11px] font-semibold leading-relaxed text-amber-700 dark:text-amber-300/90">
+                        Esta fila exige GPS: você precisa estar a até {salon.queueRadiusMeters ?? 250} m da barbearia.
+                      </p>
+                    ) : null}
                     {displayServices.length === 0 ? (
                       <p className="text-sm font-semibold text-gray-500 italic">Nenhum serviço disponível.</p>
                     ) : (

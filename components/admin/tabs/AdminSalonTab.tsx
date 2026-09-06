@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Clock3,
   DollarSign,
+  MapPin,
   MessageCircle,
   Palette,
   Store,
@@ -89,6 +90,7 @@ export default function AdminSalonTab({
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [cep, setCep] = useState('')
+  const [geoBusy, setGeoBusy] = useState(false)
   const [testPhone, setTestPhone] = useState('')
   const [testingWebhook, setTestingWebhook] = useState(false)
   const [form, setForm] = useState({
@@ -96,6 +98,9 @@ export default function AdminSalonTab({
     phone: '',
     instagramUrl: '',
     address: '',
+    latitude: '' as string,
+    longitude: '' as string,
+    queueRadiusMeters: '250',
     openTime: '09:00',
     closeTime: '18:00',
     openWeekdays: DEFAULT_OPEN_WEEKDAYS as number[],
@@ -125,11 +130,15 @@ export default function AdminSalonTab({
 
   function applySalonData(data: SalonSettings) {
     setSalon(data)
+    setCep(data.cep || '')
     setForm({
       name: data.name || '',
       phone: data.phone || '',
       instagramUrl: data.instagramUrl || '',
       address: data.address || '',
+      latitude: data.latitude != null ? String(data.latitude) : '',
+      longitude: data.longitude != null ? String(data.longitude) : '',
+      queueRadiusMeters: String(data.queueRadiusMeters ?? 250),
       openTime: data.openTime || '09:00',
       closeTime: data.closeTime || '18:00',
       openWeekdays: Array.isArray(data.openWeekdays) && data.openWeekdays.length
@@ -202,6 +211,69 @@ export default function AdminSalonTab({
     }
   }
 
+  async function captureAdminGps() {
+    setGeoBusy(true)
+    setError('')
+    try {
+      const coords = await new Promise<GeolocationPosition>((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('Geolocalização indisponível neste navegador.'))
+          return
+        }
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+        })
+      })
+      setForm((current) => ({
+        ...current,
+        latitude: String(coords.coords.latitude),
+        longitude: String(coords.coords.longitude),
+      }))
+      setSuccess('Coordenadas capturadas do GPS deste aparelho. Salve as configurações.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível obter o GPS.')
+    } finally {
+      setGeoBusy(false)
+    }
+  }
+
+  async function geocodeFromAddress() {
+    const query = [form.address, cep ? `CEP ${onlyDigits(cep)}` : '', 'Brasil'].filter(Boolean).join(', ')
+    if (!form.address.trim()) {
+      setError('Preencha o endereço (ou busque pelo CEP) antes de geocodificar.')
+      return
+    }
+    setGeoBusy(true)
+    setError('')
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`
+      const response = await fetch(url, {
+        headers: { Accept: 'application/json' },
+      })
+      const data = (await response.json()) as Array<{ lat: string; lon: string }>
+      if (!data?.[0]) {
+        setError('Não achei coordenadas para esse endereço. Use “Usar GPS deste aparelho” na barbearia.')
+        return
+      }
+      setForm((current) => ({
+        ...current,
+        latitude: data[0].lat,
+        longitude: data[0].lon,
+      }))
+      setSuccess('Coordenadas estimadas pelo endereço. Confira no mapa e salve.')
+    } catch {
+      setError('Falha ao geocodificar o endereço. Tente o GPS do aparelho.')
+    } finally {
+      setGeoBusy(false)
+    }
+  }
+
+  function clearGeofence() {
+    setForm((current) => ({ ...current, latitude: '', longitude: '' }))
+    setSuccess('Geofence desativado (sem ponto). Salve para aplicar — join sem GPS.')
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!salonId) return
@@ -209,10 +281,25 @@ export default function AdminSalonTab({
     setError('')
     setSuccess('')
     try {
+      const latRaw = form.latitude.trim()
+      const lngRaw = form.longitude.trim()
+      const latitude = latRaw === '' ? null : Number(latRaw)
+      const longitude = lngRaw === '' ? null : Number(lngRaw)
+      if (latRaw && (!Number.isFinite(latitude) || latitude! < -90 || latitude! > 90)) {
+        throw new Error('Latitude inválida.')
+      }
+      if (lngRaw && (!Number.isFinite(longitude) || longitude! < -180 || longitude! > 180)) {
+        throw new Error('Longitude inválida.')
+      }
+
       const updated = await updateSalon(salonId, {
         name: form.name,
         phone: onlyDigits(form.phone),
         address: form.address,
+        cep: onlyDigits(cep) || null,
+        latitude,
+        longitude,
+        queueRadiusMeters: Number(form.queueRadiusMeters) || 250,
         openTime: form.openTime,
         closeTime: form.closeTime,
         openWeekdays: form.openWeekdays,
@@ -526,6 +613,90 @@ export default function AdminSalonTab({
                     <input type="checkbox" className={checkboxClass(lightMode)} checked={form.queueAllowClientView} onChange={(e) => setForm({ ...form, queueAllowClientView: e.target.checked })} />
                     Permitir consulta pública da fila
                   </label>
+
+                  <div className={`rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-600 bg-[#142035]/60'}`}>
+                    <div className="mb-2 flex items-center gap-2">
+                      <MapPin className={`size-4 ${lightMode ? 'text-indigo-600' : 'text-indigo-400'}`} />
+                      <p className={`text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Fila só perto da loja (GPS)</p>
+                    </div>
+                    <p className={`mb-3 text-[11px] leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Com latitude/longitude salvas, o cliente precisa estar dentro do raio para entrar na fila. Sem ponto = qualquer lugar (útil no teste local).
+                    </p>
+                    <div className="mb-3 grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className={labelClass(lightMode)}>Latitude</label>
+                        <input
+                          value={form.latitude}
+                          onChange={(e) => setForm({ ...form, latitude: e.target.value })}
+                          placeholder="-23.5505"
+                          className={inputClass(lightMode)}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass(lightMode)}>Longitude</label>
+                        <input
+                          value={form.longitude}
+                          onChange={(e) => setForm({ ...form, longitude: e.target.value })}
+                          placeholder="-46.6333"
+                          className={inputClass(lightMode)}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass(lightMode)}>Raio (metros)</label>
+                        <input
+                          type="number"
+                          min={50}
+                          max={5000}
+                          step={50}
+                          value={form.queueRadiusMeters}
+                          onChange={(e) => setForm({ ...form, queueRadiusMeters: e.target.value })}
+                          className={inputClass(lightMode)}
+                        />
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {[150, 250, 400, 800].map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setForm({ ...form, queueRadiusMeters: String(m) })}
+                              className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+                                form.queueRadiusMeters === String(m)
+                                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                                  : lightMode
+                                    ? 'border-slate-200 text-slate-600'
+                                    : 'border-slate-600 text-slate-300'
+                              }`}
+                            >
+                              {m} m
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <AdminButton type="button" disabled={geoBusy} onClick={captureAdminGps}>
+                        {geoBusy ? 'Aguarde…' : 'Usar GPS deste aparelho'}
+                      </AdminButton>
+                      <AdminButton type="button" disabled={geoBusy} onClick={geocodeFromAddress}>
+                        Estimar pelo endereço
+                      </AdminButton>
+                      {(form.latitude || form.longitude) && (
+                        <AdminButton type="button" onClick={clearGeofence}>
+                          Limpar ponto
+                        </AdminButton>
+                      )}
+                      {form.latitude && form.longitude ? (
+                        <a
+                          href={`https://www.google.com/maps?q=${encodeURIComponent(`${form.latitude},${form.longitude}`)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-indigo-600 hover:bg-indigo-50"
+                        >
+                          Ver no mapa ↗
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+
                   <label className={`flex cursor-pointer items-center gap-3 text-sm font-medium ${lightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <input type="checkbox" className={checkboxClass(lightMode)} checked={form.queueNotifyClient} onChange={(e) => setForm({ ...form, queueNotifyClient: e.target.checked })} />
                     Notificar cliente por WhatsApp

@@ -103,6 +103,10 @@ export type SalonSettings = {
   slug: string
   phone?: string | null
   address?: string | null
+  cep?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  queueRadiusMeters?: number
   openTime?: string
   closeTime?: string
   openWeekdays?: number[]
@@ -127,6 +131,9 @@ export type SalonSettings = {
     name?: string
     slug?: string
     subdomain?: string | null
+    clientDomain?: string | null
+    customDomain?: string | null
+    adminDomain?: string | null
     primaryColor?: string
     customBrandName?: string | null
     historyText?: string | null

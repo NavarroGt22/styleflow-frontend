@@ -13,8 +13,10 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import AdminCheckoutModal from '../AdminCheckoutModal'
+import QueuePermanentQrCard from '../QueuePermanentQrCard'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminModal, inputClass, labelClass } from '../ui/AdminUi'
 import type { AdminTabProps, Appointment, Professional, QueueEntry, QueueSession, Service } from '@/lib/admin/types'
+import { resolveQueuePublicUrl } from '@/lib/admin/platform-urls'
 import {
   addWalkInToQueue,
   fetchProfessionals,
@@ -61,7 +63,17 @@ function entryDuration(entry: QueueEntry) {
 }
 
 export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, onNavigateTab }: AdminTabProps) {
-  const [salon, setSalon] = useState<{ queueMode?: boolean; slug?: string; queueAutoAdvance?: boolean; queueAllowClientView?: boolean } | null>(null)
+  const [salon, setSalon] = useState<{
+    name?: string
+    queueMode?: boolean
+    slug?: string
+    queueAutoAdvance?: boolean
+    queueAllowClientView?: boolean
+    tenant?: {
+      clientDomain?: string | null
+      customDomain?: string | null
+    }
+  } | null>(null)
   const [professionals, setProfessionals] = useState<Professional[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [selectedProf, setSelectedProf] = useState('')
@@ -154,10 +166,14 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
     return () => window.clearInterval(id)
   }, [salon?.queueAutoAdvance, activeEntry, checkoutApt])
 
-  const publicUrl =
-    typeof window !== 'undefined' && (salonSlug || salon?.slug)
-      ? `${window.location.origin}/app/${salonSlug || salon?.slug}`
-      : ''
+  const publicUrl = useMemo(() => {
+    const slug = salonSlug || salon?.slug
+    if (!slug) return ''
+    return resolveQueuePublicUrl(slug, {
+      clientDomain: salon?.tenant?.clientDomain,
+      customDomain: salon?.tenant?.customDomain,
+    })
+  }, [salonSlug, salon?.slug, salon?.tenant?.clientDomain, salon?.tenant?.customDomain])
 
   function openCheckout(entry: QueueEntry, action: 'complete' | 'completeAndNext') {
     const apt = entry.appointment
@@ -300,23 +316,27 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
               lightMode ? 'border-indigo-100 bg-indigo-50/50' : 'border-indigo-900/40 bg-indigo-950/20'
             }`}
           >
-            <div>
+            <div className="min-w-0">
               <span className="block text-xs font-bold uppercase tracking-wider text-indigo-500">Link Público da Fila</span>
-              <span className="text-[11px] font-medium text-slate-500">
-                Compartilhe para os clientes acompanharem a posição deles online
-              </span>
+              <span className="mt-1 block break-all text-[11px] font-medium text-slate-500">{publicUrl}</span>
             </div>
             <AdminButton
               onClick={() => {
                 navigator.clipboard.writeText(publicUrl)
               }}
-              className="h-10 text-xs"
+              className="h-10 shrink-0 text-xs"
             >
               <Copy className="size-3.5" /> Copiar Link
             </AdminButton>
           </div>
         ) : null}
       </div>
+
+      {salon.queueAllowClientView !== false && publicUrl ? (
+        <div className="mb-8">
+          <QueuePermanentQrCard url={publicUrl} salonName={salon.name} lightMode={lightMode} />
+        </div>
+      ) : null}
 
       {!selectedProf ? (
         <AdminEmpty lightMode={lightMode} text="Selecione um profissional da equipe acima para gerenciar a fila." />
