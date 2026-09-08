@@ -42,6 +42,16 @@ export function isCustomDomainHost(hostname = typeof window !== 'undefined' ? wi
   return !isPlatformHost(hostname)
 }
 
+/** Painel do dono em white-label: admin.suabarbearia.com */
+export function isAdminCustomHost(hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost'): boolean {
+  return hostname.toLowerCase().startsWith('admin.')
+}
+
+/** App do cliente em white-label: app.suabarbearia.com */
+export function isClientAppCustomHost(hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost'): boolean {
+  return hostname.toLowerCase().startsWith('app.')
+}
+
 export function extractTenantSubdomain(hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost'): string | null {
   const host = hostname.toLowerCase()
   if (isLocalhostHost(host) || host === BASE_DOMAIN) return null

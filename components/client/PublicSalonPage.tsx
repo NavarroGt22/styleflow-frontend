@@ -9,6 +9,7 @@ import { useTenantBranding, type TenantBranding } from '@/lib/client/useTenant';
 import { PRODUCT_NAME, PRODUCT_NAME_UPPER } from '@/lib/brand';
 import { apiUrl, wsUrl } from '@/lib/client/config';
 import { isCustomDomainHost } from '@/lib/client/domains';
+import { hasExternalMarketingLp } from '@/lib/client/marketing-lp';
 import { getClientGeolocation } from '@/lib/client/geolocation';
 import ClientLanding from '@/components/client/ClientLanding';
 import BookingDateTimePicker from '@/components/client/BookingDateTimePicker';
@@ -72,6 +73,14 @@ const generateTimeSlots = (professional: any, selectedDate: string, serviceDurat
 };
 
 const isCustomDomain = isCustomDomainHost();
+
+function ExternalLpBookingRedirect({ loginPath }: { loginPath: string }) {
+  const router = useRouter()
+  useEffect(() => {
+    router.replace(loginPath)
+  }, [loginPath, router])
+  return <ClientSalonLoading message="Abrindo agendamento..." />
+}
 
 export default function PublicSalonPage() {
   const params = useParams<{ salonSlug?: string }>();
@@ -624,6 +633,10 @@ export default function PublicSalonPage() {
   if (!salon.queueMode) {
     if (!currentUser) {
       const loginPath = salonSlug ? `/app/${salonSlug}/login` : '/login';
+      // LP marketing em site separado — não duplicar ClientLanding; manda para login/agenda
+      if (hasExternalMarketingLp(typeof salonSlug === 'string' ? salonSlug : null)) {
+        return <ExternalLpBookingRedirect loginPath={loginPath} />
+      }
       const digits = salon.phone ? String(salon.phone).replace(/\D/g, '') : '';
       const whatsappUrl = digits
         ? `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}`

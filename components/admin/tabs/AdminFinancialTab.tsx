@@ -84,13 +84,15 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
     return rangeForPreset(period)
   }, [period, customFrom, customTo])
 
-  async function load() {
+  async function load(opts?: { silent?: boolean }) {
     if (!salonId) {
       setLoading(false)
       setError('Salão não identificado. Faça login novamente.')
       return
     }
-    setLoading(true)
+    if (!opts?.silent) {
+      setLoading(true)
+    }
     setError('')
     try {
       const [financials, productList, professionals] = await Promise.all([
@@ -107,7 +109,9 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar financeiro.')
     } finally {
-      setLoading(false)
+      if (!opts?.silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -190,7 +194,7 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
     try {
       downloadCsv()
       await closeFinancialRegister(salonId)
-      await load()
+      await load({ silent: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao fechar caixa.')
     } finally {
@@ -212,7 +216,7 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
         professionalId: pos.professionalId || null,
       })
       setPos((current) => ({ ...current, quantity: '1' }))
-      await load()
+      await load({ silent: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro na venda rápida.')
     } finally {

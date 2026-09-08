@@ -8,6 +8,7 @@ import { apiUrl } from '@/lib/client/config'
 import { getSalonCache, setSalonCache } from '@/lib/client/salon-cache'
 import { parseApiError, useTenantBranding } from '@/lib/client/useTenant'
 import type { TenantBranding } from '@/lib/client/useTenant'
+import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
 
 type ClientAuthProps = {
   mode: 'login' | 'register'
@@ -37,6 +38,8 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
   const accent = primaryColor || '#d5a85c'
 
   const publicSalonPath = salonSlug ? `/app/${salonSlug}` : '/'
+  const vitrineHref =
+    externalMarketingLpUrl(typeof salonSlug === 'string' ? salonSlug : null) ?? publicSalonPath
   const loginPath = salonSlug ? `/app/${salonSlug}/login` : '/login'
   const registerPath = salonSlug ? `/app/${salonSlug}/cadastro` : '/cadastro'
   const alternatePath = mode === 'login' ? registerPath : loginPath
@@ -148,7 +151,7 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
 
       <div className="relative w-full max-w-md animate-[fade-in-up_700ms_ease-out_both]">
         <Link
-          href={publicSalonPath}
+          href={vitrineHref}
           className="mb-10 inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[#a1a1aa] transition-colors hover:text-[var(--brand)]"
         >
           <ArrowLeft className="h-4 w-4" />

@@ -93,7 +93,8 @@ export function resolveQueuePublicUrl(
 export function resolveAdminLink(salonSlug: string, storedDomain?: string | null): string {
   if (isRealCustomDomain(storedDomain)) {
     const host = extractHostname(storedDomain!)
-    return `https://${host}${ADMIN_LOGIN_PATH}`
+    const next = encodeURIComponent(`/admin/${salonSlug}`)
+    return `https://${host}${ADMIN_LOGIN_PATH}?next=${next}`
   }
   return ownerAdminUrl(salonSlug)
 }

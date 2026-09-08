@@ -174,7 +174,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
       })
       setBlockOpen(false)
       setBlockForm({ professionalId: professionals[0]?.id || '', date: '', startTime: '', endTime: '' })
-      await load()
+      await load({ silent: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao bloquear horário.')
     } finally {
@@ -182,13 +182,15 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
     }
   }
 
-  async function load() {
+  async function load(opts?: { silent?: boolean }) {
     if (!salonId) {
       setLoading(false)
       setError('Salão não identificado. Faça login novamente.')
       return
     }
-    setLoading(true)
+    if (!opts?.silent) {
+      setLoading(true)
+    }
     setError('')
     try {
       const data = await fetchAppointments(salonId)
@@ -196,7 +198,9 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar agenda.')
     } finally {
-      setLoading(false)
+      if (!opts?.silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -217,12 +221,29 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   const pendingCount = items.filter((a) => a.status === 'PENDING' || a.status === 'CONFIRMED').length
 
   async function handleStatus(id: string, status: string) {
+    const previous = items
+    // Atualiza a lista na hora — sem “recarregar” a tela inteira
+    setItems((current) => {
+      if (status.startsWith('CANCELED')) {
+        return current.filter((apt) => apt.id !== id)
+      }
+      return current.map((apt) => (apt.id === id ? { ...apt, status } : apt))
+    })
+    setError('')
     try {
       await updateAppointmentStatus(id, status)
-      await load()
     } catch (err) {
+      setItems(previous)
       setError(err instanceof Error ? err.message : 'Erro ao atualizar agendamento.')
     }
+  }
+
+  function handleCheckoutSuccess(appointmentId: string) {
+    setItems((current) =>
+      current.map((apt) => (apt.id === appointmentId ? { ...apt, status: 'COMPLETED' } : apt)),
+    )
+    setCheckoutApt(null)
+    void load({ silent: true })
   }
 
   const cardBg = lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
@@ -482,7 +503,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
           salonId={salonId}
           lightMode={lightMode}
           onClose={() => setCheckoutApt(null)}
-          onSuccess={load}
+          onSuccess={() => handleCheckoutSuccess(checkoutApt.id)}
         />
       ) : null}
 
