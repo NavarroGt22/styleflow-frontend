@@ -9,6 +9,7 @@ import { getSalonCache, setSalonCache } from '@/lib/client/salon-cache'
 import { parseApiError, useTenantBranding } from '@/lib/client/useTenant'
 import type { TenantBranding } from '@/lib/client/useTenant'
 import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
+import { slimSessionUser } from '@/lib/auth'
 
 type ClientAuthProps = {
   mode: 'login' | 'register'
@@ -116,7 +117,15 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
 
       sessionStorage.setItem('client_token', data.token)
       sessionStorage.setItem('client_refreshToken', data.refreshToken)
-      sessionStorage.setItem('client_user', JSON.stringify(data.user))
+      try {
+        sessionStorage.setItem('client_user', JSON.stringify(slimSessionUser(data.user)))
+      } catch {
+        const u = data.user as { id?: string; name?: string; phone?: string; role?: string }
+        sessionStorage.setItem(
+          'client_user',
+          JSON.stringify({ id: u.id, name: u.name, phone: u.phone, role: u.role }),
+        )
+      }
       setSuccess(isLogin ? 'Login realizado! Redirecionando...' : 'Conta criada! Redirecionando...')
       setTimeout(() => router.push(publicSalonPath), 1200)
     } catch (err: unknown) {

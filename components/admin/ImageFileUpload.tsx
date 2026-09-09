@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { ImagePlus, X } from 'lucide-react'
 import { labelClass } from './ui/AdminUi'
 
@@ -9,11 +9,20 @@ type Props = {
   value: string
   onChange: (value: string) => void
   hint?: string
+  /** Limite do arquivo original (padrão 2 MB). */
   maxMb?: number
   accept?: string
   allowedLabel?: string
   previewClassName?: string
   lightMode?: boolean
+}
+
+function estimateDataUrlBytes(dataUrl: string): number {
+  const comma = dataUrl.indexOf(',')
+  if (comma < 0) return dataUrl.length
+  const base64 = dataUrl.slice(comma + 1)
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+  return Math.floor((base64.length * 3) / 4) - padding
 }
 
 export default function ImageFileUpload({
@@ -28,21 +37,40 @@ export default function ImageFileUpload({
   lightMode = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [localError, setLocalError] = useState('')
+  const maxBytes = Math.max(0.1, maxMb) * 1024 * 1024
 
   function handleFile(file: File | undefined) {
     if (!file) return
+    setLocalError('')
+
     const isIco = file.name.toLowerCase().endsWith('.ico')
     const isImage = file.type.startsWith('image/') || isIco
     if (!isImage) {
-      alert(`Selecione um arquivo válido (${allowedLabel}).`)
+      setLocalError(`Selecione um arquivo válido (${allowedLabel}).`)
       return
     }
-    if (file.size > maxMb * 1024 * 1024) {
-      alert(`O arquivo deve ter no máximo ${maxMb}MB.`)
+    if (file.size > maxBytes) {
+      setLocalError(`Arquivo com ${(file.size / (1024 * 1024)).toFixed(1)} MB. Máximo: ${maxMb} MB.`)
+      if (inputRef.current) inputRef.current.value = ''
       return
     }
+
     const reader = new FileReader()
-    reader.onload = () => onChange(String(reader.result ?? ''))
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '')
+      const decoded = estimateDataUrlBytes(dataUrl)
+      // Base64 cresce ~33%; rejeita se o payload final passar do limite
+      if (decoded > maxBytes) {
+        setLocalError(`Após converter, a imagem passa de ${maxMb} MB. Comprima ou use outra foto.`)
+        if (inputRef.current) inputRef.current.value = ''
+        return
+      }
+      onChange(dataUrl)
+    }
+    reader.onerror = () => {
+      setLocalError('Não foi possível ler o arquivo.')
+    }
     reader.readAsDataURL(file)
     if (inputRef.current) inputRef.current.value = ''
   }
@@ -81,7 +109,10 @@ export default function ImageFileUpload({
             {value ? (
               <button
                 type="button"
-                onClick={() => onChange('')}
+                onClick={() => {
+                  setLocalError('')
+                  onChange('')
+                }}
                 className={`flex items-center gap-1 rounded-xl border px-3 py-2 text-sm font-medium ${
                   lightMode
                     ? 'border-slate-300 text-slate-600 hover:bg-slate-50'
@@ -93,9 +124,12 @@ export default function ImageFileUpload({
             ) : null}
           </div>
           <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-            {allowedLabel} — até {maxMb}MB
+            {allowedLabel} — até <strong>{maxMb} MB</strong>
           </p>
           {hint ? <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>{hint}</p> : null}
+          {localError ? (
+            <p className="text-xs font-semibold text-red-400">{localError}</p>
+          ) : null}
         </div>
       </div>
     </div>

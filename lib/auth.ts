@@ -19,6 +19,7 @@ export type SessionUser = {
     billingDueDate?: string | null
     primaryColor?: string | null
     inventoryEnabled?: boolean
+    [key: string]: unknown
   }
 }
 
@@ -29,6 +30,35 @@ const ADMIN_AUTH_AT_KEY = 'adminAuthenticatedAt'
 
 /** Sessão admin expira após 30 min — exige nova senha ao voltar do /app para /admin */
 export const ADMIN_SESSION_MAX_MS = 30 * 60 * 1000
+
+const HEAVY_SESSION_KEYS = new Set([
+  'logoUrl',
+  'faviconUrl',
+  'heroImageUrl',
+  'historyText',
+  'whatsappGatewayToken',
+])
+
+/** Remove data URLs / blobs grandes antes de gravar no sessionStorage (~5 MB). */
+export function slimSessionUser<T>(user: T): T {
+  if (!user || typeof user !== 'object') return user
+
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(walk)
+    if (!value || typeof value !== 'object') return value
+
+    const out: Record<string, unknown> = {}
+    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+      if (HEAVY_SESSION_KEYS.has(key)) continue
+      if (typeof raw === 'string' && raw.startsWith('data:')) continue
+      if (typeof raw === 'string' && raw.length > 4000) continue
+      out[key] = walk(raw)
+    }
+    return out
+  }
+
+  return walk(user) as T
+}
 
 export function getSessionToken(): string | null {
   if (typeof window === 'undefined') return null
@@ -47,9 +77,42 @@ export function getSessionUser(): SessionUser | null {
 }
 
 export function setSession(token: string, refreshToken: string, user: SessionUser) {
+  const slim = slimSessionUser(user)
   sessionStorage.setItem(TOKEN_KEY, token)
   sessionStorage.setItem(REFRESH_KEY, refreshToken)
-  sessionStorage.setItem(USER_KEY, JSON.stringify(user))
+  try {
+    sessionStorage.setItem(USER_KEY, JSON.stringify(slim))
+  } catch {
+    // Último recurso: só o essencial para o painel abrir
+    const minimal = {
+      id: slim.id,
+      name: slim.name,
+      email: slim.email,
+      role: slim.role,
+      salons: slim.salons?.map((s) => ({ id: s.id, name: s.name, slug: s.slug })),
+      professionalProfile: slim.professionalProfile
+        ? {
+            salon: slim.professionalProfile.salon
+              ? {
+                  id: slim.professionalProfile.salon.id,
+                  name: slim.professionalProfile.salon.name,
+                  slug: slim.professionalProfile.salon.slug,
+                }
+              : undefined,
+          }
+        : undefined,
+      tenant: slim.tenant
+        ? {
+            adminLocked: slim.tenant.adminLocked,
+            level: slim.tenant.level,
+            primaryColor: slim.tenant.primaryColor,
+            inventoryEnabled: slim.tenant.inventoryEnabled,
+            billingDueDate: slim.tenant.billingDueDate,
+          }
+        : undefined,
+    }
+    sessionStorage.setItem(USER_KEY, JSON.stringify(minimal))
+  }
   sessionStorage.setItem(ADMIN_AUTH_AT_KEY, String(Date.now()))
 }
 

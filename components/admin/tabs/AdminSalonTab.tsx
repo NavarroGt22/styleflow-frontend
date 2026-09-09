@@ -477,7 +477,7 @@ export default function AdminSalonTab({
                   <p className="mt-1 text-right text-xs text-slate-400">{form.historyText.length}/800</p>
                 </div>
                 <ImageFileUpload lightMode={lightMode} label="Logotipo da Barbearia" value={form.logoUrl} onChange={(logoUrl) => setForm({ ...form, logoUrl })} hint="Aparece na página de agendamento dos seus clientes." maxMb={2} />
-                <ImageFileUpload lightMode={lightMode} label="Foto da landing page (hero)" value={form.heroImageUrl} onChange={(heroImageUrl) => setForm({ ...form, heroImageUrl })} hint="Foto grande da LP do cliente. Preferencialmente vertical." maxMb={3} accept="image/png,image/jpeg,image/jpg,image/webp" allowedLabel="PNG, JPG ou WebP" />
+                <ImageFileUpload lightMode={lightMode} label="Foto da landing page (hero)" value={form.heroImageUrl} onChange={(heroImageUrl) => setForm({ ...form, heroImageUrl })} hint="Foto grande da LP do cliente. Preferencialmente vertical. Máx. 2 MB." maxMb={2} accept="image/png,image/jpeg,image/jpg,image/webp" allowedLabel="PNG, JPG ou WebP" />
                 <ImageFileUpload lightMode={lightMode} label="Favicon (ícone da aba do navegador)" value={form.faviconUrl} onChange={(faviconUrl) => setForm({ ...form, faviconUrl })} hint="Ícone pequeno que aparece na aba do navegador dos clientes." maxMb={2} accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico" allowedLabel="ICO ou PNG" previewClassName="object-contain p-2" />
                 <div>
                   <label className={labelClass(lightMode)}>Desde (ano / selo)</label>
