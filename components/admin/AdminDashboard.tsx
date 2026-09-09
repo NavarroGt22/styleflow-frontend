@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import { PRODUCT_NAME_UPPER } from '@/lib/brand'
+import { useTenantFavicon } from '@/lib/client/useTenant'
 import AdminServicesTab from './tabs/AdminServicesTab'
 import AdminAgendaTab from './tabs/AdminAgendaTab'
 import AdminFinancialTab from './tabs/AdminFinancialTab'
@@ -90,12 +91,15 @@ export default function AdminDashboard({
 
   const [resolvedSalonId, setResolvedSalonId] = useState<string | undefined>(salonId ?? salonFromSession?.id)
   const [fetchedBrandColor, setFetchedBrandColor] = useState<string | null>(null)
+  const [tenantIconUrl, setTenantIconUrl] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<AdminTab>('services')
   const [lightMode, setLightMode] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [salonSubTab, setSalonSubTab] = useState<
     'general' | 'temas' | 'expediente' | 'comissao' | 'fila' | undefined
   >()
+
+  useTenantFavicon(tenantIconUrl)
 
   const handleNavigateTab = (
     tab: AdminTab,
@@ -117,8 +121,6 @@ export default function AdminDashboard({
     let cancelled = false
 
     async function resolveSalon() {
-      if (resolvedSalonId && primaryColor) return
-
       try {
         const response = await fetch(apiUrl(`/queue/public/${salonSlug}`))
         if (!response.ok) return
@@ -129,6 +131,10 @@ export default function AdminDashboard({
           data?.salon?.tenant?.primaryColor ??
           data?.primaryColor ??
           null
+        const icon =
+          (typeof data?.tenant?.faviconUrl === 'string' && data.tenant.faviconUrl) ||
+          (typeof data?.tenant?.logoUrl === 'string' && data.tenant.logoUrl) ||
+          null
 
         if (!cancelled) {
           if (!resolvedSalonId && typeof id === 'string' && id.trim()) {
@@ -137,6 +143,7 @@ export default function AdminDashboard({
           if (!primaryColor && typeof color === 'string' && color.trim()) {
             setFetchedBrandColor(color.trim())
           }
+          if (icon) setTenantIconUrl(icon)
         }
       } catch {
         /* fallback */

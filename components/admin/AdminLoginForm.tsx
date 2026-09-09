@@ -13,7 +13,15 @@ import {
   recordFailedLogin,
 } from '@/lib/admin/login-lockout'
 import { PRODUCT_NAME_UPPER } from '@/lib/brand'
+import { useTenantFavicon } from '@/lib/client/useTenant'
 import AdminPageShell from './AdminPageShell'
+
+type AdminLoginBranding = {
+  name?: string | null
+  customBrandName?: string | null
+  logoUrl?: string | null
+  faviconUrl?: string | null
+}
 
 const inputClass =
   'h-12 w-full rounded-xl border border-slate-600 bg-[#142035] px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400'
@@ -42,15 +50,67 @@ export default function AdminLoginForm() {
   const [lockoutRemainingMs, setLockoutRemainingMs] = useState(0)
   const [loading, setLoading] = useState(false)
   const [isLocalHost, setIsLocalHost] = useState(false)
+  const [branding, setBranding] = useState<AdminLoginBranding | null>(null)
 
   const sessionExpired = searchParams.get('reason') === 'session_expired'
   const lockout = getLoginLockout(email)
   const isLocked = !isLocalHost && (lockout.locked || lockoutRemainingMs > 0)
+  const brandLabel = branding?.customBrandName || branding?.name || null
+  useTenantFavicon(branding?.faviconUrl || branding?.logoUrl || null)
 
   useEffect(() => {
     const host = window.location.hostname
     setIsLocalHost(host === 'localhost' || host === '127.0.0.1')
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const nextPath = searchParams.get('next') || ''
+
+    async function loadTenantBranding() {
+      const host = window.location.hostname
+      const slugFromNext = nextPath.match(/^\/admin\/([^/?#]+)/)?.[1] || null
+      const candidates = [host, slugFromNext].filter(Boolean) as string[]
+
+      for (const key of candidates) {
+        try {
+          const res = await fetch(apiUrl(`/tenants/by-subdomain/${encodeURIComponent(key)}`))
+          if (!res.ok) continue
+          const tenant = (await res.json()) as AdminLoginBranding
+          if (!cancelled) {
+            setBranding(tenant)
+            if (tenant.customBrandName || tenant.name) {
+              document.title = tenant.customBrandName || tenant.name || PRODUCT_NAME_UPPER
+            }
+          }
+          return
+        } catch {
+          /* tenta próximo */
+        }
+      }
+
+      if (!slugFromNext) return
+      try {
+        const res = await fetch(apiUrl(`/queue/public/${encodeURIComponent(slugFromNext)}`))
+        if (!res.ok) return
+        const data = await res.json()
+        const tenant = (data?.tenant || null) as AdminLoginBranding | null
+        if (!cancelled && tenant) {
+          setBranding(tenant)
+          if (tenant.customBrandName || tenant.name) {
+            document.title = tenant.customBrandName || tenant.name || PRODUCT_NAME_UPPER
+          }
+        }
+      } catch {
+        /* mantém favicon padrão MeuCorteJá */
+      }
+    }
+
+    loadTenantBranding()
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (sessionExpired) {
@@ -189,11 +249,17 @@ export default function AdminLoginForm() {
       <main className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-8">
         <div className="relative w-full max-w-md animate-[fade-in-up_700ms_ease-out_both]">
           <div className="mb-8 flex items-center gap-4">
-            <div className="flex size-14 items-center justify-center rounded-xl bg-slate-700 text-white shadow-lg shadow-black/20">
-              <Scissors className="size-6 -rotate-45 text-white" strokeWidth={1.5} />
+            <div className="flex size-14 items-center justify-center overflow-hidden rounded-xl bg-slate-700 text-white shadow-lg shadow-black/20">
+              {branding?.logoUrl ? (
+                <img src={branding.logoUrl} alt={brandLabel || 'Logo'} className="size-full object-cover" />
+              ) : (
+                <Scissors className="size-6 -rotate-45 text-white" strokeWidth={1.5} />
+              )}
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-semibold tracking-[0.3em] text-slate-400">{PRODUCT_NAME_UPPER}</p>
+              <p className="mb-1 text-[10px] font-semibold tracking-[0.3em] text-slate-400">
+                {brandLabel ? brandLabel.toUpperCase() : PRODUCT_NAME_UPPER}
+              </p>
               <p className="font-serif text-xl tracking-wide text-white">Painel Admin</p>
             </div>
           </div>
