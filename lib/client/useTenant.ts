@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { apiUrl } from './config'
 import { extractTenantSubdomain, isCustomDomainHost } from './domains'
@@ -41,6 +41,30 @@ export function useTenantBranding(tenant?: TenantBranding | null) {
       lpSinceYear: tenant.lpSinceYear || undefined,
     }
   }, [tenant])
+}
+
+function upsertFaviconLink(rel: string, href: string, type: string) {
+  if (typeof document === 'undefined') return
+  let link = document.querySelector<HTMLLinkElement>(`link[rel='${rel}']`)
+  if (!link) {
+    link = document.createElement('link')
+    link.rel = rel
+    document.head.appendChild(link)
+  }
+  link.href = href
+  link.type = type
+}
+
+export function useTenantFavicon(iconUrl?: string | null, fallbackUrl = '/favicon.svg?v=meucorteja') {
+  useEffect(() => {
+    const href = iconUrl || fallbackUrl
+    const lowerHref = href.toLowerCase()
+    const type = lowerHref.includes('.svg') ? 'image/svg+xml' : lowerHref.includes('.png') ? 'image/png' : 'image/x-icon'
+
+    upsertFaviconLink('icon', href, type)
+    upsertFaviconLink('shortcut icon', href, type)
+    upsertFaviconLink('apple-touch-icon', href, type)
+  }, [iconUrl, fallbackUrl])
 }
 
 export function getTenantBrandCss(primaryColor: string): string {

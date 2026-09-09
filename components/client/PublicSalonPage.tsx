@@ -5,7 +5,7 @@ import { toast } from '@/lib/client/toast';
 import { useParams, useRouter } from 'next/navigation';
 import { Clock, AlertCircle, Check, CheckCircle, Gift } from 'lucide-react';
 import { secureFetch as fetch } from '@/lib/client/api';
-import { useTenantBranding, type TenantBranding } from '@/lib/client/useTenant';
+import { useTenantBranding, useTenantFavicon, type TenantBranding } from '@/lib/client/useTenant';
 import { PRODUCT_NAME, PRODUCT_NAME_UPPER } from '@/lib/brand';
 import { apiUrl, wsUrl } from '@/lib/client/config';
 import { isCustomDomainHost } from '@/lib/client/domains';
@@ -152,21 +152,7 @@ export default function PublicSalonPage() {
   } | null>(null);
 
   const { brandName, primaryColor, logoUrl, faviconUrl } = useTenantBranding(data?.tenant);
-
-  useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-    if (!link) return;
-    const icon = faviconUrl || logoUrl;
-    if (icon) {
-      link.href = icon;
-      if (icon.includes('svg')) link.type = 'image/svg+xml';
-      else if (icon.includes('png')) link.type = 'image/png';
-      else link.type = 'image/x-icon';
-    } else {
-      link.href = '/favicon.svg';
-      link.type = 'image/svg+xml';
-    }
-  }, [faviconUrl, logoUrl]);
+  useTenantFavicon(faviconUrl || logoUrl || null);
 
   useEffect(() => {
     const sessionUser = readClientSession();

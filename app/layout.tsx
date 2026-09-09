@@ -16,9 +16,9 @@ export const metadata: Metadata = {
   description: 'Agendamento e gestão para barbearias e salões.',
   applicationName: PRODUCT_NAME,
   icons: {
-    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
-    shortcut: '/favicon.svg',
-    apple: '/favicon.svg',
+    icon: [{ url: '/favicon.svg?v=meucorteja', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg?v=meucorteja',
+    apple: '/favicon.svg?v=meucorteja',
   },
 }
 

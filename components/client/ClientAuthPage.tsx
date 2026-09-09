@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowUpRight, Loader2, MapPin, Scissors } from 'lucide-react'
 import { apiUrl } from '@/lib/client/config'
 import { getSalonCache, setSalonCache } from '@/lib/client/salon-cache'
-import { parseApiError, useTenantBranding } from '@/lib/client/useTenant'
+import { parseApiError, useTenantBranding, useTenantFavicon } from '@/lib/client/useTenant'
 import type { TenantBranding } from '@/lib/client/useTenant'
 import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
 import { slimSessionUser } from '@/lib/auth'
@@ -35,8 +35,9 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const { brandName, primaryColor, logoUrl } = useTenantBranding(tenant)
+  const { brandName, primaryColor, logoUrl, faviconUrl } = useTenantBranding(tenant)
   const accent = primaryColor || '#d5a85c'
+  useTenantFavicon(faviconUrl || logoUrl || null)
 
   const publicSalonPath = salonSlug ? `/app/${salonSlug}` : '/'
   const vitrineHref =

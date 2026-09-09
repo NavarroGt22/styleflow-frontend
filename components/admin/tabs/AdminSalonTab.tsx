@@ -23,6 +23,8 @@ import {
 } from '../ui/AdminUi'
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
 import { fetchSalon, normalizeInstagram, updateSalon } from '@/lib/admin/api'
+import { resolveAdminLink, resolveClientLink } from '@/lib/admin/platform-urls'
+import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
 import WeekdayHoursEditor, {
   DEFAULT_CLOSED_DAY_MESSAGE,
   DEFAULT_OPEN_WEEKDAYS,
@@ -448,7 +450,7 @@ export default function AdminSalonTab({
           {subTab === 'temas' ? (
             <div className="space-y-4">
               <p className={`text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Personalize a landing page dos clientes: história, foto, cor e slug da URL pública.
+                Personalize a marca no app de agendamento (login, cores e logo). A LP de marketing fica no site próprio do salão, quando houver.
               </p>
               <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                 <div>
@@ -462,35 +464,60 @@ export default function AdminSalonTab({
                 <div>
                   <label className={labelClass(lightMode)}>Slug da página do cliente</label>
                   <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className={inputClass(lightMode)} />
-                  <p className="mt-1 text-xs text-slate-500">URL pública: /app/{form.slug || '...'}</p>
+                  <p className="mt-1 text-xs text-slate-500">Path no app: /app/{form.slug || '...'}</p>
                 </div>
                 <div>
-                  <label className={labelClass(lightMode)}>Cor da landing page</label>
+                  <label className={labelClass(lightMode)}>Cor do app (agenda / login)</label>
                   <div className="flex items-center gap-2">
                     <input type="color" value={form.primaryColor} onChange={(e) => setForm({ ...form, primaryColor: e.target.value })} className="h-11 w-14 cursor-pointer rounded-xl border border-slate-200 bg-white p-1" />
                     <input value={form.primaryColor} onChange={(e) => setForm({ ...form, primaryColor: e.target.value })} className={inputClass(lightMode)} />
                   </div>
                 </div>
-                <div className="sm:col-span-2">
-                  <label className={labelClass(lightMode)}>História / texto da LP</label>
-                  <textarea value={form.historyText} onChange={(e) => setForm({ ...form, historyText: e.target.value.slice(0, 800) })} rows={4} placeholder="Conte a história da barbearia. Ex: Corte preciso, barba alinhada e a experiência que você merece..." className={`${inputClass(lightMode)} h-auto py-3`} />
-                  <p className="mt-1 text-right text-xs text-slate-400">{form.historyText.length}/800</p>
-                </div>
-                <ImageFileUpload lightMode={lightMode} label="Logotipo da Barbearia" value={form.logoUrl} onChange={(logoUrl) => setForm({ ...form, logoUrl })} hint="Aparece na página de agendamento dos seus clientes." maxMb={2} />
-                <ImageFileUpload lightMode={lightMode} label="Foto da landing page (hero)" value={form.heroImageUrl} onChange={(heroImageUrl) => setForm({ ...form, heroImageUrl })} hint="Foto grande da LP do cliente. Preferencialmente vertical. Máx. 2 MB." maxMb={2} accept="image/png,image/jpeg,image/jpg,image/webp" allowedLabel="PNG, JPG ou WebP" />
-                <ImageFileUpload lightMode={lightMode} label="Favicon (ícone da aba do navegador)" value={form.faviconUrl} onChange={(faviconUrl) => setForm({ ...form, faviconUrl })} hint="Ícone pequeno que aparece na aba do navegador dos clientes." maxMb={2} accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico" allowedLabel="ICO ou PNG" previewClassName="object-contain p-2" />
-                <div>
-                  <label className={labelClass(lightMode)}>Desde (ano / selo)</label>
-                  <input value={form.lpSinceYear} onChange={(e) => setForm({ ...form, lpSinceYear: e.target.value })} placeholder="Ex: 2014" className={inputClass(lightMode)} />
-                </div>
+                <ImageFileUpload lightMode={lightMode} label="Logotipo da Barbearia" value={form.logoUrl} onChange={(logoUrl) => setForm({ ...form, logoUrl })} hint="Aparece no login e no app de agendamento dos clientes." maxMb={2} />
+                <ImageFileUpload lightMode={lightMode} label="Favicon (ícone da aba do navegador)" value={form.faviconUrl} onChange={(faviconUrl) => setForm({ ...form, faviconUrl })} hint="Ícone pequeno na aba do navegador no app de agendamento." maxMb={2} accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico" allowedLabel="ICO ou PNG" previewClassName="object-contain p-2" />
               </div>
-              {salon?.tenant?.subdomain ? (
-                <div className={`rounded-xl border px-4 py-3 text-sm ${lightMode ? 'border-slate-200 bg-slate-50 text-slate-600' : 'border-slate-600 text-slate-300'}`}>
-                  <p className="font-semibold">Subdomínio da Conta</p>
-                  <p className="mt-1">{salon.tenant.subdomain}</p>
-                  <p className="mt-1 text-xs text-slate-500">O slug da conta (tenant) não muda aqui — só o slug da unidade na URL /app/...</p>
-                </div>
-              ) : null}
+              {(() => {
+                const slug = form.slug || salon?.slug || ''
+                const marketing = externalMarketingLpUrl(slug)
+                const clientUrl = resolveClientLink(slug, salon?.tenant?.clientDomain)
+                const adminUrl = resolveAdminLink(slug, salon?.tenant?.adminDomain)
+                const lpUrl = marketing || (salon?.tenant?.customDomain
+                  ? `https://${String(salon.tenant.customDomain).replace(/^https?:\/\//, '')}`
+                  : null)
+                if (!lpUrl && !salon?.tenant?.clientDomain && !salon?.tenant?.adminDomain) return null
+                return (
+                  <div className={`rounded-xl border px-4 py-3 text-sm ${lightMode ? 'border-slate-200 bg-slate-50 text-slate-600' : 'border-slate-600 text-slate-300'}`}>
+                    <p className="font-semibold">Links públicos da conta</p>
+                    <ul className="mt-2 space-y-1.5 text-xs sm:text-sm">
+                      {lpUrl ? (
+                        <li>
+                          <span className="text-slate-500">LP / site: </span>
+                          <a href={lpUrl} target="_blank" rel="noreferrer" className="font-medium text-indigo-400 hover:underline">
+                            {lpUrl.replace(/^https?:\/\//, '')}
+                          </a>
+                        </li>
+                      ) : null}
+                      {salon?.tenant?.clientDomain ? (
+                        <li>
+                          <span className="text-slate-500">App cliente: </span>
+                          <a href={clientUrl} target="_blank" rel="noreferrer" className="font-medium text-indigo-400 hover:underline">
+                            {String(salon.tenant.clientDomain).replace(/^https?:\/\//, '')}
+                          </a>
+                          <span className="text-slate-500"> → /app/{slug || '...'}</span>
+                        </li>
+                      ) : null}
+                      {salon?.tenant?.adminDomain ? (
+                        <li>
+                          <span className="text-slate-500">Admin: </span>
+                          <a href={adminUrl} target="_blank" rel="noreferrer" className="font-medium text-indigo-400 hover:underline">
+                            {String(salon.tenant.adminDomain).replace(/^https?:\/\//, '')}
+                          </a>
+                        </li>
+                      ) : null}
+                    </ul>
+                  </div>
+                )
+              })()}
             </div>
           ) : null}
 
