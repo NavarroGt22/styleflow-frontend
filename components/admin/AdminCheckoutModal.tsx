@@ -22,7 +22,9 @@ export default function AdminCheckoutModal({ appointment, salonId, lightMode = f
   const [prodId, setProdId] = useState('')
   const [prodQty, setProdQty] = useState('1')
   const [paymentMethod, setPaymentMethod] = useState('PIX')
-  const [finalPrice, setFinalPrice] = useState(String(appointment.service?.price ?? 0).replace('.', ','))
+  const baseServicePrice = appointment.service?.price ?? 0
+  const discountedServicePrice = appointment.quotedPrice ?? baseServicePrice
+  const [finalPrice, setFinalPrice] = useState(String(discountedServicePrice).replace('.', ','))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -116,6 +118,14 @@ export default function AdminCheckoutModal({ appointment, salonId, lightMode = f
                 <p className={`font-medium ${lightMode ? 'text-gray-900' : 'text-white'}`}>
                   {appointment.service?.name || 'Serviço'}
                 </p>
+                <p className={`text-xs ${lightMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                  Original: R$ {baseServicePrice.toFixed(2).replace('.', ',')}
+                </p>
+                {appointment.discountAmount ? (
+                  <p className="text-xs font-semibold text-emerald-400">
+                    Cupom: -{appointment.discountPercent ?? 0}% (−R$ {Number(appointment.discountAmount).toFixed(2).replace('.', ',')})
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>

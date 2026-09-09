@@ -32,6 +32,10 @@ export type Appointment = {
   status: string
   startTime: string
   endTime?: string | null
+  couponId?: string | null
+  discountPercent?: number | null
+  discountAmount?: number | null
+  quotedPrice?: number | null
   customer?: { user?: { name?: string; phone?: string } }
   service?: { name?: string; price?: number }
   professional?: { user?: { name?: string } }

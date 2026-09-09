@@ -20,6 +20,15 @@ function formatPhone(phone?: string) {
   return phone
 }
 
+function money(value?: number | null) {
+  if (value == null || !Number.isFinite(Number(value))) return ''
+  return `R$ ${Number(value).toFixed(2).replace('.', ',')}`
+}
+
+function appointmentServicePrice(apt: Appointment) {
+  return apt.quotedPrice ?? apt.service?.price ?? null
+}
+
 function StatusBadge({ status }: { status: string }) {
   if (status === 'COMPLETED') {
     return (
@@ -368,10 +377,20 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                           <p className={`truncate text-sm font-semibold ${title}`}>
                             {apt.service?.name || '-'}
                           </p>
-                          {apt.service?.price != null ? (
-                            <p className={`text-xs ${muted}`}>
-                              R$ {Number(apt.service.price).toFixed(2).replace('.', ',')}
-                            </p>
+                          {appointmentServicePrice(apt) != null ? (
+                            <div className={`text-xs ${muted}`}>
+                              {apt.discountAmount ? (
+                                <p className="line-through opacity-70">{money(apt.service?.price)}</p>
+                              ) : null}
+                              <p className={apt.discountAmount ? 'text-emerald-400 font-semibold' : ''}>
+                                {money(appointmentServicePrice(apt))}
+                              </p>
+                              {apt.discountAmount ? (
+                                <p className="text-emerald-400">
+                                  Cupom: -{apt.discountPercent ?? 0}% (−{money(apt.discountAmount)})
+                                </p>
+                              ) : null}
+                            </div>
                           ) : null}
                         </div>
                       </div>
@@ -457,9 +476,19 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                       </td>
                       <td className="p-4">
                         <div className={`font-medium ${title}`}>{apt.service?.name || '-'}</div>
-                        {apt.service?.price != null ? (
+                        {appointmentServicePrice(apt) != null ? (
                           <div className="text-sm text-slate-500">
-                            R$ {Number(apt.service.price).toFixed(2).replace('.', ',')}
+                            {apt.discountAmount ? (
+                              <div className="line-through opacity-70">{money(apt.service?.price)}</div>
+                            ) : null}
+                            <div className={apt.discountAmount ? 'font-semibold text-emerald-400' : ''}>
+                              {money(appointmentServicePrice(apt))}
+                            </div>
+                            {apt.discountAmount ? (
+                              <div className="text-xs text-emerald-400">
+                                Cupom: -{apt.discountPercent ?? 0}% (−{money(apt.discountAmount)})
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </td>
