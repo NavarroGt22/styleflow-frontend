@@ -908,6 +908,7 @@ export default function PublicSalonPage() {
                       data?.salon?.closedDayMessage ||
                       'Neste dia o barbeiro está de folga. Escolha outro dia para o corte.'
                     }
+                    daysToShow={data?.salon?.bookingCalendarMode === 'TODAY' ? 1 : 7}
                     selectedDate={selectedDate}
                     onSelectDate={(value) => {
                       setSelectedDate(value);

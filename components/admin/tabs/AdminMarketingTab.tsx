@@ -1,7 +1,18 @@
 'use client'
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Link2, Megaphone, MessageCircle, Send, Users } from 'lucide-react'
+import {
+  Link2,
+  Megaphone,
+  MessageCircle,
+  QrCode,
+  RefreshCw,
+  Send,
+  Smartphone,
+  Users,
+  Wifi,
+  WifiOff,
+} from 'lucide-react'
 import {
   AdminButton,
   AdminError,
@@ -13,17 +24,23 @@ import {
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
 import {
   broadcastSalonWhatsApp,
+  connectEvolutionWhatsApp,
+  disconnectEvolutionWhatsApp,
   fetchClientGroups,
+  fetchEvolutionWhatsAppStatus,
   fetchSalon,
   sendSalonWhatsAppManual,
   testSalonWhatsApp,
   updateSalon,
   type ClientGroup,
+  type EvolutionWhatsAppStatus,
 } from '@/lib/admin/api'
 import { resolveQueuePublicUrl } from '@/lib/admin/platform-urls'
 
 const DEFAULT_TEMPLATE =
-  'Olá {cliente}, seu horário no {estabelecimento} está chegando! Previsão: {tempo}.'
+  'Olá {cliente}, seu horário no {estabelecimento} está chegando! Dia {data} às {tempo}. Te esperamos!'
+
+const LEGACY_QUEUE_TEMPLATE_HINT = /fila|posi[cç][aã]o|previs[aã]o para as/i
 
 type SendMode = 'one' | 'group' | 'all'
 
@@ -42,12 +59,14 @@ function formatPreview(
   cliente: string,
   tempo: string,
   estabelecimento: string,
+  data: string,
   posicao: string | number = 1
 ) {
   return template
     .replace(/{cliente}/g, cliente)
     .replace(/{posicao}/g, String(posicao))
     .replace(/{tempo}/g, tempo)
+    .replace(/{data}/g, data)
     .replace(/{estabelecimento}/g, estabelecimento)
 }
 
@@ -60,6 +79,62 @@ function modeChipClass(lightMode: boolean, active: boolean) {
   return lightMode
     ? 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
     : 'border-slate-600 bg-[#142035] text-slate-300 hover:bg-slate-800'
+}
+
+function EvolutionStatusBadge({
+  status,
+  lightMode,
+}: {
+  status: EvolutionWhatsAppStatus | null
+  lightMode: boolean
+}) {
+  if (!status) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+          lightMode ? 'border-slate-200 text-slate-500' : 'border-slate-600 text-slate-400'
+        }`}
+      >
+        …
+      </span>
+    )
+  }
+  if (!status.configured) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+          lightMode
+            ? 'border-amber-200 bg-amber-50 text-amber-800'
+            : 'border-amber-900/40 bg-amber-950/30 text-amber-200'
+        }`}
+      >
+        <WifiOff className="size-3.5" /> Servidor sem Evolution
+      </span>
+    )
+  }
+  if (status.connected) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-400">
+        <Wifi className="size-3.5" /> Conectado
+      </span>
+    )
+  }
+  if (status.state === 'connecting') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400">
+        <QrCode className="size-3.5" /> Aguardando QR
+      </span>
+    )
+  }
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+        lightMode ? 'border-slate-200 text-slate-600' : 'border-slate-600 text-slate-300'
+      }`}
+    >
+      <WifiOff className="size-3.5" /> Desconectado
+    </span>
+  )
 }
 
 export default function AdminMarketingTab({
@@ -88,6 +163,10 @@ export default function AdminMarketingTab({
   const [manualMessage, setManualMessage] = useState('')
   const [testPhone, setTestPhone] = useState('')
 
+  const [evoStatus, setEvoStatus] = useState<EvolutionWhatsAppStatus | null>(null)
+  const [evoQr, setEvoQr] = useState<string | null>(null)
+  const [evoBusy, setEvoBusy] = useState(false)
+
   const publicUrl = useMemo(() => {
     const slug = salonSlug || salon?.slug
     if (!slug) return ''
@@ -101,6 +180,19 @@ export default function AdminMarketingTab({
     () => groups.find((g) => g.id === selectedGroupId) ?? null,
     [groups, selectedGroupId]
   )
+
+  async function loadEvolutionStatus(silent = false) {
+    if (!salonId) return
+    try {
+      const status = await fetchEvolutionWhatsAppStatus(salonId)
+      setEvoStatus(status)
+      if (status.connected) setEvoQr(null)
+    } catch (err) {
+      if (!silent) {
+        setError(err instanceof Error ? err.message : 'Erro ao consultar WhatsApp.')
+      }
+    }
+  }
 
   async function load() {
     if (!salonId) {
@@ -120,10 +212,15 @@ export default function AdminMarketingTab({
       setGroups(activeGroups)
       setRemindEnabled(Boolean(data.queueNotifyClient))
       setRemindMinutes(String(data.appointmentRemindMinutes ?? 10))
-      setTemplate(data.whatsappTemplate || DEFAULT_TEMPLATE)
+      const loadedTemplate = data.whatsappTemplate || DEFAULT_TEMPLATE
+      // Templates antigos de fila → troca pelo texto padrão da agenda
+      setTemplate(
+        LEGACY_QUEUE_TEMPLATE_HINT.test(loadedTemplate) ? DEFAULT_TEMPLATE : loadedTemplate
+      )
       setGatewayUrl(data.whatsappGatewayUrl || '')
       setGatewayToken(data.whatsappGatewayToken || '')
       setSelectedGroupId((current) => current || activeGroups[0]?.id || '')
+      await loadEvolutionStatus(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar Marketing.')
     } finally {
@@ -135,9 +232,58 @@ export default function AdminMarketingTab({
     load()
   }, [salonId])
 
+  useEffect(() => {
+    if (!salonId || !evoQr || evoStatus?.connected) return
+    const id = window.setInterval(() => {
+      void loadEvolutionStatus(true)
+    }, 4000)
+    return () => window.clearInterval(id)
+  }, [salonId, evoQr, evoStatus?.connected])
+
   function insertLink(url: string, label?: string) {
     const chunk = label ? `${label}: ${url}` : url
     setManualMessage((current) => (current.trim() ? `${current.trim()}\n\n${chunk}` : chunk))
+  }
+
+  async function handleConnectWhatsApp() {
+    if (!salonId) return
+    setEvoBusy(true)
+    setError('')
+    setSuccess('')
+    try {
+      const result = await connectEvolutionWhatsApp(salonId)
+      setEvoStatus(result)
+      setEvoQr(result.qrBase64 || null)
+      if (result.connected) {
+        setSuccess('WhatsApp conectado na Evolution.')
+      } else if (result.qrBase64) {
+        setSuccess('Escaneie o QR com o WhatsApp do celular (Aparelhos conectados).')
+      } else {
+        setSuccess(result.label || 'Aguardando conexão…')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao gerar QR da Evolution.')
+    } finally {
+      setEvoBusy(false)
+    }
+  }
+
+  async function handleDisconnectWhatsApp() {
+    if (!salonId) return
+    if (!window.confirm('Desconectar o WhatsApp deste salão na Evolution?')) return
+    setEvoBusy(true)
+    setError('')
+    setSuccess('')
+    try {
+      const result = await disconnectEvolutionWhatsApp(salonId)
+      setEvoStatus(result)
+      setEvoQr(null)
+      setSuccess('WhatsApp desconectado.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao desconectar.')
+    } finally {
+      setEvoBusy(false)
+    }
   }
 
   async function handleSaveConfig(event: FormEvent) {
@@ -239,21 +385,123 @@ export default function AdminMarketingTab({
             Marketing · WhatsApp
           </h3>
           <p className={`mt-1 text-xs sm:text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-            n8n + disparo individual, por grupo de clientes (aba Clientes) ou lembrete automático da agenda.
+            Parear número (Evolution), n8n, disparos e lembrete da agenda. O QR da fila do cliente fica na aba
+            Fila.
           </p>
         </div>
       </div>
 
       {error ? <AdminError message={error} /> : null}
       {success ? (
-        <p className={`rounded-xl border px-4 py-3 text-sm ${lightMode ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300'}`}>
+        <p
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            lightMode
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300'
+          }`}
+        >
           {success}
         </p>
       ) : null}
 
+      <div className={sectionClass(lightMode)}>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h4
+              className={`text-sm font-bold uppercase tracking-wide ${
+                lightMode ? 'text-slate-700' : 'text-slate-300'
+              }`}
+            >
+              1. Conectar WhatsApp (Evolution)
+            </h4>
+            <p className={`mt-1 max-w-xl text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              QR para o <strong>dono</strong> parear o número na Evolution. Não é o QR da fila (esse é para o
+              cliente entrar na fila, na aba Fila).
+            </p>
+          </div>
+          <EvolutionStatusBadge status={evoStatus} lightMode={lightMode} />
+        </div>
+
+        {evoStatus?.instanceName ? (
+          <p className={`mb-3 text-[11px] ${lightMode ? 'text-slate-400' : 'text-slate-500'}`}>
+            Instância: <code className="rounded bg-black/10 px-1 py-0.5">{evoStatus.instanceName}</code>
+          </p>
+        ) : null}
+
+        {!evoStatus?.configured ? (
+          <p
+            className={`rounded-xl border px-3 py-3 text-xs ${
+              lightMode
+                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                : 'border-amber-900/40 bg-amber-950/20 text-amber-100'
+            }`}
+          >
+            A Evolution ainda não está ligada neste servidor (faltam <code>EVOLUTION_API_URL</code> e{' '}
+            <code>EVOLUTION_API_KEY</code>). Com a VPS no ar (HTTPS <code>evo.…</code> ou API na mesma máquina),
+            o botão passa a gerar o QR aqui.
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          <AdminButton
+            type="button"
+            disabled={evoBusy || !salonId || evoStatus?.configured === false}
+            onClick={handleConnectWhatsApp}
+          >
+            {evoBusy ? (
+              'Aguarde…'
+            ) : evoStatus?.connected ? (
+              <>
+                <RefreshCw className="size-3.5" /> Reconectar / atualizar
+              </>
+            ) : (
+              <>
+                <Smartphone className="size-3.5" /> Conectar WhatsApp
+              </>
+            )}
+          </AdminButton>
+          {evoStatus?.connected || evoQr ? (
+            <AdminButton type="button" variant="ghost" disabled={evoBusy} onClick={handleDisconnectWhatsApp}>
+              Desconectar
+            </AdminButton>
+          ) : null}
+          <AdminButton
+            type="button"
+            variant="ghost"
+            disabled={evoBusy || !salonId}
+            onClick={() => loadEvolutionStatus(false)}
+          >
+            Atualizar status
+          </AdminButton>
+        </div>
+
+        {evoQr ? (
+          <div
+            className={`mt-4 flex flex-col items-center gap-3 rounded-xl border p-4 ${
+              lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-[#0f1a2a]'
+            }`}
+          >
+            <p className={`text-center text-xs ${lightMode ? 'text-slate-600' : 'text-slate-300'}`}>
+              Abra o WhatsApp no celular → Aparelhos conectados → Conectar um aparelho → escaneie:
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={evoQr}
+              alt="QR Code WhatsApp Evolution"
+              className="size-56 rounded-lg bg-white p-2 shadow-sm"
+            />
+            <p className="text-[11px] text-slate-400">O status atualiza sozinho após a leitura.</p>
+          </div>
+        ) : null}
+      </div>
+
       <form onSubmit={handleSaveConfig} className={sectionClass(lightMode)}>
-        <h4 className={`mb-4 text-sm font-bold uppercase tracking-wide ${lightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-          1. Conexão n8n
+        <h4
+          className={`mb-4 text-sm font-bold uppercase tracking-wide ${
+            lightMode ? 'text-slate-700' : 'text-slate-300'
+          }`}
+        >
+          2. Conexão n8n
         </h4>
         <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
           <div className="sm:col-span-2">
@@ -280,7 +528,13 @@ export default function AdminMarketingTab({
             />
           </div>
           <div className="sm:col-span-2">
-            <label className={labelClass(lightMode)}>Template do lembrete automático</label>
+            <label className={labelClass(lightMode)}>Texto do lembrete automático (agenda)</label>
+            <p className={`mb-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              Quando o horário do cliente estiver perto (ex.: corte às <strong>09:00</strong> e aviso com{' '}
+              <strong>10 min</strong> → envia ~<strong>08:50</strong>), o sistema monta a mensagem sozinho com
+              nome, data e hora do agendamento. Nome e telefone vêm da <strong>Agenda</strong> /{' '}
+              <strong>Clientes</strong> — você não digita isso aqui.
+            </p>
             <textarea
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
@@ -288,17 +542,59 @@ export default function AdminMarketingTab({
               className={`${inputClass(lightMode)} h-auto py-3`}
               placeholder={DEFAULT_TEMPLATE}
             />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['{cliente}', 'Nome'],
+                  ['{data}', 'Data'],
+                  ['{tempo}', 'Horário'],
+                  ['{estabelecimento}', 'Salão'],
+                ] as const
+              ).map(([token, label]) => (
+                <button
+                  key={token}
+                  type="button"
+                  onClick={() => setTemplate((t) => (t.includes(token) ? t : `${t.trim()} ${token}`.trim()))}
+                  className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+                    lightMode
+                      ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      : 'border-slate-600 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label} {token}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setTemplate(DEFAULT_TEMPLATE)}
+                className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+                  lightMode
+                    ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                    : 'border-emerald-800 text-emerald-300 hover:bg-emerald-950/40'
+                }`}
+              >
+                Restaurar texto padrão
+              </button>
+            </div>
             <p className="mt-1 text-[11px] text-slate-400">
-              Variáveis: {'{cliente}'}, {'{estabelecimento}'}, {'{tempo}'}, {'{posicao}'}
+              Variáveis preenchidas no envio: {'{cliente}'}, {'{data}'}, {'{tempo}'}, {'{estabelecimento}'}
             </p>
           </div>
         </div>
 
-        <div className={`mt-5 rounded-xl border p-4 ${lightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-600 bg-[#142035]/60'}`}>
+        <div
+          className={`mt-5 rounded-xl border p-4 ${
+            lightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-600 bg-[#142035]/60'
+          }`}
+        >
           <h4 className={`mb-3 text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
-            2. Automação da agenda
+            3. Automação da agenda
           </h4>
-          <label className={`mb-3 flex cursor-pointer items-center gap-3 text-sm font-medium ${lightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+          <label
+            className={`mb-3 flex cursor-pointer items-center gap-3 text-sm font-medium ${
+              lightMode ? 'text-slate-700' : 'text-slate-300'
+            }`}
+          >
             <input
               type="checkbox"
               className={checkboxClass(lightMode)}
@@ -308,7 +604,8 @@ export default function AdminMarketingTab({
             Enviar lembrete automático antes do horário
           </label>
           <p className={`mb-3 text-[11px] leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-            Ex.: cliente às 9:30 e aviso com 10 min → mensagem sai por volta das 9:20. O n8n entrega no WhatsApp.
+            Ex.: cliente agendou às 9:00 e você escolhe 10 min → a mensagem sai por volta das 8:50, com o nome e o
+            telefone já cadastrados na Agenda/Clientes.
           </p>
           <div className="max-w-xs">
             <label className={labelClass(lightMode)}>Minutos antes do horário</label>
@@ -343,12 +640,16 @@ export default function AdminMarketingTab({
           </div>
           {remindEnabled ? (
             <p className={`mt-3 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              Prévia: {formatPreview(template, 'João', '09:30', salon?.name || 'Barbearia')}
+              Prévia: {formatPreview(template, 'João', '09:00', salon?.name || 'Barbearia', '10/09/2026')}
             </p>
           ) : null}
         </div>
 
-        <div className={`mt-4 rounded-xl border p-3 ${lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-[#0f1a2a]'}`}>
+        <div
+          className={`mt-4 rounded-xl border p-3 ${
+            lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-[#0f1a2a]'
+          }`}
+        >
           <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Testar webhook</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
@@ -406,13 +707,17 @@ export default function AdminMarketingTab({
       <form onSubmit={handleManualSend} className={sectionClass(lightMode)}>
         <div className="mb-4 flex items-center gap-2">
           <Send className={`size-4 ${lightMode ? 'text-emerald-600' : 'text-emerald-400'}`} />
-          <h4 className={`text-sm font-bold uppercase tracking-wide ${lightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-            3. Disparo (manual / massa)
+          <h4
+            className={`text-sm font-bold uppercase tracking-wide ${
+              lightMode ? 'text-slate-700' : 'text-slate-300'
+            }`}
+          >
+            4. Disparo (manual / massa)
           </h4>
         </div>
         <p className={`mb-3 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-          Use os grupos da aba <strong>Clientes</strong>. O envio é um WhatsApp por pessoa (não cria/entra em grupo do WhatsApp).
-          Use {'{cliente}'} e {'{estabelecimento}'} na mensagem em massa.
+          Use os grupos da aba <strong>Clientes</strong>. O envio é um WhatsApp por pessoa (não cria/entra em
+          grupo do WhatsApp). Use {'{cliente}'} e {'{estabelecimento}'} na mensagem em massa.
         </p>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -427,7 +732,10 @@ export default function AdminMarketingTab({
               key={opt.id}
               type="button"
               onClick={() => setSendMode(opt.id)}
-              className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${modeChipClass(lightMode, sendMode === opt.id)}`}
+              className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${modeChipClass(
+                lightMode,
+                sendMode === opt.id
+              )}`}
             >
               {opt.label}
             </button>
@@ -440,7 +748,9 @@ export default function AdminMarketingTab({
               type="button"
               onClick={() => insertLink(publicUrl, 'Agende aqui')}
               className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${
-                lightMode ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-600 text-slate-200 hover:bg-slate-800'
+                lightMode
+                  ? 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'border-slate-600 text-slate-200 hover:bg-slate-800'
               }`}
             >
               <Link2 className="size-3.5" />
@@ -450,7 +760,9 @@ export default function AdminMarketingTab({
               type="button"
               onClick={() => insertLink(publicUrl, 'Fila / agendamento')}
               className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${
-                lightMode ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-600 text-slate-200 hover:bg-slate-800'
+                lightMode
+                  ? 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'border-slate-600 text-slate-200 hover:bg-slate-800'
               }`}
             >
               <MessageCircle className="size-3.5" />
@@ -477,7 +789,13 @@ export default function AdminMarketingTab({
             <div>
               <label className={labelClass(lightMode)}>Grupo (aba Clientes)</label>
               {groups.length === 0 ? (
-                <p className={`rounded-xl border px-3 py-3 text-xs ${lightMode ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-amber-900/40 bg-amber-950/20 text-amber-200'}`}>
+                <p
+                  className={`rounded-xl border px-3 py-3 text-xs ${
+                    lightMode
+                      ? 'border-amber-200 bg-amber-50 text-amber-800'
+                      : 'border-amber-900/40 bg-amber-950/20 text-amber-200'
+                  }`}
+                >
                   Nenhum grupo ainda. Crie em <strong>Clientes → Grupos</strong> e vincule os clientes.
                 </p>
               ) : (
@@ -494,7 +812,11 @@ export default function AdminMarketingTab({
                     ))}
                   </select>
                   {selectedGroup ? (
-                    <p className={`mt-1.5 flex items-center gap-1.5 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    <p
+                      className={`mt-1.5 flex items-center gap-1.5 text-[11px] ${
+                        lightMode ? 'text-slate-500' : 'text-slate-400'
+                      }`}
+                    >
                       <Users className="size-3.5" />
                       Dispara para membros com telefone válido neste grupo.
                     </p>
@@ -505,7 +827,13 @@ export default function AdminMarketingTab({
           ) : null}
 
           {sendMode === 'all' ? (
-            <p className={`rounded-xl border px-3 py-3 text-xs ${lightMode ? 'border-slate-200 bg-slate-50 text-slate-600' : 'border-slate-600 bg-[#142035]/60 text-slate-300'}`}>
+            <p
+              className={`rounded-xl border px-3 py-3 text-xs ${
+                lightMode
+                  ? 'border-slate-200 bg-slate-50 text-slate-600'
+                  : 'border-slate-600 bg-[#142035]/60 text-slate-300'
+              }`}
+            >
               Envia para os clientes da lista (com celular), até 150 números por disparo. Ideal para promoções.
             </p>
           ) : null}
@@ -529,10 +857,7 @@ export default function AdminMarketingTab({
         </div>
 
         <div className="mt-4 flex justify-end">
-          <AdminButton
-            type="submit"
-            disabled={sending || (sendMode === 'group' && groups.length === 0)}
-          >
+          <AdminButton type="submit" disabled={sending || (sendMode === 'group' && groups.length === 0)}>
             {sending
               ? 'Enviando…'
               : sendMode === 'one'

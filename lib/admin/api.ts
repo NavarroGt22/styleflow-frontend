@@ -290,6 +290,41 @@ export async function broadcastSalonWhatsApp(
   return parseJson(response)
 }
 
+export type EvolutionWhatsAppStatus = {
+  configured: boolean
+  connected: boolean
+  state: 'open' | 'close' | 'connecting' | 'unknown'
+  instanceName: string | null
+  label: string
+  qrBase64?: string | null
+  pairingCode?: string | null
+}
+
+export async function fetchEvolutionWhatsAppStatus(
+  salonId: string
+): Promise<EvolutionWhatsAppStatus> {
+  const response = await authFetch(`/establishments/${salonId}/whatsapp/evolution/status`)
+  return parseJson(response)
+}
+
+export async function connectEvolutionWhatsApp(
+  salonId: string
+): Promise<EvolutionWhatsAppStatus> {
+  const response = await authFetch(`/establishments/${salonId}/whatsapp/evolution/connect`, {
+    method: 'POST',
+  })
+  return parseJson(response)
+}
+
+export async function disconnectEvolutionWhatsApp(
+  salonId: string
+): Promise<EvolutionWhatsAppStatus> {
+  const response = await authFetch(`/establishments/${salonId}/whatsapp/evolution/disconnect`, {
+    method: 'POST',
+  })
+  return parseJson(response)
+}
+
 export async function fetchProducts(salonId: string): Promise<Product[]> {
   const response = await authFetch(`/products/salon/${salonId}`)
   return parseJson(response)

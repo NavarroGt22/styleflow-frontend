@@ -115,6 +115,7 @@ export type SalonSettings = {
   closeTime?: string
   openWeekdays?: number[]
   closedDayMessage?: string | null
+  bookingCalendarMode?: 'WEEK' | 'TODAY'
   instagramUrl?: string | null
   queueMode?: boolean
   queueAutoAdvance?: boolean

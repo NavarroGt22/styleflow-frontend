@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 export type BookingDateTimePickerProps = {
   brandColor?: string
@@ -91,6 +91,15 @@ export default function BookingDateTimePicker({
       }
     })
   }, [daysToShow, openSet])
+
+  // No modo "só hoje", pré-seleciona o dia atual quando estiver aberto
+  useEffect(() => {
+    if (disabled || daysToShow !== 1 || days.length !== 1) return
+    const only = days[0]
+    if (only.isOpen && selectedDate !== only.value) {
+      onSelectDate(only.value)
+    }
+  }, [disabled, daysToShow, days, selectedDate, onSelectDate])
 
   const defaultClosedMsg =
     closedDayMessage ||

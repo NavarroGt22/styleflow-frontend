@@ -88,6 +88,7 @@ export default function AdminSalonTab({
     closeTime: '18:00',
     openWeekdays: DEFAULT_OPEN_WEEKDAYS as number[],
     closedDayMessage: DEFAULT_CLOSED_DAY_MESSAGE,
+    bookingCalendarMode: 'WEEK' as 'WEEK' | 'TODAY',
     tenantName: '',
     customBrandName: '',
     slug: '',
@@ -123,6 +124,7 @@ export default function AdminSalonTab({
         ? data.openWeekdays
         : DEFAULT_OPEN_WEEKDAYS,
       closedDayMessage: data.closedDayMessage || DEFAULT_CLOSED_DAY_MESSAGE,
+      bookingCalendarMode: data.bookingCalendarMode === 'TODAY' ? 'TODAY' : 'WEEK',
       tenantName: data.tenant?.name || '',
       customBrandName: data.tenant?.customBrandName || '',
       slug: data.slug || '',
@@ -277,6 +279,7 @@ export default function AdminSalonTab({
         closeTime: form.closeTime,
         openWeekdays: form.openWeekdays,
         closedDayMessage: form.closedDayMessage.trim() || DEFAULT_CLOSED_DAY_MESSAGE,
+        bookingCalendarMode: form.bookingCalendarMode,
         instagramUrl: normalizeInstagram(form.instagramUrl) || null,
         slug: form.slug,
         queueMode: form.queueMode,
@@ -540,6 +543,8 @@ export default function AdminSalonTab({
               onChangeCloseTime={(value) => setForm({ ...form, closeTime: value })}
               closedDayMessage={form.closedDayMessage}
               onChangeClosedDayMessage={(value) => setForm({ ...form, closedDayMessage: value })}
+              bookingCalendarMode={form.bookingCalendarMode}
+              onChangeBookingCalendarMode={(value) => setForm({ ...form, bookingCalendarMode: value })}
             />
           ) : null}
 
