@@ -165,7 +165,10 @@ export default function AdminMarketingTab({
 
   const [evoStatus, setEvoStatus] = useState<EvolutionWhatsAppStatus | null>(null)
   const [evoQr, setEvoQr] = useState<string | null>(null)
+  const [evoPairingCode, setEvoPairingCode] = useState<string | null>(null)
+  const [evoPhone, setEvoPhone] = useState('')
   const [evoBusy, setEvoBusy] = useState(false)
+  const [showEvoQr, setShowEvoQr] = useState(false)
 
   const publicUrl = useMemo(() => {
     const slug = salonSlug || salon?.slug
@@ -186,7 +189,10 @@ export default function AdminMarketingTab({
     try {
       const status = await fetchEvolutionWhatsAppStatus(salonId)
       setEvoStatus(status)
-      if (status.connected) setEvoQr(null)
+      if (status.connected) {
+        setEvoQr(null)
+        setEvoPairingCode(null)
+      }
     } catch (err) {
       if (!silent) {
         setError(err instanceof Error ? err.message : 'Erro ao consultar WhatsApp.')
@@ -219,6 +225,7 @@ export default function AdminMarketingTab({
       )
       setGatewayUrl(data.whatsappGatewayUrl || '')
       setGatewayToken(data.whatsappGatewayToken || '')
+      setEvoPhone((current) => current || data.phone || '')
       setSelectedGroupId((current) => current || activeGroups[0]?.id || '')
       await loadEvolutionStatus(true)
     } catch (err) {
@@ -233,12 +240,12 @@ export default function AdminMarketingTab({
   }, [salonId])
 
   useEffect(() => {
-    if (!salonId || !evoQr || evoStatus?.connected) return
+    if (!salonId || (!evoQr && !evoPairingCode) || evoStatus?.connected) return
     const id = window.setInterval(() => {
       void loadEvolutionStatus(true)
     }, 4000)
     return () => window.clearInterval(id)
-  }, [salonId, evoQr, evoStatus?.connected])
+  }, [salonId, evoQr, evoPairingCode, evoStatus?.connected])
 
   function insertLink(url: string, label?: string) {
     const chunk = label ? `${label}: ${url}` : url
@@ -247,22 +254,32 @@ export default function AdminMarketingTab({
 
   async function handleConnectWhatsApp() {
     if (!salonId) return
+    const digits = onlyDigits(evoPhone)
+    if (digits.length < 10) {
+      setError('Informe o celular do WhatsApp do salão (com DDD) para gerar o código de pareamento.')
+      return
+    }
     setEvoBusy(true)
     setError('')
     setSuccess('')
     try {
-      const result = await connectEvolutionWhatsApp(salonId)
+      const result = await connectEvolutionWhatsApp(salonId, digits)
       setEvoStatus(result)
       setEvoQr(result.qrBase64 || null)
+      setEvoPairingCode(result.pairingCode || null)
+      setShowEvoQr(false)
       if (result.connected) {
         setSuccess('WhatsApp conectado na Evolution.')
+      } else if (result.pairingCode) {
+        setSuccess('Código gerado. No celular: WhatsApp → Aparelhos conectados → Vincular com número.')
       } else if (result.qrBase64) {
-        setSuccess('Escaneie o QR com o WhatsApp do celular (Aparelhos conectados).')
+        setSuccess('Abra este admin no computador/tablet para escanear o QR, ou tente de novo com o número.')
+        setShowEvoQr(true)
       } else {
         setSuccess(result.label || 'Aguardando conexão…')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao gerar QR da Evolution.')
+      setError(err instanceof Error ? err.message : 'Falha ao gerar pareamento da Evolution.')
     } finally {
       setEvoBusy(false)
     }
@@ -278,6 +295,7 @@ export default function AdminMarketingTab({
       const result = await disconnectEvolutionWhatsApp(salonId)
       setEvoStatus(result)
       setEvoQr(null)
+      setEvoPairingCode(null)
       setSuccess('WhatsApp desconectado.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao desconectar.')
@@ -415,8 +433,8 @@ export default function AdminMarketingTab({
               1. Conectar WhatsApp (Evolution)
             </h4>
             <p className={`mt-1 max-w-xl text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              QR para o <strong>dono</strong> parear o número na Evolution. Não é o QR da fila (esse é para o
-              cliente entrar na fila, na aba Fila).
+              Para barbeiro <strong>só com celular</strong>: use o <strong>código de pareamento</strong> (não dá
+              para escanear o QR na mesma tela). O QR da fila do cliente continua na aba Fila.
             </p>
           </div>
           <EvolutionStatusBadge status={evoStatus} lightMode={lightMode} />
@@ -438,9 +456,24 @@ export default function AdminMarketingTab({
           >
             A Evolution ainda não está ligada neste servidor (faltam <code>EVOLUTION_API_URL</code> e{' '}
             <code>EVOLUTION_API_KEY</code>). Com a VPS no ar (HTTPS <code>evo.…</code> ou API na mesma máquina),
-            o botão passa a gerar o QR aqui.
+            o botão passa a gerar o código aqui.
           </p>
         ) : null}
+
+        <div className="mb-3 max-w-sm">
+          <label className={labelClass(lightMode)}>Celular do WhatsApp do salão</label>
+          <input
+            type="tel"
+            value={evoPhone}
+            onChange={(e) => setEvoPhone(e.target.value)}
+            placeholder="(71) 98888-0000"
+            className={inputClass(lightMode)}
+            disabled={evoBusy || evoStatus?.configured === false}
+          />
+          <p className="mt-1 text-[11px] text-slate-400">
+            É o número que vai receber/enviar as mensagens (não o do cliente).
+          </p>
+        </div>
 
         <div className="flex flex-wrap gap-2">
           <AdminButton
@@ -456,11 +489,11 @@ export default function AdminMarketingTab({
               </>
             ) : (
               <>
-                <Smartphone className="size-3.5" /> Conectar WhatsApp
+                <Smartphone className="size-3.5" /> Gerar código de pareamento
               </>
             )}
           </AdminButton>
-          {evoStatus?.connected || evoQr ? (
+          {evoStatus?.connected || evoQr || evoPairingCode ? (
             <AdminButton type="button" variant="ghost" disabled={evoBusy} onClick={handleDisconnectWhatsApp}>
               Desconectar
             </AdminButton>
@@ -475,22 +508,56 @@ export default function AdminMarketingTab({
           </AdminButton>
         </div>
 
-        {evoQr ? (
+        {evoPairingCode ? (
           <div
-            className={`mt-4 flex flex-col items-center gap-3 rounded-xl border p-4 ${
-              lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-[#0f1a2a]'
+            className={`mt-4 rounded-xl border p-4 ${
+              lightMode ? 'border-emerald-200 bg-emerald-50' : 'border-emerald-900/40 bg-emerald-950/30'
             }`}
           >
-            <p className={`text-center text-xs ${lightMode ? 'text-slate-600' : 'text-slate-300'}`}>
-              Abra o WhatsApp no celular → Aparelhos conectados → Conectar um aparelho → escaneie:
+            <p className={`text-xs font-semibold ${lightMode ? 'text-emerald-900' : 'text-emerald-200'}`}>
+              Só com celular — digite este código no WhatsApp
             </p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={evoQr}
-              alt="QR Code WhatsApp Evolution"
-              className="size-56 rounded-lg bg-white p-2 shadow-sm"
-            />
-            <p className="text-[11px] text-slate-400">O status atualiza sozinho após a leitura.</p>
+            <ol className={`mt-2 list-decimal space-y-1 pl-4 text-[11px] ${lightMode ? 'text-emerald-800' : 'text-emerald-100/90'}`}>
+              <li>Abra o WhatsApp neste mesmo celular</li>
+              <li>Menu → Aparelhos conectados → Conectar um aparelho</li>
+              <li>Escolha <strong>Vincular com número de telefone</strong></li>
+              <li>Digite o código abaixo</li>
+            </ol>
+            <p className="mt-4 text-center font-mono text-3xl font-black tracking-[0.35em] text-emerald-400 sm:text-4xl">
+              {evoPairingCode}
+            </p>
+            <p className="mt-2 text-center text-[11px] text-slate-400">O status atualiza sozinho após vincular.</p>
+          </div>
+        ) : null}
+
+        {evoQr ? (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowEvoQr((v) => !v)}
+              className={`text-xs font-semibold underline-offset-2 hover:underline ${
+                lightMode ? 'text-slate-600' : 'text-slate-400'
+              }`}
+            >
+              {showEvoQr ? 'Ocultar QR (PC/tablet)' : 'Tenho computador/tablet — mostrar QR'}
+            </button>
+            {showEvoQr ? (
+              <div
+                className={`mt-3 flex flex-col items-center gap-3 rounded-xl border p-4 ${
+                  lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-[#0f1a2a]'
+                }`}
+              >
+                <p className={`text-center text-xs ${lightMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                  Abra o admin no PC/tablet e escaneie com o WhatsApp do celular (não funciona na mesma tela).
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={evoQr}
+                  alt="QR Code WhatsApp Evolution"
+                  className="size-56 rounded-lg bg-white p-2 shadow-sm"
+                />
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -513,9 +580,6 @@ export default function AdminMarketingTab({
               placeholder="https://seu-n8n.app/webhook/styleflow-whatsapp"
               className={inputClass(lightMode)}
             />
-            <p className="mt-1 text-[11px] text-slate-400">
-              Guia: projeto-leitura/p3/WhatsApp-n8n-Evolution.md
-            </p>
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass(lightMode)}>Token do gateway (opcional)</label>

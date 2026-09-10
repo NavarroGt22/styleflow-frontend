@@ -308,10 +308,12 @@ export async function fetchEvolutionWhatsAppStatus(
 }
 
 export async function connectEvolutionWhatsApp(
-  salonId: string
+  salonId: string,
+  phone?: string
 ): Promise<EvolutionWhatsAppStatus> {
   const response = await authFetch(`/establishments/${salonId}/whatsapp/evolution/connect`, {
     method: 'POST',
+    body: JSON.stringify(phone ? { phone } : {}),
   })
   return parseJson(response)
 }
