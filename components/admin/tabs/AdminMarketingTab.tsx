@@ -519,7 +519,7 @@ export default function AdminMarketingTab({
             }`}
           >
             <p className={`text-xs font-semibold ${lightMode ? 'text-emerald-900' : 'text-emerald-200'}`}>
-              Só com celular — cole este código no WhatsApp
+              PIN de 8 caracteres (formato ABCD-EFGH)
             </p>
             <ol className={`mt-2 list-decimal space-y-1 pl-4 text-[11px] ${lightMode ? 'text-emerald-800' : 'text-emerald-100/90'}`}>
               <li>Abra o WhatsApp neste mesmo celular</li>
@@ -527,28 +527,19 @@ export default function AdminMarketingTab({
               <li>
                 Escolha <strong>Vincular com número de telefone</strong>
               </li>
-              <li>Toque em <strong>Copiar código</strong> abaixo e cole no WhatsApp</li>
+              <li>Digite ou cole o PIN abaixo (só 8 letras/números)</li>
             </ol>
 
-            <div
-              className={`mt-4 rounded-2xl border px-3.5 py-3 ${
-                lightMode ? 'border-slate-200 bg-white' : 'border-slate-600/80 bg-[#152033]'
-              }`}
-            >
-              <p
-                className={`select-all break-all font-mono text-[13px] leading-relaxed underline decoration-sky-400/70 underline-offset-2 sm:text-sm ${
-                  lightMode ? 'text-sky-700' : 'text-sky-300'
-                }`}
-              >
-                {evoPairingCode}
-              </p>
-            </div>
+            <p className="mt-4 text-center font-mono text-3xl font-black tracking-[0.2em] text-emerald-400 sm:text-4xl">
+              {evoPairingCode}
+            </p>
 
             <button
               type="button"
               onClick={async () => {
                 try {
-                  await navigator.clipboard.writeText(evoPairingCode)
+                  // WhatsApp tem 8 caixas — copia sem hífen
+                  await navigator.clipboard.writeText(evoPairingCode.replace(/[^A-Za-z0-9]/g, ''))
                   setPairingCopied(true)
                   window.setTimeout(() => setPairingCopied(false), 2200)
                 } catch {
