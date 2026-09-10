@@ -22,6 +22,16 @@ import {
 } from 'lucide-react'
 import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 import { useTenantFavicon } from '@/lib/client/useTenant'
+import { apiUrl } from '@/lib/config'
+import {
+  clearSession,
+  getSessionToken,
+  getSessionUser,
+  resolveSalonForSlug,
+  setSession,
+  type SessionUser,
+} from '@/lib/auth'
+import { TENANT_LEVEL_LABELS, type TenantLevel } from '@/lib/admin/tenant-plans'
 import AdminServicesTab from './tabs/AdminServicesTab'
 import AdminAgendaTab from './tabs/AdminAgendaTab'
 import AdminFinancialTab from './tabs/AdminFinancialTab'
@@ -33,8 +43,6 @@ import AdminClientsTab from './tabs/AdminClientsTab'
 import AdminMarketingTab from './tabs/AdminMarketingTab'
 import AdminPageShell from './AdminPageShell'
 import type { AdminTab, AdminDashboardProps } from '@/lib/admin/types'
-import { clearSession, getSessionUser, resolveSalonForSlug } from '@/lib/auth'
-import { apiUrl } from '@/lib/config'
 
 const DEFAULT_BRAND = '#d5a85c'
 
@@ -82,10 +90,16 @@ export default function AdminDashboard({
   const resolvedUnit = unitName ?? salonFromSession?.name ?? 'Leleco Barbers'
   const resolvedOwner = ownerName ?? sessionUser?.name ?? 'Joel'
   const brandUpper = resolvedBrand.toUpperCase()
+  const [tenantLevel, setTenantLevel] = useState<TenantLevel>(() => {
+    const level = sessionUser?.tenant?.level
+    if (level === 'FREE' || level === 'BASIC' || level === 'PRO' || level === 'ENTERPRISE') return level
+    return 'BASIC'
+  })
+  const planLabel = TENANT_LEVEL_LABELS[tenantLevel]
   const canUseInventory =
     sessionUser?.role === 'SUPER_ADMIN' ||
-    sessionUser?.tenant?.level === 'PRO' ||
-    sessionUser?.tenant?.level === 'ENTERPRISE' ||
+    tenantLevel === 'PRO' ||
+    tenantLevel === 'ENTERPRISE' ||
     Boolean(sessionUser?.tenant?.inventoryEnabled)
   const visibleTabs = tabs.filter((tab) => tab.id !== 'estoque' || canUseInventory)
 
@@ -100,6 +114,44 @@ export default function AdminDashboard({
   >()
 
   useTenantFavicon(tenantIconUrl)
+
+  // Atualiza plano da sessão (Super Admin pode ter mudado BASIC → PRO sem novo login)
+  useEffect(() => {
+    let cancelled = false
+    async function refreshPlan() {
+      const token = getSessionToken()
+      const refreshToken = typeof window !== 'undefined' ? sessionStorage.getItem('refreshToken') : null
+      if (!token || !refreshToken) return
+      try {
+        const res = await fetch(apiUrl('/auth/me'), {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        const user = (data?.user ?? data) as SessionUser
+        const level = user?.tenant?.level
+        if (cancelled || !user) return
+        if (level === 'FREE' || level === 'BASIC' || level === 'PRO' || level === 'ENTERPRISE') {
+          setTenantLevel(level)
+        }
+        const current = getSessionUser()
+        setSession(token, refreshToken, {
+          ...(current || user),
+          ...user,
+          tenant: {
+            ...(current?.tenant || {}),
+            ...(user.tenant || {}),
+          },
+        })
+      } catch {
+        /* mantém sessão local */
+      }
+    }
+    void refreshPlan()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleNavigateTab = (
     tab: AdminTab,
@@ -223,7 +275,7 @@ export default function AdminDashboard({
             </p>
             <h1 className={`text-lg font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{resolvedBrand}</h1>
             <p className={`mt-1 text-[9px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              {resolvedUnit} · Plano Básico · /{salonSlug}
+              {resolvedUnit} · Plano {planLabel} · /{salonSlug}
             </p>
           </section>
 
