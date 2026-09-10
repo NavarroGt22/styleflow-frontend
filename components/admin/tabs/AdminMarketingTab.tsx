@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
+  Check,
+  Copy,
   Link2,
   Megaphone,
   MessageCircle,
@@ -166,6 +168,7 @@ export default function AdminMarketingTab({
   const [evoStatus, setEvoStatus] = useState<EvolutionWhatsAppStatus | null>(null)
   const [evoQr, setEvoQr] = useState<string | null>(null)
   const [evoPairingCode, setEvoPairingCode] = useState<string | null>(null)
+  const [pairingCopied, setPairingCopied] = useState(false)
   const [evoPhone, setEvoPhone] = useState('')
   const [evoBusy, setEvoBusy] = useState(false)
   const [showEvoQr, setShowEvoQr] = useState(false)
@@ -267,6 +270,7 @@ export default function AdminMarketingTab({
       setEvoStatus(result)
       setEvoQr(result.qrBase64 || null)
       setEvoPairingCode(result.pairingCode || null)
+      setPairingCopied(false)
       setShowEvoQr(false)
       if (result.connected) {
         setSuccess('WhatsApp conectado na Evolution.')
@@ -515,18 +519,51 @@ export default function AdminMarketingTab({
             }`}
           >
             <p className={`text-xs font-semibold ${lightMode ? 'text-emerald-900' : 'text-emerald-200'}`}>
-              Só com celular — digite este código no WhatsApp
+              Só com celular — cole este código no WhatsApp
             </p>
             <ol className={`mt-2 list-decimal space-y-1 pl-4 text-[11px] ${lightMode ? 'text-emerald-800' : 'text-emerald-100/90'}`}>
               <li>Abra o WhatsApp neste mesmo celular</li>
               <li>Menu → Aparelhos conectados → Conectar um aparelho</li>
-              <li>Escolha <strong>Vincular com número de telefone</strong></li>
-              <li>Digite o código abaixo</li>
+              <li>
+                Escolha <strong>Vincular com número de telefone</strong>
+              </li>
+              <li>Toque em <strong>Copiar código</strong> abaixo e cole no WhatsApp</li>
             </ol>
-            <p className="mt-4 text-center font-mono text-3xl font-black tracking-[0.35em] text-emerald-400 sm:text-4xl">
-              {evoPairingCode}
+
+            <div
+              className={`mt-4 rounded-2xl border px-3.5 py-3 ${
+                lightMode ? 'border-slate-200 bg-white' : 'border-slate-600/80 bg-[#152033]'
+              }`}
+            >
+              <p
+                className={`select-all break-all font-mono text-[13px] leading-relaxed underline decoration-sky-400/70 underline-offset-2 sm:text-sm ${
+                  lightMode ? 'text-sky-700' : 'text-sky-300'
+                }`}
+              >
+                {evoPairingCode}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(evoPairingCode)
+                  setPairingCopied(true)
+                  window.setTimeout(() => setPairingCopied(false), 2200)
+                } catch {
+                  setError('Não foi possível copiar. Segure o código e escolha Copiar.')
+                }
+              }}
+              className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-emerald-400 transition hover:text-emerald-300 active:scale-[0.98]"
+            >
+              {pairingCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              {pairingCopied ? 'Código copiado!' : 'Copiar código'}
+            </button>
+
+            <p className={`mt-2 text-[11px] ${lightMode ? 'text-emerald-700/80' : 'text-slate-400'}`}>
+              O status atualiza sozinho após vincular.
             </p>
-            <p className="mt-2 text-center text-[11px] text-slate-400">O status atualiza sozinho após vincular.</p>
           </div>
         ) : null}
 
