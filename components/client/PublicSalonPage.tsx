@@ -15,6 +15,7 @@ import ClientLanding from '@/components/client/ClientLanding';
 import BookingDateTimePicker from '@/components/client/BookingDateTimePicker';
 import { ClientSalonError, ClientSalonLoading, clientBrandStyles } from '@/components/client/ClientSalonShell';
 import { ClientTopBar } from '@/components/client/ClientTopBar';
+import ClientProfileSheet from '@/components/client/ClientProfileSheet';
 import { BookingHero } from '@/components/client/booking/BookingHero';
 import { DynamicQueueSection } from '@/components/client/queue/DynamicQueueSection';
 import type { QueueSession } from '@/components/client/queue/types';
@@ -90,6 +91,7 @@ export default function PublicSalonPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(() => readClientSession());
+  const [profileOpen, setProfileOpen] = useState(false);
   const [loyalty, setLoyalty] = useState<any>(null);
 
   const [isDark, setIsDark] = useState(() =>
@@ -672,7 +674,18 @@ export default function PublicSalonPage() {
             isDark={isDark}
             onToggleTheme={() => setIsDark(!isDark)}
             onLogout={handleLogout}
+            onOpenProfile={() => setProfileOpen(true)}
             salonSlug={salonSlug}
+          />
+
+          <ClientProfileSheet
+            open={profileOpen}
+            onClose={() => setProfileOpen(false)}
+            brandColor={brand}
+            isDark={isDark}
+            salonId={data?.salon?.id}
+            currentUser={currentUser}
+            onUserUpdated={(user) => setCurrentUser(user)}
           />
 
           <BookingHero
@@ -1092,7 +1105,18 @@ export default function PublicSalonPage() {
           isDark={isDark}
           onToggleTheme={() => setIsDark(!isDark)}
           onLogout={handleLogout}
+          onOpenProfile={() => setProfileOpen(true)}
           salonSlug={salonSlug}
+        />
+
+        <ClientProfileSheet
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          brandColor={primaryColor || '#d5a85c'}
+          isDark={isDark}
+          salonId={data?.salon?.id}
+          currentUser={currentUser}
+          onUserUpdated={(user) => setCurrentUser(user)}
         />
 
         <DynamicQueueSection

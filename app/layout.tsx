@@ -15,16 +15,32 @@ export const metadata: Metadata = {
   },
   description: 'Agendamento e gestão para barbearias e salões.',
   applicationName: PRODUCT_NAME,
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: PRODUCT_NAME,
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
-    icon: [{ url: '/favicon.svg?v=meucorteja', type: 'image/svg+xml' }],
+    icon: [
+      { url: '/favicon.svg?v=meucorteja', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
     shortcut: '/favicon.svg?v=meucorteja',
-    apple: '/favicon.svg?v=meucorteja',
+    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
 }
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
   themeColor: '#0b0d0e',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

@@ -19,6 +19,7 @@ import {
   Timer,
   Users,
   X,
+  BriefcaseBusiness,
 } from 'lucide-react'
 import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 import { useTenantFavicon } from '@/lib/client/useTenant'
@@ -40,22 +41,27 @@ import AdminStockTab from './tabs/AdminStockTab'
 import AdminQueueTab from './tabs/AdminQueueTab'
 import AdminSalonTab from './tabs/AdminSalonTab'
 import AdminClientsTab from './tabs/AdminClientsTab'
-import AdminMarketingTab from './tabs/AdminMarketingTab'
+import AdminCrmTab from './tabs/AdminCrmTab'
 import AdminPageShell from './AdminPageShell'
 import type { AdminTab, AdminDashboardProps } from '@/lib/admin/types'
 
 const DEFAULT_BRAND = '#d5a85c'
 
-const tabs: { id: AdminTab; label: string; icon: typeof Scissors }[] = [
+/**
+ * ownerOnly espelha as permissões do backend (config/permissions.ts):
+ * FINANCIAL_VIEW_ALL, STAFF_MANAGE, SETTINGS_EDIT, LOYALTY_MANAGE → só OWNER/SUPER_ADMIN.
+ * A API já devolve 403; aqui só escondemos a UI para PROFESSIONAL.
+ */
+const tabs: { id: AdminTab; label: string; icon: typeof Scissors; ownerOnly?: boolean }[] = [
   { id: 'services', label: 'Meus Serviços', icon: Scissors },
   { id: 'agenda', label: 'Agenda', icon: CalendarDays },
   { id: 'clientes', label: 'Clientes', icon: Contact },
-  { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
-  { id: 'equipe', label: 'Equipe', icon: Users },
+  { id: 'financeiro', label: 'Financeiro', icon: DollarSign, ownerOnly: true },
+  { id: 'equipe', label: 'Equipe', icon: Users, ownerOnly: true },
   { id: 'estoque', label: 'Estoque', icon: Package },
   { id: 'fila', label: 'Fila Dinâmica', icon: Timer },
-  { id: 'marketing', label: 'Marketing', icon: MessageCircle },
-  { id: 'salao', label: 'Salão', icon: Store },
+  { id: 'crm', label: 'CRM', icon: BriefcaseBusiness, ownerOnly: true },
+  { id: 'salao', label: 'Salão', icon: Store, ownerOnly: true },
 ]
 
 function resolveBrandColor(options: {
@@ -101,7 +107,11 @@ export default function AdminDashboard({
     tenantLevel === 'PRO' ||
     tenantLevel === 'ENTERPRISE' ||
     Boolean(sessionUser?.tenant?.inventoryEnabled)
-  const visibleTabs = tabs.filter((tab) => tab.id !== 'estoque' || canUseInventory)
+  const isOwner = sessionUser?.role === 'OWNER' || sessionUser?.role === 'SUPER_ADMIN'
+  const visibleTabs = tabs.filter(
+    (tab) => (tab.id !== 'estoque' || canUseInventory) && (!tab.ownerOnly || isOwner),
+  )
+  const canRenderTab = (tab: AdminTab) => visibleTabs.some((t) => t.id === tab)
 
   const [resolvedSalonId, setResolvedSalonId] = useState<string | undefined>(salonId ?? salonFromSession?.id)
   const [fetchedBrandColor, setFetchedBrandColor] = useState<string | null>(null)
@@ -157,6 +167,7 @@ export default function AdminDashboard({
     tab: AdminTab,
     options?: { salonSubTab?: 'general' | 'temas' | 'expediente' | 'comissao' | 'fila' },
   ) => {
+    if (!canRenderTab(tab)) return
     setActiveTab(tab)
     setMobileNavOpen(false)
     setSalonSubTab(tab === 'salao' ? options?.salonSubTab : undefined)
@@ -293,7 +304,7 @@ export default function AdminDashboard({
             </button>
             <button
               type="button"
-              onClick={() => handleNavigateTab('marketing')}
+              onClick={() => handleNavigateTab('crm')}
               className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-[#10251f] transition hover:bg-emerald-400"
             >
               <MessageCircle className="size-3.5" />
@@ -449,9 +460,15 @@ export default function AdminDashboard({
                 {activeTab === 'services' && <AdminServicesTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'agenda' && <AdminAgendaTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'clientes' && <AdminClientsTab salonId={resolvedSalonId} lightMode={lightMode} />}
-                {activeTab === 'financeiro' && <AdminFinancialTab salonId={resolvedSalonId} lightMode={lightMode} />}
-                {activeTab === 'equipe' && <AdminTeamTab salonId={resolvedSalonId} lightMode={lightMode} />}
-                {activeTab === 'estoque' && <AdminStockTab salonId={resolvedSalonId} lightMode={lightMode} />}
+                {activeTab === 'financeiro' && canRenderTab('financeiro') && (
+                  <AdminFinancialTab salonId={resolvedSalonId} lightMode={lightMode} />
+                )}
+                {activeTab === 'equipe' && canRenderTab('equipe') && (
+                  <AdminTeamTab salonId={resolvedSalonId} lightMode={lightMode} />
+                )}
+                {activeTab === 'estoque' && canRenderTab('estoque') && (
+                  <AdminStockTab salonId={resolvedSalonId} lightMode={lightMode} />
+                )}
                 {activeTab === 'fila' && (
                   <AdminQueueTab
                     salonId={resolvedSalonId}
@@ -460,14 +477,14 @@ export default function AdminDashboard({
                     onNavigateTab={handleNavigateTab}
                   />
                 )}
-                {activeTab === 'marketing' && (
-                  <AdminMarketingTab
+                {activeTab === 'crm' && canRenderTab('crm') && (
+                  <AdminCrmTab
                     salonId={resolvedSalonId}
                     salonSlug={salonSlug}
                     lightMode={lightMode}
                   />
                 )}
-                {activeTab === 'salao' && (
+                {activeTab === 'salao' && canRenderTab('salao') && (
                   <AdminSalonTab
                     salonId={resolvedSalonId}
                     lightMode={lightMode}

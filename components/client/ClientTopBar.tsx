@@ -9,6 +9,7 @@ type Props = {
   isDark: boolean
   onToggleTheme: () => void
   onLogout?: () => void
+  onOpenProfile?: () => void
   salonSlug?: string
 }
 
@@ -18,6 +19,7 @@ export function ClientTopBar({
   isDark,
   onToggleTheme,
   onLogout,
+  onOpenProfile,
   salonSlug,
 }: Props) {
   return (
@@ -31,15 +33,18 @@ export function ClientTopBar({
       <div className="flex items-center gap-3">
         {currentUser ? (
           <>
-            <div
-              className={`flex h-9 w-9 items-center justify-center rounded-full border ${
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              aria-label="Abrir meu perfil"
+              className={`flex h-9 w-9 items-center justify-center rounded-full border transition hover:scale-105 ${
                 isDark ? 'border-white/10 bg-white/5 text-slate-300' : 'border-slate-200 bg-slate-100 text-slate-600'
               }`}
               style={{ borderColor: `${brandColor}40` }}
             >
               <User size={16} style={{ color: brandColor }} />
-            </div>
-            <div className="flex items-center gap-2">
+            </button>
+            <button type="button" onClick={onOpenProfile} className="flex items-center gap-2 text-left">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <span
                 className={`text-xs font-extrabold uppercase tracking-wide ${
@@ -48,7 +53,7 @@ export function ClientTopBar({
               >
                 Bem-vindo {currentUser.name}
               </span>
-            </div>
+            </button>
           </>
         ) : (
           <div className="flex items-center gap-2.5">

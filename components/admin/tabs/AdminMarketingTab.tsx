@@ -4,9 +4,12 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   Check,
   Copy,
+  ExternalLink,
+  LayoutTemplate,
   Link2,
   Megaphone,
   MessageCircle,
+  PencilLine,
   QrCode,
   RefreshCw,
   Send,
@@ -45,6 +48,25 @@ const DEFAULT_TEMPLATE =
 const LEGACY_QUEUE_TEMPLATE_HINT = /fila|posi[cç][aã]o|previs[aã]o para as/i
 
 type SendMode = 'one' | 'group' | 'all'
+type ComposeMode = 'template' | 'scratch'
+type SavedTemplate = { id: string; name: string; body: string; updatedAt: string }
+
+const TEMPLATES_KEY = (salonId: string) => `mcj_crm_templates_${salonId}`
+
+function loadSavedTemplates(salonId: string): SavedTemplate[] {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_KEY(salonId))
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as SavedTemplate[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function persistSavedTemplates(salonId: string, list: SavedTemplate[]) {
+  localStorage.setItem(TEMPLATES_KEY(salonId), JSON.stringify(list))
+}
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, '')
@@ -143,7 +165,22 @@ export default function AdminMarketingTab({
   salonId,
   salonSlug,
   lightMode = false,
-}: AdminTabProps & { salonSlug?: string }) {
+  crmPanel = 'all',
+  hideOuterHeader = false,
+}: AdminTabProps & {
+  salonSlug?: string
+  crmPanel?: 'all' | 'marketing' | 'webhook'
+  hideOuterHeader?: boolean
+}) {
+  const showWebhook = crmPanel === 'all' || crmPanel === 'webhook'
+  const showMarketing = crmPanel === 'all' || crmPanel === 'marketing'
+
+  const [composeMode, setComposeMode] = useState<ComposeMode>('template')
+  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('system-reminder')
+  const [templateDraftName, setTemplateDraftName] = useState('')
+  const [managingTemplates, setManagingTemplates] = useState(false)
+
   const [salon, setSalon] = useState<SalonSettings | null>(null)
   const [groups, setGroups] = useState<ClientGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -243,6 +280,22 @@ export default function AdminMarketingTab({
   }, [salonId])
 
   useEffect(() => {
+    if (!salonId) return
+    const list = loadSavedTemplates(salonId)
+    setSavedTemplates(list)
+  }, [salonId])
+
+  useEffect(() => {
+    if (!showMarketing || composeMode !== 'template') return
+    if (selectedTemplateId === 'system-reminder') {
+      setManualMessage(template)
+      return
+    }
+    const found = savedTemplates.find((t) => t.id === selectedTemplateId)
+    if (found) setManualMessage(found.body)
+  }, [showMarketing, composeMode, selectedTemplateId, savedTemplates, template])
+
+  useEffect(() => {
     if (!salonId || (!evoQr && !evoPairingCode) || evoStatus?.connected) return
     const id = window.setInterval(() => {
       void loadEvolutionStatus(true)
@@ -324,12 +377,44 @@ export default function AdminMarketingTab({
         whatsappGatewayToken: gatewayToken.trim() || null,
       })
       setSalon(updated)
-      setSuccess('Configurações de Marketing salvas.')
+      setSuccess(crmPanel === 'webhook' ? 'Configurações do webhook salvas.' : 'Configurações de Marketing salvas.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao salvar.')
     } finally {
       setSaving(false)
     }
+  }
+
+  function saveCurrentAsTemplate() {
+    if (!salonId) return
+    const name = templateDraftName.trim() || `Template ${savedTemplates.length + 1}`
+    const body = manualMessage.trim()
+    if (!body) {
+      setError('Escreva a mensagem antes de salvar o template.')
+      return
+    }
+    const next: SavedTemplate = {
+      id: `tpl_${Date.now()}`,
+      name,
+      body,
+      updatedAt: new Date().toISOString(),
+    }
+    const list = [next, ...savedTemplates]
+    setSavedTemplates(list)
+    persistSavedTemplates(salonId, list)
+    setSelectedTemplateId(next.id)
+    setTemplateDraftName('')
+    setComposeMode('template')
+    setSuccess(`Template "${name}" salvo.`)
+  }
+
+  function deleteSelectedTemplate() {
+    if (!salonId || selectedTemplateId === 'system-reminder') return
+    const list = savedTemplates.filter((t) => t.id !== selectedTemplateId)
+    setSavedTemplates(list)
+    persistSavedTemplates(salonId, list)
+    setSelectedTemplateId('system-reminder')
+    setSuccess('Template removido.')
   }
 
   async function handleManualSend(event: FormEvent) {
@@ -390,10 +475,11 @@ export default function AdminMarketingTab({
     }
   }
 
-  if (loading) return <AdminLoading lightMode={lightMode} text="Carregando Marketing..." />
+  if (loading) return <AdminLoading lightMode={lightMode} text="Carregando CRM..." />
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className={hideOuterHeader ? 'space-y-4 sm:space-y-5' : 'space-y-4 sm:space-y-5'}>
+      {!hideOuterHeader ? (
       <div className="flex items-start gap-3">
         <div
           className={`grid size-10 place-items-center rounded-xl ${
@@ -412,6 +498,7 @@ export default function AdminMarketingTab({
           </p>
         </div>
       </div>
+      ) : null}
 
       {error ? <AdminError message={error} /> : null}
       {success ? (
@@ -426,6 +513,8 @@ export default function AdminMarketingTab({
         </p>
       ) : null}
 
+      {showWebhook ? (
+      <>
       <div className={sectionClass(lightMode)}>
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -791,10 +880,125 @@ export default function AdminMarketingTab({
 
         <div className="mt-4 flex justify-end">
           <AdminButton type="submit" disabled={saving}>
-            {saving ? 'Salvando…' : 'Salvar Marketing'}
+            {saving ? 'Salvando…' : 'Salvar Webhook'}
           </AdminButton>
         </div>
       </form>
+      </>
+      ) : null}
+
+      {showMarketing ? (
+      <>
+      <div className={sectionClass(lightMode)}>
+        <h4
+          className={`mb-3 text-sm font-bold uppercase tracking-wide ${
+            lightMode ? 'text-slate-700' : 'text-slate-300'
+          }`}
+        >
+          Como montar a mensagem
+        </h4>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setComposeMode('template')}
+            className={`rounded-xl border p-4 text-left transition ${
+              composeMode === 'template'
+                ? 'border-indigo-500 bg-indigo-500/10'
+                : lightMode
+                  ? 'border-slate-200 bg-slate-50'
+                  : 'border-slate-600 bg-[#142035]/50'
+            }`}
+          >
+            <p className={`flex items-center gap-2 text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+              <LayoutTemplate className="size-4 text-indigo-400" /> Usar template
+            </p>
+            <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              Lista de templates salvos (inclui lembrete da agenda).
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setComposeMode('scratch')
+              setManualMessage('')
+            }}
+            className={`rounded-xl border p-4 text-left transition ${
+              composeMode === 'scratch'
+                ? 'border-indigo-500 bg-indigo-500/10'
+                : lightMode
+                  ? 'border-slate-200 bg-slate-50'
+                  : 'border-slate-600 bg-[#142035]/50'
+            }`}
+          >
+            <p className={`flex items-center gap-2 text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+              <PencilLine className="size-4 text-violet-400" /> Criar na hora
+            </p>
+            <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              Escreve a mensagem agora e escolhe o público para enviar.
+            </p>
+          </button>
+        </div>
+
+        {composeMode === 'template' ? (
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className={labelClass(lightMode)}>Selecionar template</label>
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                className={inputClass(lightMode)}
+              >
+                <option value="system-reminder">Lembrete da agenda (automático)</option>
+                {savedTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => setManagingTemplates((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                lightMode
+                  ? 'border-slate-300 text-slate-700 hover:bg-slate-50'
+                  : 'border-slate-600 text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <ExternalLink className="size-3.5" />
+              {managingTemplates ? 'Fechar templates' : 'Gerenciar templates'}
+            </button>
+            {managingTemplates ? (
+              <div
+                className={`space-y-3 rounded-xl border p-3 ${
+                  lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-[#0f1a2a]'
+                }`}
+              >
+                <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Salve mensagens para confirmação de corte, promoção, retorno etc. O texto do lembrete automático
+                  edita-se na aba Webhook.
+                </p>
+                <input
+                  value={templateDraftName}
+                  onChange={(e) => setTemplateDraftName(e.target.value)}
+                  placeholder="Nome do template (ex: Confirmação de agendamento)"
+                  className={inputClass(lightMode)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <AdminButton type="button" onClick={saveCurrentAsTemplate}>
+                    Salvar mensagem atual como template
+                  </AdminButton>
+                  {selectedTemplateId !== 'system-reminder' ? (
+                    <AdminButton type="button" variant="ghost" onClick={deleteSelectedTemplate}>
+                      Excluir selecionado
+                    </AdminButton>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       <form onSubmit={handleManualSend} className={sectionClass(lightMode)}>
         <div className="mb-4 flex items-center gap-2">
@@ -960,6 +1164,8 @@ export default function AdminMarketingTab({
           </AdminButton>
         </div>
       </form>
+      </>
+      ) : null}
     </div>
   )
 }

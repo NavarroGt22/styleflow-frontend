@@ -23,8 +23,15 @@ function isPassthroughPath(pathname: string): boolean {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/favicon') ||
+    pathname.startsWith('/icons') ||
     pathname.startsWith('/screenshots') ||
     pathname.startsWith('/tenants') ||
+    pathname.startsWith('/sw.js') ||
+    pathname.startsWith('/workbox-') ||
+    pathname.startsWith('/swe-worker') ||
+    pathname.startsWith('/fallback') ||
+    pathname.endsWith('/manifest.webmanifest') ||
+    pathname.startsWith('/offline') ||
     /\.[a-zA-Z0-9]+$/.test(pathname)
   )
 }

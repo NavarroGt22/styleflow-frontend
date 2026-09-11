@@ -68,21 +68,50 @@ export default function QueuePermanentQrCard({ url, salonName, lightMode = false
       setError('Permita pop-ups para imprimir o QR.')
       return
     }
-    win.document.write(`<!doctype html><html><head><title>${title}</title>
-      <style>
-        body{font-family:system-ui,sans-serif;text-align:center;padding:32px;color:#111}
-        h1{font-size:20px;margin:0 0 8px}
-        p{font-size:12px;color:#555;margin:0 0 20px;word-break:break-all}
-        img{width:280px;height:280px}
-        .note{margin-top:24px;font-size:11px;color:#777;max-width:320px;margin-left:auto;margin-right:auto;line-height:1.4}
-      </style></head><body>
-      <h1>${title}</h1>
-      <p>${url}</p>
-      <img src="${dataUrl}" alt="QR Code da fila" />
-      <p class="note">QR permanente: continue válido ao fechar e reabrir a fila em outro dia. Escaneie para abrir a página do salão.</p>
-      <script>window.onload=function(){window.print()}</script>
-      </body></html>`)
-    win.document.close()
+    // Monta o documento via DOM API (sem document.write/innerHTML com dados do salão) — evita XSS
+    // caso salonName/url contenham HTML (achado #10 da auditoria).
+    const doc = win.document
+    doc.open()
+    doc.write('<!doctype html><html><head></head><body></body></html>')
+    doc.close()
+
+    doc.title = title
+
+    const style = doc.createElement('style')
+    style.textContent = `
+      body{font-family:system-ui,sans-serif;text-align:center;padding:32px;color:#111}
+      h1{font-size:20px;margin:0 0 8px}
+      p{font-size:12px;color:#555;margin:0 0 20px;word-break:break-all}
+      img{width:280px;height:280px}
+      .note{margin-top:24px;font-size:11px;color:#777;max-width:320px;margin-left:auto;margin-right:auto;line-height:1.4}
+    `
+    doc.head.appendChild(style)
+
+    const h1 = doc.createElement('h1')
+    h1.textContent = title
+    const urlP = doc.createElement('p')
+    urlP.textContent = url
+    const img = doc.createElement('img')
+    img.alt = 'QR Code da fila'
+    // dataUrl vem do gerador de QR (data:image/png;base64,...) — só aceita esse formato
+    img.src = dataUrl.startsWith('data:image/') ? dataUrl : ''
+    const note = doc.createElement('p')
+    note.className = 'note'
+    note.textContent =
+      'QR permanente: continue válido ao fechar e reabrir a fila em outro dia. Escaneie para abrir a página do salão.'
+
+    doc.body.append(h1, urlP, img, note)
+
+    const triggerPrint = () => {
+      try {
+        win.focus()
+        win.print()
+      } catch {
+        /* popup fechado */
+      }
+    }
+    if (img.complete) triggerPrint()
+    else img.onload = triggerPrint
   }
 
   if (!url) return null

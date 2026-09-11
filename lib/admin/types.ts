@@ -1,4 +1,4 @@
-export type AdminTab = 'services' | 'agenda' | 'financeiro' | 'equipe' | 'estoque' | 'fila' | 'salao' | 'clientes' | 'marketing'
+export type AdminTab = 'services' | 'agenda' | 'financeiro' | 'equipe' | 'estoque' | 'fila' | 'salao' | 'clientes' | 'crm'
 
 export type Product = {
   id: string

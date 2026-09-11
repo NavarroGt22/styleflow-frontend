@@ -74,6 +74,14 @@ function AppointmentActions({
   onCheckout: () => void
   onUnblock: () => void
 }) {
+  function requestCancel() {
+    const message =
+      apt.status === 'CONFIRMED'
+        ? 'Tem certeza que gostaria de cancelar essa confirmação / finalizar a cobrança?'
+        : 'Cancelar este agendamento?'
+    if (confirm(message)) onCancel()
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       {apt.status === 'PENDING' && (
@@ -87,7 +95,7 @@ function AppointmentActions({
           </button>
           <button
             type="button"
-            onClick={onCancel}
+            onClick={requestCancel}
             className="min-h-11 flex-1 rounded-xl border border-red-500/40 px-3 py-2.5 text-sm font-bold text-red-400 transition hover:bg-red-500/10 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
           >
             Cancelar
@@ -95,13 +103,22 @@ function AppointmentActions({
         </>
       )}
       {apt.status === 'CONFIRMED' && (
-        <button
-          type="button"
-          onClick={onCheckout}
-          className="min-h-11 w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 sm:min-h-0 sm:w-auto sm:rounded-lg sm:py-1.5 sm:text-xs"
-        >
-          Finalizar & Cobrar
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={onCheckout}
+            className="min-h-11 flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
+          >
+            Finalizar & Cobrar
+          </button>
+          <button
+            type="button"
+            onClick={requestCancel}
+            className="min-h-11 flex-1 rounded-xl border border-red-500/40 px-3 py-2.5 text-sm font-bold text-red-400 transition hover:bg-red-500/10 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
+          >
+            Cancelar
+          </button>
+        </>
       )}
       {apt.status === 'BLOCKED' && (
         <button
@@ -404,9 +421,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                   <AppointmentActions
                     apt={apt}
                     onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
-                    onCancel={() => {
-                      if (confirm('Cancelar este agendamento?')) handleStatus(apt.id, 'CANCELED_BY_SALON')
-                    }}
+                    onCancel={() => handleStatus(apt.id, 'CANCELED_BY_SALON')}
                     onCheckout={() => setCheckoutApt(apt)}
                     onUnblock={() => {
                       if (confirm('Desbloquear este horário?')) handleStatus(apt.id, 'CANCELED_BY_SALON')
@@ -503,27 +518,23 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                           <AppointmentActions
                             apt={apt}
                             onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
-                            onCancel={() => {
-                              if (confirm('Cancelar este agendamento?')) {
-                                handleStatus(apt.id, 'CANCELED_BY_SALON')
-                              }
-                            }}
-                            onCheckout={() => setCheckoutApt(apt)}
-                            onUnblock={() => {
-                              if (confirm('Desbloquear este horário?')) {
-                                handleStatus(apt.id, 'CANCELED_BY_SALON')
-                              }
-                            }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          onCancel={() => handleStatus(apt.id, 'CANCELED_BY_SALON')}
+                          onCheckout={() => setCheckoutApt(apt)}
+                          onUnblock={() => {
+                            if (confirm('Desbloquear este horário?')) {
+                              handleStatus(apt.id, 'CANCELED_BY_SALON')
+                            }
+                          }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </>
+        </div>
+      </>
       )}
 
       {checkoutApt && salonId ? (
