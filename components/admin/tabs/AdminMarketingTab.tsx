@@ -47,6 +47,22 @@ const DEFAULT_TEMPLATE =
 
 const LEGACY_QUEUE_TEMPLATE_HINT = /fila|posi[cç][aã]o|previs[aã]o para as/i
 
+// Mesmo texto padrão do backend (DEFAULT_BOOKING_WHATSAPP_TEMPLATE)
+const DEFAULT_BOOKING_TEMPLATE =
+  'Olá {cliente}! Seu agendamento na {estabelecimento} foi confirmado: {servico} com {barbeiro} no dia {data} às {horario}. Te esperamos!'
+
+function formatBookingPreview(template: string, estabelecimento: string) {
+  return template
+    .replace(/{cliente}/g, 'João')
+    .replace(/{barbeiro}/g, 'Joel')
+    .replace(/{profissional}/g, 'Joel')
+    .replace(/{servico}/g, 'Corte + barba')
+    .replace(/{data}/g, '12/09/2026')
+    .replace(/{horario}/g, '19:30')
+    .replace(/{tempo}/g, '19:30')
+    .replace(/{estabelecimento}/g, estabelecimento)
+}
+
 type SendMode = 'one' | 'group' | 'all'
 type ComposeMode = 'template' | 'scratch'
 type SavedTemplate = { id: string; name: string; body: string; updatedAt: string }
@@ -193,6 +209,7 @@ export default function AdminMarketingTab({
   const [remindEnabled, setRemindEnabled] = useState(false)
   const [remindMinutes, setRemindMinutes] = useState('10')
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
+  const [bookingTemplate, setBookingTemplate] = useState(DEFAULT_BOOKING_TEMPLATE)
   const [gatewayUrl, setGatewayUrl] = useState('')
   const [gatewayToken, setGatewayToken] = useState('')
 
@@ -263,6 +280,7 @@ export default function AdminMarketingTab({
       setTemplate(
         LEGACY_QUEUE_TEMPLATE_HINT.test(loadedTemplate) ? DEFAULT_TEMPLATE : loadedTemplate
       )
+      setBookingTemplate(data.whatsappBookingTemplate?.trim() || DEFAULT_BOOKING_TEMPLATE)
       setGatewayUrl(data.whatsappGatewayUrl || '')
       setGatewayToken(data.whatsappGatewayToken || '')
       setEvoPhone((current) => current || data.phone || '')
@@ -291,9 +309,13 @@ export default function AdminMarketingTab({
       setManualMessage(template)
       return
     }
+    if (selectedTemplateId === 'system-booking') {
+      setManualMessage(bookingTemplate)
+      return
+    }
     const found = savedTemplates.find((t) => t.id === selectedTemplateId)
     if (found) setManualMessage(found.body)
-  }, [showMarketing, composeMode, selectedTemplateId, savedTemplates, template])
+  }, [showMarketing, composeMode, selectedTemplateId, savedTemplates, template, bookingTemplate])
 
   useEffect(() => {
     if (!salonId || (!evoQr && !evoPairingCode) || evoStatus?.connected) return
@@ -373,6 +395,7 @@ export default function AdminMarketingTab({
         queueNotifyClient: remindEnabled,
         appointmentRemindMinutes: minutes,
         whatsappTemplate: template,
+        whatsappBookingTemplate: bookingTemplate.trim() || null,
         whatsappGatewayUrl: gatewayUrl.trim() || null,
         whatsappGatewayToken: gatewayToken.trim() || null,
       })
@@ -761,6 +784,63 @@ export default function AdminMarketingTab({
               Variáveis preenchidas no envio: {'{cliente}'}, {'{data}'}, {'{tempo}'}, {'{estabelecimento}'}
             </p>
           </div>
+
+          <div className="sm:col-span-2">
+            <label className={labelClass(lightMode)}>Mensagem de confirmação de agendamento (automática)</label>
+            <p className={`mb-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              Enviada na hora em que o cliente <strong>marca o corte</strong>. Escreva o texto do seu jeito: o
+              sistema troca as variáveis pelo nome do cliente, barbeiro, serviço, data e horário.
+            </p>
+            <textarea
+              value={bookingTemplate}
+              onChange={(e) => setBookingTemplate(e.target.value)}
+              rows={4}
+              maxLength={1000}
+              className={`${inputClass(lightMode)} h-auto py-3`}
+              placeholder={DEFAULT_BOOKING_TEMPLATE}
+            />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['{cliente}', 'Nome'],
+                  ['{barbeiro}', 'Barbeiro'],
+                  ['{servico}', 'Serviço'],
+                  ['{data}', 'Data'],
+                  ['{horario}', 'Horário'],
+                  ['{estabelecimento}', 'Salão'],
+                ] as const
+              ).map(([token, label]) => (
+                <button
+                  key={token}
+                  type="button"
+                  onClick={() =>
+                    setBookingTemplate((t) => (t.includes(token) ? t : `${t.trim()} ${token}`.trim()))
+                  }
+                  className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+                    lightMode
+                      ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      : 'border-slate-600 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label} {token}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setBookingTemplate(DEFAULT_BOOKING_TEMPLATE)}
+                className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+                  lightMode
+                    ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                    : 'border-emerald-800 text-emerald-300 hover:bg-emerald-950/40'
+                }`}
+              >
+                Restaurar texto padrão
+              </button>
+            </div>
+            <p className={`mt-2 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              Prévia: {formatBookingPreview(bookingTemplate || DEFAULT_BOOKING_TEMPLATE, salon?.name || 'Barbearia')}
+            </p>
+          </div>
         </div>
 
         <div
@@ -861,6 +941,7 @@ export default function AdminMarketingTab({
                     whatsappGatewayUrl: gatewayUrl.trim() || null,
                     whatsappGatewayToken: gatewayToken.trim() || null,
                     whatsappTemplate: template,
+                    whatsappBookingTemplate: bookingTemplate.trim() || null,
                     queueNotifyClient: remindEnabled,
                     appointmentRemindMinutes: Number(remindMinutes) || 10,
                   })
@@ -949,6 +1030,7 @@ export default function AdminMarketingTab({
                 className={inputClass(lightMode)}
               >
                 <option value="system-reminder">Lembrete da agenda (automático)</option>
+                <option value="system-booking">Confirmação de agendamento (automático)</option>
                 {savedTemplates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -975,8 +1057,8 @@ export default function AdminMarketingTab({
                 }`}
               >
                 <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Salve mensagens para confirmação de corte, promoção, retorno etc. O texto do lembrete automático
-                  edita-se na aba Webhook.
+                  Salve mensagens para promoção, retorno etc. Os textos automáticos (lembrete e confirmação de
+                  agendamento) editam-se na aba Webhook.
                 </p>
                 <input
                   value={templateDraftName}
@@ -988,7 +1070,7 @@ export default function AdminMarketingTab({
                   <AdminButton type="button" onClick={saveCurrentAsTemplate}>
                     Salvar mensagem atual como template
                   </AdminButton>
-                  {selectedTemplateId !== 'system-reminder' ? (
+                  {selectedTemplateId !== 'system-reminder' && selectedTemplateId !== 'system-booking' ? (
                     <AdminButton type="button" variant="ghost" onClick={deleteSelectedTemplate}>
                       Excluir selecionado
                     </AdminButton>
