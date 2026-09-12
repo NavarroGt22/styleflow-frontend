@@ -33,6 +33,7 @@ import {
   TENANT_LEVEL_LABELS,
   type TenantLevel,
 } from '@/lib/admin/tenant-plans'
+import { useConfirm } from '@/components/admin/ui/useConfirm'
 
 type TenantRow = {
   id: string
@@ -154,6 +155,7 @@ function billingStatusLabel(status: string, locked?: boolean) {
 
 export default function SuperAdminDashboard() {
   const router = useRouter()
+  const { confirm, confirmDialog } = useConfirm(false)
   const [ready, setReady] = useState(false)
   const [userName, setUserName] = useState('')
   const [data, setData] = useState<DashboardData | null>(null)
@@ -358,13 +360,19 @@ export default function SuperAdminDashboard() {
   }
 
   async function handleSoftDelete(tenant: TenantRow) {
-    if (
-      !window.confirm(
-        `Excluir "${tenant.name}"?\n\nSoft delete: some da lista, mas os dados ficam no banco (você pode restaurar ou apagar no Neon depois).`
-      )
-    ) {
-      return
-    }
+    const ok = await confirm({
+      message: (
+        <>
+          Excluir <strong>{tenant.name}</strong>?
+          <br />
+          <span className="text-xs opacity-80">
+            Soft delete: some da lista, mas os dados ficam no banco (você pode restaurar depois).
+          </span>
+        </>
+      ),
+      confirmLabel: 'Sim, excluir',
+    })
+    if (!ok) return
     try {
       const res = await authFetch(`/admin/tenants/${tenant.id}`, { method: 'DELETE' })
       const json = await res.json().catch(() => ({}))
@@ -1205,6 +1213,7 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
       ) : null}
+      {confirmDialog}
     </div>
   )
 }

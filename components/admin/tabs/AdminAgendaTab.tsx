@@ -4,6 +4,7 @@ import { CheckCircle2, Clock, Lock, Plus, Scissors, User } from 'lucide-react'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import AdminCheckoutModal from '../AdminCheckoutModal'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminModal, inputClass, labelClass } from '../ui/AdminUi'
+import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, Appointment, Professional } from '@/lib/admin/types'
 import {
   blockAppointment,
@@ -74,13 +75,8 @@ function AppointmentActions({
   onCheckout: () => void
   onUnblock: () => void
 }) {
-  function requestCancel() {
-    const message =
-      apt.status === 'CONFIRMED'
-        ? 'Tem certeza que gostaria de cancelar essa confirmação / finalizar a cobrança?'
-        : 'Cancelar este agendamento?'
-    if (confirm(message)) onCancel()
-  }
+  // A confirmação ("Você tem certeza?") é feita pelo pai, com diálogo dentro do app
+  const requestCancel = onCancel
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -139,6 +135,28 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   const [error, setError] = useState('')
   const [filter, setFilter] = useState<'PENDING' | 'COMPLETED'>('PENDING')
   const [checkoutApt, setCheckoutApt] = useState<Appointment | null>(null)
+  const { confirm, confirmDialog } = useConfirm(lightMode)
+
+  async function requestCancel(apt: Appointment) {
+    const ok = await confirm({
+      message:
+        apt.status === 'CONFIRMED'
+          ? 'Tem certeza que gostaria de cancelar essa confirmação / finalizar a cobrança?'
+          : `Cancelar o agendamento de ${apt.customer?.user?.name || 'cliente'}? O horário ficará vago.`,
+      confirmLabel: 'Sim, cancelar',
+      cancelLabel: 'Voltar',
+    })
+    if (ok) handleStatus(apt.id, 'CANCELED_BY_SALON')
+  }
+
+  async function requestUnblock(apt: Appointment) {
+    const ok = await confirm({
+      message: 'Desbloquear este horário? Ele volta a ficar disponível para agendamento.',
+      confirmLabel: 'Sim, desbloquear',
+      danger: false,
+    })
+    if (ok) handleStatus(apt.id, 'CANCELED_BY_SALON')
+  }
   const [blockOpen, setBlockOpen] = useState(false)
   const [professionals, setProfessionals] = useState<Professional[]>([])
   const [blocking, setBlocking] = useState(false)
@@ -421,11 +439,9 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                   <AppointmentActions
                     apt={apt}
                     onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
-                    onCancel={() => handleStatus(apt.id, 'CANCELED_BY_SALON')}
+                    onCancel={() => requestCancel(apt)}
                     onCheckout={() => setCheckoutApt(apt)}
-                    onUnblock={() => {
-                      if (confirm('Desbloquear este horário?')) handleStatus(apt.id, 'CANCELED_BY_SALON')
-                    }}
+                    onUnblock={() => requestUnblock(apt)}
                   />
                 </article>
               )
@@ -518,13 +534,9 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                           <AppointmentActions
                             apt={apt}
                             onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
-                          onCancel={() => handleStatus(apt.id, 'CANCELED_BY_SALON')}
+                          onCancel={() => requestCancel(apt)}
                           onCheckout={() => setCheckoutApt(apt)}
-                          onUnblock={() => {
-                            if (confirm('Desbloquear este horário?')) {
-                              handleStatus(apt.id, 'CANCELED_BY_SALON')
-                            }
-                          }}
+                          onUnblock={() => requestUnblock(apt)}
                         />
                       </div>
                     </td>
@@ -612,6 +624,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
           </form>
         </AdminModal>
       ) : null}
+      {confirmDialog}
     </div>
   )
 }

@@ -12,6 +12,7 @@ import {
   labelClass,
   sectionClass,
 } from '../ui/AdminUi'
+import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, Professional } from '@/lib/admin/types'
 import { createProfessional, deleteProfessional, fetchProfessionals, updateProfessional } from '@/lib/admin/api'
 import { getSessionUser } from '@/lib/auth'
@@ -25,6 +26,7 @@ function formatPhone(phone?: string | null) {
 }
 
 export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }: AdminTabProps) {
+  const { confirm, confirmDialog } = useConfirm(lightMode)
   const sessionUser = getSessionUser()
   const resolvedOwnerId = ownerUserId ?? sessionUser?.id
 
@@ -139,7 +141,16 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
       setError('Não é possível remover o dono do salão.')
       return
     }
-    if (!confirm(`Remover ${member.user?.name || 'profissional'} da equipe?`)) return
+    const ok = await confirm({
+      message: (
+        <>
+          Remover <strong>{member.user?.name || 'este profissional'}</strong> da equipe? Ele deixa de aparecer para
+          os clientes e perde o acesso ao painel.
+        </>
+      ),
+      confirmLabel: 'Sim, remover',
+    })
+    if (!ok) return
     try {
       await deleteProfessional(member.id)
       await load()
@@ -340,6 +351,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
           </form>
         </AdminModal>
       ) : null}
+      {confirmDialog}
     </section>
   )
 }

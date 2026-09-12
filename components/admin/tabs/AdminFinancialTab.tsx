@@ -12,6 +12,7 @@ import {
   labelClass,
   sectionClass,
 } from '../ui/AdminUi'
+import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, FinancialDashboard, Product, Professional } from '@/lib/admin/types'
 import {
   closeFinancialRegister,
@@ -57,6 +58,7 @@ function rangeForPreset(preset: PeriodPreset): { from?: string; to?: string } {
 }
 
 export default function AdminFinancialTab({ salonId, lightMode = false }: AdminTabProps) {
+  const { confirm, confirmDialog } = useConfirm(lightMode)
   const [data, setData] = useState<FinancialDashboard | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [team, setTeam] = useState<Professional[]>([])
@@ -189,7 +191,13 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
   }
 
   async function handleClose() {
-    if (!salonId || !confirm('Fechar o caixa do dia e baixar o relatório?')) return
+    if (!salonId) return
+    const ok = await confirm({
+      message: 'Fechar o caixa do dia e baixar o relatório? Depois de fechado, as vendas de hoje ficam consolidadas.',
+      confirmLabel: 'Sim, fechar caixa',
+      danger: false,
+    })
+    if (!ok) return
     setClosing(true)
     try {
       downloadCsv()
@@ -454,6 +462,7 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
       ) : (
         <AdminEmpty lightMode={lightMode} text="Sem dados financeiros." />
       )}
+      {confirmDialog}
     </section>
   )
 }

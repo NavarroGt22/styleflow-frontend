@@ -12,6 +12,7 @@ import {
   labelClass,
   sectionClass,
 } from '../ui/AdminUi'
+import { useConfirm } from '../ui/useConfirm'
 import type {
   AdminTabProps,
   CustomersListResponse,
@@ -59,6 +60,7 @@ function formatPhone(phone?: string | null) {
 }
 
 export default function AdminClientsTab({ salonId, lightMode = false }: AdminTabProps) {
+  const { confirm, confirmDialog } = useConfirm(lightMode)
   const [subTab, setSubTab] = useState<ClientsSubTab>('lista')
   const [data, setData] = useState<CustomersListResponse | null>(null)
   const [rewards, setRewards] = useState<LoyaltyReward[]>([])
@@ -788,7 +790,16 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                           <button
                             type="button"
                             onClick={async () => {
-                              if (!confirm(`Excluir o grupo "${group.name}"?`)) return
+                              const ok = await confirm({
+                                message: (
+                                  <>
+                                    Excluir o grupo <strong>{group.name}</strong>? Os clientes não são apagados,
+                                    só deixam de fazer parte deste grupo.
+                                  </>
+                                ),
+                                confirmLabel: 'Sim, excluir',
+                              })
+                              if (!ok) return
                               await deleteClientGroup(group.id)
                               if (editingGroupId === group.id) setEditingGroupId(null)
                               await load()
@@ -1175,7 +1186,16 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                         variant="danger"
                         disabled={isToggling}
                         onClick={async () => {
-                          if (!confirm('Excluir cupom?')) return
+                          const ok = await confirm({
+                            message: (
+                              <>
+                                Excluir o cupom <strong>{coupon.code}</strong>? Ele deixa de valer para novos
+                                agendamentos.
+                              </>
+                            ),
+                            confirmLabel: 'Sim, excluir',
+                          })
+                          if (!ok) return
                           await deleteCoupon(coupon.id)
                           await load()
                         }}
@@ -1191,6 +1211,7 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
           </div>
         </div>
       ) : null}
+      {confirmDialog}
     </section>
   )
 }

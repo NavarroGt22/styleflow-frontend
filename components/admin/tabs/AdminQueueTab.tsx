@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import AdminCheckoutModal from '../AdminCheckoutModal'
 import QueuePermanentQrCard from '../QueuePermanentQrCard'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminModal, inputClass, labelClass } from '../ui/AdminUi'
+import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, Appointment, Professional, QueueEntry, QueueSession, Service } from '@/lib/admin/types'
 import { resolveQueuePublicUrl } from '@/lib/admin/platform-urls'
 import {
@@ -63,6 +64,7 @@ function entryDuration(entry: QueueEntry) {
 }
 
 export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, onNavigateTab }: AdminTabProps) {
+  const { confirm, confirmDialog } = useConfirm(lightMode)
   const [salon, setSalon] = useState<{
     name?: string
     queueMode?: boolean
@@ -218,7 +220,11 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
   }
 
   async function handleSkip(entryId: string) {
-    if (!confirm('Registrar ausência e pular este cliente?')) return
+    const ok = await confirm({
+      message: 'Registrar ausência e pular este cliente? Ele sai da vez e o próximo é chamado.',
+      confirmLabel: 'Sim, pular',
+    })
+    if (!ok) return
     try {
       await skipQueueEntry(entryId, 'Cliente Ausente')
       await loadSession(selectedProf)
@@ -547,6 +553,7 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
           }}
         />
       ) : null}
+      {confirmDialog}
     </div>
   )
 }

@@ -26,6 +26,7 @@ import {
   labelClass,
   sectionClass,
 } from '../ui/AdminUi'
+import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
 import {
   broadcastSalonWhatsApp,
@@ -208,6 +209,7 @@ export default function AdminMarketingTab({
 
   const [remindEnabled, setRemindEnabled] = useState(false)
   const [remindMinutes, setRemindMinutes] = useState('10')
+  const { confirm, confirmDialog } = useConfirm(lightMode)
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
   const [bookingTemplate, setBookingTemplate] = useState(DEFAULT_BOOKING_TEMPLATE)
   const [gatewayUrl, setGatewayUrl] = useState('')
@@ -366,7 +368,11 @@ export default function AdminMarketingTab({
 
   async function handleDisconnectWhatsApp() {
     if (!salonId) return
-    if (!window.confirm('Desconectar o WhatsApp deste salão na Evolution?')) return
+    const ok = await confirm({
+      message: 'Desconectar o WhatsApp deste salão na Evolution? Os disparos automáticos param até reconectar.',
+      confirmLabel: 'Sim, desconectar',
+    })
+    if (!ok) return
     setEvoBusy(true)
     setError('')
     setSuccess('')
@@ -477,13 +483,21 @@ export default function AdminMarketingTab({
           ? `o grupo "${selectedGroup?.name || 'selecionado'}" (${selectedGroup?._count?.members ?? '?'} membros)`
           : 'todos os clientes com telefone'
 
-      if (
-        !window.confirm(
-          `Enviar esta mensagem para ${targetLabel}?\n\nCada cliente recebe um WhatsApp individual via n8n (não é um grupo do WhatsApp).`
-        )
-      ) {
-        return
-      }
+      const ok = await confirm({
+        title: 'Enviar disparo?',
+        message: (
+          <>
+            Enviar esta mensagem para <strong>{targetLabel}</strong>?
+            <br />
+            <span className="text-xs opacity-80">
+              Cada cliente recebe um WhatsApp individual via n8n (não é um grupo do WhatsApp).
+            </span>
+          </>
+        ),
+        confirmLabel: 'Sim, enviar',
+        danger: false,
+      })
+      if (!ok) return
 
       const result = await broadcastSalonWhatsApp(salonId, {
         message: manualMessage.trim(),
@@ -1248,6 +1262,7 @@ export default function AdminMarketingTab({
       </form>
       </>
       ) : null}
+      {confirmDialog}
     </div>
   )
 }

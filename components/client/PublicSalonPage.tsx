@@ -20,6 +20,7 @@ import { BookingHero } from '@/components/client/booking/BookingHero';
 import { DynamicQueueSection } from '@/components/client/queue/DynamicQueueSection';
 import type { QueueSession } from '@/components/client/queue/types';
 import { readClientSession, setSalonCache } from '@/lib/client/salon-cache';
+import { useConfirm } from '@/components/admin/ui/useConfirm';
 
 const formatInstagramUrl = (url: string) => {
   if (!url) return '';
@@ -97,6 +98,8 @@ export default function PublicSalonPage() {
   const [isDark, setIsDark] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem('theme') !== 'light' : true,
   );
+  // Diálogo "Você tem certeza?" dentro do app (window.confirm falha em PWA instalado)
+  const { confirm: confirmDialogAsk, confirmDialog } = useConfirm(!isDark);
 
   useEffect(() => {
     const root = document.documentElement
@@ -521,9 +524,12 @@ export default function PublicSalonPage() {
   };
 
   const handleLeaveQueue = async (sessionId: string) => {
-    if (!window.confirm('Tem certeza que deseja sair desta fila de atendimento?')) {
-      return;
-    }
+    const ok = await confirmDialogAsk({
+      message: 'Tem certeza que deseja sair desta fila de atendimento? Você perde a sua posição.',
+      confirmLabel: 'Sim, sair da fila',
+      cancelLabel: 'Continuar na fila',
+    });
+    if (!ok) return;
 
     const token = sessionStorage.getItem('client_token');
     if (!token) return;
@@ -1118,6 +1124,7 @@ export default function PublicSalonPage() {
           currentUser={currentUser}
           onUserUpdated={(user) => setCurrentUser(user)}
         />
+        {confirmDialog}
 
         <DynamicQueueSection
           queues={queues as QueueSession[]}

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { PackagePlus, Trash2 } from 'lucide-react'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminStat, inputClass, labelClass, sectionClass } from '../ui/AdminUi'
+import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, Product } from '@/lib/admin/types'
 import { createProduct, fetchProducts, restockProduct, sellProduct, softDeleteProduct, updateProduct } from '@/lib/admin/api'
 
@@ -17,6 +18,7 @@ function isArchived(product: Product) {
 }
 
 export default function AdminStockTab({ salonId, lightMode = false }: AdminTabProps) {
+  const { confirm, confirmDialog } = useConfirm(lightMode)
   const [subTab, setSubTab] = useState<StockSubTab>('estoque')
   const [items, setItems] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -116,9 +118,15 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
   }
 
   async function handleSoftDelete(product: Product) {
-    if (!window.confirm(`Remover ${product.name} do estoque? O histórico de vendas e o lucro ficam no Financeiro.`)) {
-      return
-    }
+    const ok = await confirm({
+      message: (
+        <>
+          Remover <strong>{product.name}</strong> do estoque? O histórico de vendas e o lucro ficam no Financeiro.
+        </>
+      ),
+      confirmLabel: 'Sim, remover',
+    })
+    if (!ok) return
     setBusyId(product.id)
     try {
       await softDeleteProduct(product.id)
@@ -375,6 +383,7 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
           </div>
         </div>
       ) : null}
+      {confirmDialog}
     </section>
   )
 }
