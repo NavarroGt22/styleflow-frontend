@@ -121,6 +121,64 @@ export function AdminButton({
   )
 }
 
+/**
+ * Diálogo "Você tem certeza?" dentro do app.
+ * Substitui window.confirm(), que não aparece de forma confiável em PWA instalado (iOS/Android).
+ */
+export function AdminConfirm({
+  title = 'Você tem certeza?',
+  message,
+  confirmLabel = 'Sim, confirmar',
+  cancelLabel = 'Cancelar',
+  danger = false,
+  busy = false,
+  onConfirm,
+  onCancel,
+  lightMode,
+}: {
+  title?: string
+  message: ReactNode
+  confirmLabel?: string
+  cancelLabel?: string
+  danger?: boolean
+  busy?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+  lightMode?: boolean
+}) {
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center"
+    >
+      <button type="button" aria-label="Fechar" className="absolute inset-0 cursor-default" onClick={busy ? undefined : onCancel} />
+      <div
+        className={`relative w-full max-w-sm rounded-2xl border p-5 shadow-2xl ${
+          lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
+        }`}
+      >
+        <h3 className={`text-base font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{title}</h3>
+        <div className={`mt-2 text-sm leading-relaxed ${lightMode ? 'text-slate-600' : 'text-slate-300'}`}>{message}</div>
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <AdminButton variant="ghost" onClick={onCancel} disabled={busy} className="h-10 px-3 text-xs">
+            {cancelLabel}
+          </AdminButton>
+          <AdminButton
+            variant={danger ? 'danger' : 'brand'}
+            onClick={onConfirm}
+            disabled={busy}
+            className={`h-10 px-3 text-xs ${danger ? 'border-rose-300 bg-rose-600 text-white hover:bg-rose-500' : ''}`}
+          >
+            {busy ? 'Aguarde…' : confirmLabel}
+          </AdminButton>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function AdminModal({
   title,
   onClose,

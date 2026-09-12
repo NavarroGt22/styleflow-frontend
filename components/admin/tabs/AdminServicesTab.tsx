@@ -4,6 +4,7 @@ import { CheckCircle2, Clock3, Pencil, Plus, Scissors, Search, Trash2, XCircle }
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   AdminButton,
+  AdminConfirm,
   AdminEmpty,
   AdminError,
   AdminLoading,
@@ -29,6 +30,8 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Service | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   async function load() {
     if (!salonId) {
@@ -117,13 +120,20 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Excluir este serviço? Ele deixará de aparecer para os clientes.')) return
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    const id = deleteTarget.id
+    setDeleting(true)
+    setError('')
     try {
       await deleteService(id)
-      await load()
+      // Soft delete no backend (deletedAt): some da lista na hora
+      setServices((current) => current.filter((item) => item.id !== id))
+      setDeleteTarget(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao excluir.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -204,7 +214,7 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
                 <AdminButton variant="soft" onClick={() => openEdit(service)} className="h-9 px-3 text-xs">
                   <Pencil className="size-3.5" /> Editar
                 </AdminButton>
-                <AdminButton variant="danger" onClick={() => handleDelete(service.id)} className="h-9 px-3 text-xs">
+                <AdminButton variant="danger" onClick={() => setDeleteTarget(service)} className="h-9 px-3 text-xs">
                   <Trash2 className="size-3.5" />
                   Excluir
                 </AdminButton>
@@ -215,6 +225,24 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
       ) : (
         <AdminEmpty lightMode={lightMode} text="Nenhum serviço cadastrado." />
       )}
+
+      {deleteTarget ? (
+        <AdminConfirm
+          lightMode={lightMode}
+          danger
+          busy={deleting}
+          title="Você tem certeza?"
+          message={
+            <>
+              Excluir o serviço <strong>{deleteTarget.name}</strong>? Ele some da sua lista e do agendamento dos
+              clientes. Os agendamentos já feitos com ele continuam no histórico.
+            </>
+          }
+          confirmLabel="Sim, excluir"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      ) : null}
 
       {modalOpen ? (
         <AdminModal

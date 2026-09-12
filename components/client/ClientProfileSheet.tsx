@@ -70,6 +70,7 @@ export default function ClientProfileSheet({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<AppointmentItem | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [upcoming, setUpcoming] = useState<AppointmentItem[]>([])
@@ -152,13 +153,9 @@ export default function ClientProfileSheet({
     }
   }
 
-  async function handleCancel(appointmentId: string, hadCoupon: boolean) {
-    const ok = window.confirm(
-      hadCoupon
-        ? 'Desmarcar este corte? O horário fica vago e o cupom usado neste agendamento será perdido (não poderá reutilizar).'
-        : 'Desmarcar este corte? O horário ficará vago novamente.'
-    )
-    if (!ok) return
+  // Confirmação dentro do app (window.confirm não aparece de forma confiável em PWA instalado)
+  async function handleCancel(appointmentId: string) {
+    setCancelTarget(null)
     setCancelingId(appointmentId)
     setError('')
     setSuccess('')
@@ -222,7 +219,7 @@ export default function ClientProfileSheet({
           <button
             type="button"
             disabled={cancelingId === item.id}
-            onClick={() => handleCancel(item.id, Boolean(item.couponId))}
+            onClick={() => setCancelTarget(item)}
             className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-rose-300 disabled:opacity-50"
           >
             {cancelingId === item.id ? '...' : 'Desmarcar'}
@@ -375,6 +372,56 @@ export default function ClientProfileSheet({
           </div>
         )}
       </div>
+
+      {cancelTarget ? (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Você tem certeza?"
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+        >
+          <button
+            type="button"
+            aria-label="Fechar"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setCancelTarget(null)}
+          />
+          <div
+            className={`relative w-full max-w-sm rounded-2xl border p-5 shadow-2xl ${
+              isDark ? 'border-white/10 bg-[#15181a] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+            }`}
+          >
+            <p className="text-base font-bold">Você tem certeza?</p>
+            <p className={`mt-2 text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              Desmarcar <strong>{cancelTarget.service?.name || 'este corte'}</strong> de{' '}
+              <strong>{formatWhen(cancelTarget.startTime)}</strong>
+              {cancelTarget.professionalName ? ` com ${cancelTarget.professionalName}` : ''}? O horário ficará vago
+              novamente.
+              {cancelTarget.couponId
+                ? ' O cupom usado neste agendamento será perdido (não poderá reutilizar).'
+                : ''}
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelTarget(null)}
+                className={`rounded-xl border px-3 py-2 text-xs font-semibold ${
+                  isDark ? 'border-white/15 text-slate-200' : 'border-slate-300 text-slate-700'
+                }`}
+              >
+                Manter horário
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCancel(cancelTarget.id)}
+                className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-rose-500"
+              >
+                Sim, desmarcar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
