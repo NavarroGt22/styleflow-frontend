@@ -33,17 +33,26 @@ export function ClientTopBar({
       <div className="flex items-center gap-3">
         {currentUser ? (
           <>
-            <button
-              type="button"
-              onClick={onOpenProfile}
-              aria-label="Abrir meu perfil"
-              className={`flex h-9 w-9 items-center justify-center rounded-full border transition hover:scale-105 ${
-                isDark ? 'border-white/10 bg-white/5 text-slate-300' : 'border-slate-200 bg-slate-100 text-slate-600'
-              }`}
-              style={{ borderColor: `${brandColor}40` }}
-            >
-              <User size={16} style={{ color: brandColor }} />
-            </button>
+            {/* Anel pulsando: mostra que o avatar é clicável (abre "Meu perfil") */}
+            <span className="relative inline-flex">
+              <span
+                aria-hidden
+                className="absolute inset-0 animate-ping rounded-full opacity-60"
+                style={{ backgroundColor: `${brandColor}55` }}
+              />
+              <button
+                type="button"
+                onClick={onOpenProfile}
+                aria-label="Abrir meu perfil"
+                title="Meus cortes e meus dados"
+                className={`relative flex h-9 w-9 items-center justify-center rounded-full border transition hover:scale-105 ${
+                  isDark ? 'border-white/10 bg-white/5 text-slate-300' : 'border-slate-200 bg-slate-100 text-slate-600'
+                }`}
+                style={{ borderColor: `${brandColor}40` }}
+              >
+                <User size={16} style={{ color: brandColor }} />
+              </button>
+            </span>
             <button type="button" onClick={onOpenProfile} className="flex items-center gap-2 text-left">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <span

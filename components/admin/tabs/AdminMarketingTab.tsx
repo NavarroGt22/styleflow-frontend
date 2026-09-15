@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react'
 import {
   Check,
   Copy,
@@ -52,16 +52,125 @@ const LEGACY_QUEUE_TEMPLATE_HINT = /fila|posi[cç][aã]o|previs[aã]o para as/i
 const DEFAULT_BOOKING_TEMPLATE =
   'Olá {cliente}! Seu agendamento na {estabelecimento} foi confirmado: {servico} com {barbeiro} no dia {data} às {horario}. Te esperamos!'
 
-function formatBookingPreview(template: string, estabelecimento: string) {
+// Mesmos textos padrão do backend (whatsapp-gateway.service.ts)
+const DEFAULT_CANCEL_SALON_TEMPLATE =
+  'Agendamento cancelado pelo estabelecimento!!\n\n' +
+  'Olá {cliente}, tudo bem?\n' +
+  'Seu horário {data} às {horario} foi cancelado!!\n\n' +
+  'Em caso de dúvidas, responda essa mensagem!'
+
+const DEFAULT_CANCEL_CLIENT_TEMPLATE =
+  'Olá {cliente}, tudo bem?\n\n' +
+  'Você cancelou seu agendamento do dia {data} às {horario}. Gostaria de remarcar um horário?\n' +
+  '{link}\n\n' +
+  'Estamos esperando você!'
+
+const DEFAULT_RESCHEDULE_TEMPLATE =
+  'Olá {cliente}, tudo bem?\n\n' +
+  'Seu horário na {estabelecimento} mudou: {servico} com {barbeiro} agora é dia {data} às {horario} ' +
+  '(antes era {data_anterior} às {horario_anterior}).\n\n' +
+  'Te esperamos!'
+
+const SYSTEM_TEMPLATE_OPTIONS = [
+  { id: 'system-reminder', label: 'Lembrete da agenda (automático)' },
+  { id: 'system-booking', label: 'Confirmação de agendamento (automático)' },
+  { id: 'system-cancel-salon', label: 'Cancelamento pelo estabelecimento (automático)' },
+  { id: 'system-cancel-client', label: 'Cancelamento pelo cliente (automático)' },
+  { id: 'system-reschedule', label: 'Remarcação de horário (automático)' },
+] as const
+
+function isSystemTemplate(id: string) {
+  return SYSTEM_TEMPLATE_OPTIONS.some((option) => option.id === id)
+}
+
+function formatBookingPreview(template: string, estabelecimento: string, link = '') {
   return template
-    .replace(/{cliente}/g, 'João')
-    .replace(/{barbeiro}/g, 'Joel')
-    .replace(/{profissional}/g, 'Joel')
+    .replace(/{cliente}|{nome_cliente}/g, 'João')
+    .replace(/{barbeiro}|{profissional}/g, 'Joel')
     .replace(/{servico}/g, 'Corte + barba')
-    .replace(/{data}/g, '12/09/2026')
-    .replace(/{horario}/g, '19:30')
-    .replace(/{tempo}/g, '19:30')
+    .replace(/{data_anterior}|{data_antiga}/g, '19/09/2026')
+    .replace(/{horario_anterior}|{hora_anterior}/g, '22:00')
+    .replace(/{data}|{data_agendamento}/g, '19/09/2026')
+    .replace(/{horario}|{hora_agendamento}|{tempo}/g, '19:30')
     .replace(/{estabelecimento}/g, estabelecimento)
+    .replace(/{link}|{link_agendamento}/g, link)
+}
+
+const APPOINTMENT_TOKENS = [
+  ['{cliente}', 'Nome'],
+  ['{barbeiro}', 'Barbeiro'],
+  ['{servico}', 'Serviço'],
+  ['{data}', 'Data'],
+  ['{horario}', 'Horário'],
+  ['{estabelecimento}', 'Salão'],
+] as const
+
+/** Campo de template automático (confirmação, cancelamento, remarcação). */
+function AutoTemplateField({
+  label,
+  hint,
+  value,
+  onChange,
+  defaultValue,
+  tokens,
+  previewName,
+  previewLink,
+  lightMode,
+}: {
+  label: string
+  hint: ReactNode
+  value: string
+  onChange: (next: string) => void
+  defaultValue: string
+  tokens: ReadonlyArray<readonly [string, string]>
+  previewName: string
+  previewLink?: string
+  lightMode: boolean
+}) {
+  return (
+    <div className="sm:col-span-2">
+      <label className={labelClass(lightMode)}>{label}</label>
+      <p className={`mb-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>{hint}</p>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={5}
+        maxLength={1000}
+        className={`${inputClass(lightMode)} h-auto py-3`}
+        placeholder={defaultValue}
+      />
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {tokens.map(([token, tokenLabel]) => (
+          <button
+            key={token}
+            type="button"
+            onClick={() => onChange(value.includes(token) ? value : `${value.trim()} ${token}`.trim())}
+            className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+              lightMode
+                ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                : 'border-slate-600 text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            {tokenLabel} {token}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => onChange(defaultValue)}
+          className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+            lightMode
+              ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+              : 'border-emerald-800 text-emerald-300 hover:bg-emerald-950/40'
+          }`}
+        >
+          Restaurar texto padrão
+        </button>
+      </div>
+      <p className={`mt-2 whitespace-pre-line text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+        Prévia: {formatBookingPreview(value || defaultValue, previewName, previewLink)}
+      </p>
+    </div>
+  )
 }
 
 type SendMode = 'one' | 'group' | 'all'
@@ -212,6 +321,9 @@ export default function AdminMarketingTab({
   const { confirm, confirmDialog } = useConfirm(lightMode)
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
   const [bookingTemplate, setBookingTemplate] = useState(DEFAULT_BOOKING_TEMPLATE)
+  const [cancelSalonTemplate, setCancelSalonTemplate] = useState(DEFAULT_CANCEL_SALON_TEMPLATE)
+  const [cancelClientTemplate, setCancelClientTemplate] = useState(DEFAULT_CANCEL_CLIENT_TEMPLATE)
+  const [rescheduleTemplate, setRescheduleTemplate] = useState(DEFAULT_RESCHEDULE_TEMPLATE)
   const [gatewayUrl, setGatewayUrl] = useState('')
   const [gatewayToken, setGatewayToken] = useState('')
 
@@ -283,6 +395,9 @@ export default function AdminMarketingTab({
         LEGACY_QUEUE_TEMPLATE_HINT.test(loadedTemplate) ? DEFAULT_TEMPLATE : loadedTemplate
       )
       setBookingTemplate(data.whatsappBookingTemplate?.trim() || DEFAULT_BOOKING_TEMPLATE)
+      setCancelSalonTemplate(data.whatsappCancelSalonTemplate?.trim() || DEFAULT_CANCEL_SALON_TEMPLATE)
+      setCancelClientTemplate(data.whatsappCancelClientTemplate?.trim() || DEFAULT_CANCEL_CLIENT_TEMPLATE)
+      setRescheduleTemplate(data.whatsappRescheduleTemplate?.trim() || DEFAULT_RESCHEDULE_TEMPLATE)
       setGatewayUrl(data.whatsappGatewayUrl || '')
       setGatewayToken(data.whatsappGatewayToken || '')
       setEvoPhone((current) => current || data.phone || '')
@@ -307,17 +422,31 @@ export default function AdminMarketingTab({
 
   useEffect(() => {
     if (!showMarketing || composeMode !== 'template') return
-    if (selectedTemplateId === 'system-reminder') {
-      setManualMessage(template)
-      return
+    const systemBodies: Record<string, string> = {
+      'system-reminder': template,
+      'system-booking': bookingTemplate,
+      'system-cancel-salon': cancelSalonTemplate,
+      'system-cancel-client': cancelClientTemplate,
+      'system-reschedule': rescheduleTemplate,
     }
-    if (selectedTemplateId === 'system-booking') {
-      setManualMessage(bookingTemplate)
+    const systemBody = systemBodies[selectedTemplateId]
+    if (systemBody !== undefined) {
+      setManualMessage(systemBody)
       return
     }
     const found = savedTemplates.find((t) => t.id === selectedTemplateId)
     if (found) setManualMessage(found.body)
-  }, [showMarketing, composeMode, selectedTemplateId, savedTemplates, template, bookingTemplate])
+  }, [
+    showMarketing,
+    composeMode,
+    selectedTemplateId,
+    savedTemplates,
+    template,
+    bookingTemplate,
+    cancelSalonTemplate,
+    cancelClientTemplate,
+    rescheduleTemplate,
+  ])
 
   useEffect(() => {
     if (!salonId || (!evoQr && !evoPairingCode) || evoStatus?.connected) return
@@ -402,6 +531,9 @@ export default function AdminMarketingTab({
         appointmentRemindMinutes: minutes,
         whatsappTemplate: template,
         whatsappBookingTemplate: bookingTemplate.trim() || null,
+        whatsappCancelSalonTemplate: cancelSalonTemplate.trim() || null,
+        whatsappCancelClientTemplate: cancelClientTemplate.trim() || null,
+        whatsappRescheduleTemplate: rescheduleTemplate.trim() || null,
         whatsappGatewayUrl: gatewayUrl.trim() || null,
         whatsappGatewayToken: gatewayToken.trim() || null,
       })
@@ -438,7 +570,7 @@ export default function AdminMarketingTab({
   }
 
   function deleteSelectedTemplate() {
-    if (!salonId || selectedTemplateId === 'system-reminder') return
+    if (!salonId || isSystemTemplate(selectedTemplateId)) return
     const list = savedTemplates.filter((t) => t.id !== selectedTemplateId)
     setSavedTemplates(list)
     persistSavedTemplates(salonId, list)
@@ -855,6 +987,60 @@ export default function AdminMarketingTab({
               Prévia: {formatBookingPreview(bookingTemplate || DEFAULT_BOOKING_TEMPLATE, salon?.name || 'Barbearia')}
             </p>
           </div>
+
+          <AutoTemplateField
+            lightMode={lightMode}
+            label="Mensagem de cancelamento feito pelo salão (automática)"
+            hint={
+              <>
+                Enviada quando <strong>você ou a equipe</strong> clica em Cancelar na Agenda. O cliente é avisado
+                na hora de que o horário dele não vai acontecer.
+              </>
+            }
+            value={cancelSalonTemplate}
+            onChange={setCancelSalonTemplate}
+            defaultValue={DEFAULT_CANCEL_SALON_TEMPLATE}
+            tokens={APPOINTMENT_TOKENS}
+            previewName={salon?.name || 'Barbearia'}
+          />
+
+          <AutoTemplateField
+            lightMode={lightMode}
+            label="Mensagem de cancelamento feito pelo cliente (automática)"
+            hint={
+              <>
+                Enviada quando <strong>o próprio cliente</strong> desmarca pelo app. Use {'{link}'} para mandar o
+                link de agendamento e convidar a remarcar.
+              </>
+            }
+            value={cancelClientTemplate}
+            onChange={setCancelClientTemplate}
+            defaultValue={DEFAULT_CANCEL_CLIENT_TEMPLATE}
+            tokens={[...APPOINTMENT_TOKENS, ['{link}', 'Link de agendar']] as const}
+            previewName={salon?.name || 'Barbearia'}
+            previewLink={publicUrl || 'https://app.suabarbearia.com'}
+          />
+
+          <AutoTemplateField
+            lightMode={lightMode}
+            label="Mensagem de horário remarcado (automática)"
+            hint={
+              <>
+                Enviada quando o cliente troca o corte para outro horário vago do mesmo dia. Use{' '}
+                {'{data_anterior}'} e {'{horario_anterior}'} para mostrar como era antes.
+              </>
+            }
+            value={rescheduleTemplate}
+            onChange={setRescheduleTemplate}
+            defaultValue={DEFAULT_RESCHEDULE_TEMPLATE}
+            tokens={
+              [
+                ...APPOINTMENT_TOKENS,
+                ['{horario_anterior}', 'Horário antigo'],
+              ] as const
+            }
+            previewName={salon?.name || 'Barbearia'}
+          />
         </div>
 
         <div
@@ -956,6 +1142,9 @@ export default function AdminMarketingTab({
                     whatsappGatewayToken: gatewayToken.trim() || null,
                     whatsappTemplate: template,
                     whatsappBookingTemplate: bookingTemplate.trim() || null,
+                    whatsappCancelSalonTemplate: cancelSalonTemplate.trim() || null,
+                    whatsappCancelClientTemplate: cancelClientTemplate.trim() || null,
+                    whatsappRescheduleTemplate: rescheduleTemplate.trim() || null,
                     queueNotifyClient: remindEnabled,
                     appointmentRemindMinutes: Number(remindMinutes) || 10,
                   })
@@ -1008,7 +1197,7 @@ export default function AdminMarketingTab({
               <LayoutTemplate className="size-4 text-indigo-400" /> Usar template
             </p>
             <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              Lista de templates salvos (inclui lembrete da agenda).
+              Lista de templates salvos (inclui os textos automáticos).
             </p>
           </button>
           <button
@@ -1043,8 +1232,11 @@ export default function AdminMarketingTab({
                 onChange={(e) => setSelectedTemplateId(e.target.value)}
                 className={inputClass(lightMode)}
               >
-                <option value="system-reminder">Lembrete da agenda (automático)</option>
-                <option value="system-booking">Confirmação de agendamento (automático)</option>
+                {SYSTEM_TEMPLATE_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
                 {savedTemplates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -1071,8 +1263,8 @@ export default function AdminMarketingTab({
                 }`}
               >
                 <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Salve mensagens para promoção, retorno etc. Os textos automáticos (lembrete e confirmação de
-                  agendamento) editam-se na aba Webhook.
+                  Salve mensagens para promoção, retorno etc. Os textos automáticos (lembrete, confirmação,
+                  cancelamentos e remarcação) editam-se na aba Webhook.
                 </p>
                 <input
                   value={templateDraftName}
@@ -1084,7 +1276,7 @@ export default function AdminMarketingTab({
                   <AdminButton type="button" onClick={saveCurrentAsTemplate}>
                     Salvar mensagem atual como template
                   </AdminButton>
-                  {selectedTemplateId !== 'system-reminder' && selectedTemplateId !== 'system-booking' ? (
+                  {!isSystemTemplate(selectedTemplateId) ? (
                     <AdminButton type="button" variant="ghost" onClick={deleteSelectedTemplate}>
                       Excluir selecionado
                     </AdminButton>

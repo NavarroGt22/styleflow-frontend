@@ -1,4 +1,14 @@
-export type AdminTab = 'services' | 'agenda' | 'financeiro' | 'equipe' | 'estoque' | 'fila' | 'salao' | 'clientes' | 'crm'
+export type AdminTab =
+  | 'services'
+  | 'agenda'
+  | 'cancelados'
+  | 'financeiro'
+  | 'equipe'
+  | 'estoque'
+  | 'fila'
+  | 'salao'
+  | 'clientes'
+  | 'crm'
 
 export type Product = {
   id: string
@@ -41,6 +51,14 @@ export type Appointment = {
   professional?: { user?: { name?: string } }
 }
 
+export type CanceledAppointmentsResult = {
+  date: string
+  /** Dono/super admin pode escolher de qual profissional quer ver; funcionário vê só o dele. */
+  canSelectProfessional: boolean
+  professionalId: string | null
+  items: (Appointment & { professionalId?: string })[]
+}
+
 export type Professional = {
   id: string
   userId?: string
@@ -50,6 +68,54 @@ export type Professional = {
   queueMode?: boolean
   isActive?: boolean
   user?: { id?: string; name?: string; email?: string; phone?: string | null; role?: string }
+}
+
+export type FinancialScope = 'SALON' | 'PROFESSIONAL'
+
+export type FinancialSummary = {
+  period: { from: string; to: string }
+  professionalId: string | null
+  scope: FinancialScope
+  services: {
+    gross: number
+    net: number
+    commission: number
+    commissionRate: number | null
+    appointments: number
+  }
+  /** "N/P" no app: venda de produto do estoque, fora do serviço. */
+  products: { revenue: number; quantity: number }
+  expenses: number
+}
+
+export type FinancialDailyPoint = {
+  day: number
+  date: string
+  appointments: number
+  gross: number
+  net: number
+  products: number
+}
+
+export type FinancialDailySeries = {
+  month: string
+  professionalId: string | null
+  days: FinancialDailyPoint[]
+}
+
+export type FinancialServiceRow = {
+  serviceId: string | null
+  name: string
+  category: string | null
+  count: number
+  gross: number
+}
+
+export type FinancialServicesReport = {
+  period: { from: string; to: string }
+  professionalId: string | null
+  services: FinancialServiceRow[]
+  categories: { category: string; count: number; gross: number }[]
 }
 
 export type FinancialDashboard = {
@@ -116,6 +182,16 @@ export type SalonSettings = {
   openWeekdays?: number[]
   closedDayMessage?: string | null
   bookingCalendarMode?: 'WEEK' | 'TODAY'
+  bookingLinkEnabled?: boolean
+  bookingMaxDaysAhead?: number
+  bookingMinAdvanceMinutes?: number
+  bookingAllowClientCancel?: boolean
+  bookingAllowClientReschedule?: boolean
+  bookingCancelMinMinutes?: number
+  bookingSuccessGif?: boolean
+  bookingExtraText?: string | null
+  /** Texto do compartilhamento do "Meu link". Aceita {link} e {estabelecimento}. */
+  bookingShareMessage?: string | null
   instagramUrl?: string | null
   queueMode?: boolean
   queueAutoAdvance?: boolean
@@ -127,6 +203,9 @@ export type SalonSettings = {
   queueSkipTimeoutMin?: number
   whatsappTemplate?: string | null
   whatsappBookingTemplate?: string | null
+  whatsappCancelSalonTemplate?: string | null
+  whatsappCancelClientTemplate?: string | null
+  whatsappRescheduleTemplate?: string | null
   whatsappGatewayUrl?: string | null
   whatsappGatewayToken?: string | null
   ownerId?: string

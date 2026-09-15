@@ -86,6 +86,8 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
     const category = form.category === 'custom' ? form.customCategory.trim() || 'Geral' : form.category
     const payload = {
       name: form.name.trim(),
+      category,
+      // Mantido em sincronia com category enquanto catálogos antigos ainda leem description.
       description: category,
       price: Number(form.price.replace(',', '.')),
       duration: Number(form.duration) || 30,

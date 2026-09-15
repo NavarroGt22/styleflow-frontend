@@ -1,8 +1,12 @@
 import { authFetch } from '@/lib/api'
 import type {
   Appointment,
+  CanceledAppointmentsResult,
   CustomersListResponse,
+  FinancialDailySeries,
   FinancialDashboard,
+  FinancialServicesReport,
+  FinancialSummary,
   LoyaltyReward,
   LoyaltyRewardType,
   Product,
@@ -30,7 +34,8 @@ export function mapService(item: Record<string, unknown>): Service {
   return {
     id: String(item.id),
     name: String(item.name ?? ''),
-    category: String(item.description || 'Geral'),
+    // Catálogos antigos guardavam a categoria em description; o campo próprio tem prioridade.
+    category: String(item.category || item.description || 'Geral'),
     duration: Number(item.duration ?? 30),
     price: Number(item.price ?? 0),
     active: item.isActive !== false,
@@ -50,6 +55,7 @@ export async function createService(payload: {
   price: number
   duration: number
   description?: string
+  category?: string
 }): Promise<Service> {
   const response = await authFetch('/services', {
     method: 'POST',
@@ -60,7 +66,14 @@ export async function createService(payload: {
 
 export async function updateService(
   id: string,
-  payload: { name?: string; price?: number; duration?: number; description?: string; isActive?: boolean },
+  payload: {
+    name?: string
+    price?: number
+    duration?: number
+    description?: string
+    category?: string
+    isActive?: boolean
+  },
 ): Promise<Service> {
   const response = await authFetch(`/services/${id}`, {
     method: 'PUT',
@@ -79,6 +92,16 @@ export async function deleteService(id: string): Promise<void> {
 
 export async function fetchAppointments(salonId: string): Promise<Appointment[]> {
   const response = await authFetch(`/appointments/salon/${salonId}`)
+  return parseJson(response)
+}
+
+export async function fetchCanceledAppointments(
+  salonId: string,
+  filters: { date: string; professionalId?: string },
+): Promise<CanceledAppointmentsResult> {
+  const params = new URLSearchParams({ date: filters.date })
+  if (filters.professionalId) params.set('professionalId', filters.professionalId)
+  const response = await authFetch(`/appointments/salon/${salonId}/canceled?${params.toString()}`)
   return parseJson(response)
 }
 
@@ -125,6 +148,40 @@ export async function fetchFinancials(
   if (range?.to) params.set('to', range.to)
   const qs = params.toString()
   const response = await authFetch(`/financials/salon/${salonId}${qs ? `?${qs}` : ''}`)
+  return parseJson(response)
+}
+
+function reportQuery(filters: { from?: string; to?: string; month?: string; professionalId?: string }) {
+  const params = new URLSearchParams()
+  if (filters.from) params.set('from', filters.from)
+  if (filters.to) params.set('to', filters.to)
+  if (filters.month) params.set('month', filters.month)
+  if (filters.professionalId) params.set('professionalId', filters.professionalId)
+  const qs = params.toString()
+  return qs ? `?${qs}` : ''
+}
+
+export async function fetchFinancialSummary(
+  salonId: string,
+  filters: { from?: string; to?: string; professionalId?: string },
+): Promise<FinancialSummary> {
+  const response = await authFetch(`/financials/salon/${salonId}/summary${reportQuery(filters)}`)
+  return parseJson(response)
+}
+
+export async function fetchFinancialDaily(
+  salonId: string,
+  filters: { month: string; professionalId?: string },
+): Promise<FinancialDailySeries> {
+  const response = await authFetch(`/financials/salon/${salonId}/daily${reportQuery(filters)}`)
+  return parseJson(response)
+}
+
+export async function fetchFinancialServices(
+  salonId: string,
+  filters: { from?: string; to?: string; professionalId?: string },
+): Promise<FinancialServicesReport> {
+  const response = await authFetch(`/financials/salon/${salonId}/services${reportQuery(filters)}`)
   return parseJson(response)
 }
 

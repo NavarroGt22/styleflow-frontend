@@ -33,7 +33,15 @@ type Props = {
   salonId?: string
   currentUser: ClientProfileUser | null
   onUserUpdated: (user: ClientProfileUser) => void
+  /** Configuração "Meu link": salão permite o cliente desmarcar pelo app */
+  allowClientCancel?: boolean
+  /** Antecedência mínima (minutos) para o cliente desmarcar. 0 = até o início */
+  cancelMinMinutes?: number
+  /** Configuração "Meu link": salão permite o cliente trocar de horário no mesmo dia */
+  allowClientReschedule?: boolean
 }
+
+type RescheduleSlot = { time: string; available: boolean; startTime: string }
 
 function formatWhen(iso: string) {
   const d = new Date(iso)
@@ -66,11 +74,19 @@ export default function ClientProfileSheet({
   salonId,
   currentUser,
   onUserUpdated,
+  allowClientCancel = true,
+  cancelMinMinutes = 0,
+  allowClientReschedule = true,
 }: Props) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
   const [cancelTarget, setCancelTarget] = useState<AppointmentItem | null>(null)
+  const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentItem | null>(null)
+  const [rescheduleSlots, setRescheduleSlots] = useState<RescheduleSlot[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [rescheduling, setRescheduling] = useState(false)
+  const [selectedSlot, setSelectedSlot] = useState<RescheduleSlot | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [upcoming, setUpcoming] = useState<AppointmentItem[]>([])
@@ -186,6 +202,72 @@ export default function ClientProfileSheet({
     }
   }
 
+  async function openReschedule(item: AppointmentItem) {
+    setRescheduleTarget(item)
+    setSelectedSlot(null)
+    setRescheduleSlots([])
+    setError('')
+    setSuccess('')
+    setLoadingSlots(true)
+    try {
+      const res = await fetch(apiUrl(`/appointments/${item.id}/reschedule-options`))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Não foi possível ver os horários livres.')
+      setRescheduleSlots(Array.isArray(json.slots) ? json.slots : [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar horários.')
+      setRescheduleTarget(null)
+    } finally {
+      setLoadingSlots(false)
+    }
+  }
+
+  async function confirmReschedule() {
+    if (!rescheduleTarget || !selectedSlot) return
+    const appointmentId = rescheduleTarget.id
+    setRescheduling(true)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await fetch(apiUrl(`/appointments/${appointmentId}/reschedule`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startTime: selectedSlot.startTime }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Não foi possível remarcar.')
+
+      const newStart = json.appointment?.startTime ?? selectedSlot.startTime
+      const newEnd = json.appointment?.endTime
+      const applyNewTime = (apt: AppointmentItem) =>
+        apt.id === appointmentId
+          ? { ...apt, startTime: newStart, endTime: newEnd ?? apt.endTime }
+          : apt
+      setUpcoming((list) => list.map(applyNewTime))
+      setActiveToday((current) => (current ? applyNewTime(current) : current))
+      setSuccess(json.message || `Horário remarcado para ${selectedSlot.time}.`)
+      setRescheduleTarget(null)
+      setSelectedSlot(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao remarcar.')
+    } finally {
+      setRescheduling(false)
+    }
+  }
+
+  // Só mostra "Remarcar" para horários futuros, quando o salão permitir
+  const canRescheduleNow = (item: AppointmentItem) => {
+    if (!allowClientReschedule) return false
+    return new Date(item.startTime).getTime() >= Date.now()
+  }
+
+  // Só mostra "Desmarcar" se o salão permitir e o horário ainda respeitar a antecedência exigida
+  const canCancelNow = (item: AppointmentItem) => {
+    if (!allowClientCancel) return false
+    const startsAt = new Date(item.startTime).getTime()
+    return startsAt >= Date.now() + cancelMinMinutes * 60000
+  }
+
   const card = (item: AppointmentItem, opts?: { allowCancel?: boolean }) => (
     <div
       key={item.id}
@@ -216,14 +298,29 @@ export default function ClientProfileSheet({
           </p>
         </div>
         {opts?.allowCancel ? (
-          <button
-            type="button"
-            disabled={cancelingId === item.id}
-            onClick={() => setCancelTarget(item)}
-            className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-rose-300 disabled:opacity-50"
-          >
-            {cancelingId === item.id ? '...' : 'Desmarcar'}
-          </button>
+          <div className="flex shrink-0 flex-col gap-1.5">
+            {canRescheduleNow(item) ? (
+              <button
+                type="button"
+                disabled={loadingSlots && rescheduleTarget?.id === item.id}
+                onClick={() => openReschedule(item)}
+                className="rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide disabled:opacity-50"
+                style={{ borderColor: `${brandColor}66`, color: brandColor }}
+              >
+                {loadingSlots && rescheduleTarget?.id === item.id ? '...' : 'Remarcar'}
+              </button>
+            ) : null}
+            {canCancelNow(item) ? (
+              <button
+                type="button"
+                disabled={cancelingId === item.id}
+                onClick={() => setCancelTarget(item)}
+                className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-rose-300 disabled:opacity-50"
+              >
+                {cancelingId === item.id ? '...' : 'Desmarcar'}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>
@@ -372,6 +469,89 @@ export default function ClientProfileSheet({
           </div>
         )}
       </div>
+
+      {rescheduleTarget ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Escolher novo horário"
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+        >
+          <button
+            type="button"
+            aria-label="Fechar"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setRescheduleTarget(null)}
+          />
+          <div
+            className={`relative w-full max-w-sm rounded-2xl border p-5 shadow-2xl ${
+              isDark ? 'border-white/10 bg-[#15181a] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+            }`}
+          >
+            <p className="text-base font-bold">Remarcar no mesmo dia</p>
+            <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              {rescheduleTarget.service?.name || 'Seu corte'} · hoje marcado para{' '}
+              {formatWhen(rescheduleTarget.startTime)}
+              {rescheduleTarget.professionalName ? ` com ${rescheduleTarget.professionalName}` : ''}.
+            </p>
+
+            {loadingSlots ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-xs opacity-70">
+                <Loader2 size={14} className="animate-spin" /> Buscando horários livres…
+              </div>
+            ) : rescheduleSlots.every((slot) => !slot.available) ? (
+              <p className={`mt-4 text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                Não há outro horário vago neste dia. Fale com a barbearia para trocar de data.
+              </p>
+            ) : (
+              <div className="mt-4 grid max-h-56 grid-cols-4 gap-2 overflow-y-auto">
+                {rescheduleSlots.map((slot) => {
+                  const chosen = selectedSlot?.startTime === slot.startTime
+                  return (
+                    <button
+                      key={slot.startTime}
+                      type="button"
+                      disabled={!slot.available}
+                      onClick={() => setSelectedSlot(slot)}
+                      className={`rounded-lg border px-1 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                        chosen ? 'text-[#111]' : isDark ? 'text-slate-200' : 'text-slate-700'
+                      }`}
+                      style={
+                        chosen
+                          ? { backgroundColor: brandColor, borderColor: brandColor }
+                          : { borderColor: `${brandColor}40` }
+                      }
+                    >
+                      {slot.time}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRescheduleTarget(null)}
+                className={`rounded-xl border px-3 py-2 text-xs font-semibold ${
+                  isDark ? 'border-white/15 text-slate-200' : 'border-slate-300 text-slate-700'
+                }`}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                disabled={!selectedSlot || rescheduling}
+                onClick={confirmReschedule}
+                className="rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wide text-[#111] disabled:opacity-40"
+                style={{ backgroundColor: brandColor }}
+              >
+                {rescheduling ? 'Remarcando…' : 'Confirmar novo horário'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {cancelTarget ? (
         <div

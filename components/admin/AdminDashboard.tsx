@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   CalendarDays,
+  CalendarX2,
   Camera,
   Contact,
   DollarSign,
+  Link2,
   Lock,
   Menu,
   MessageCircle,
@@ -35,6 +37,7 @@ import {
 import { TENANT_LEVEL_LABELS, type TenantLevel } from '@/lib/admin/tenant-plans'
 import AdminServicesTab from './tabs/AdminServicesTab'
 import AdminAgendaTab from './tabs/AdminAgendaTab'
+import AdminCancelledTab from './tabs/AdminCancelledTab'
 import AdminFinancialTab from './tabs/AdminFinancialTab'
 import AdminTeamTab from './tabs/AdminTeamTab'
 import AdminStockTab from './tabs/AdminStockTab'
@@ -42,6 +45,7 @@ import AdminQueueTab from './tabs/AdminQueueTab'
 import AdminSalonTab from './tabs/AdminSalonTab'
 import AdminClientsTab from './tabs/AdminClientsTab'
 import AdminCrmTab from './tabs/AdminCrmTab'
+import AdminMyLinkPanel from './AdminMyLinkPanel'
 import AdminPageShell from './AdminPageShell'
 import type { AdminTab, AdminDashboardProps } from '@/lib/admin/types'
 
@@ -55,8 +59,10 @@ const DEFAULT_BRAND = '#d5a85c'
 const tabs: { id: AdminTab; label: string; icon: typeof Scissors; ownerOnly?: boolean }[] = [
   { id: 'services', label: 'Meus Serviços', icon: Scissors },
   { id: 'agenda', label: 'Agenda', icon: CalendarDays },
+  { id: 'cancelados', label: 'Cancelados', icon: CalendarX2 },
   { id: 'clientes', label: 'Clientes', icon: Contact },
-  { id: 'financeiro', label: 'Financeiro', icon: DollarSign, ownerOnly: true },
+  // Funcionário entra para ver o próprio faturamento; o caixa/PDV continua só do dono, dentro da aba.
+  { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
   { id: 'equipe', label: 'Equipe', icon: Users, ownerOnly: true },
   { id: 'estoque', label: 'Estoque', icon: Package },
   { id: 'fila', label: 'Fila Dinâmica', icon: Timer },
@@ -119,6 +125,7 @@ export default function AdminDashboard({
   const [activeTab, setActiveTab] = useState<AdminTab>('services')
   const [lightMode, setLightMode] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [myLinkOpen, setMyLinkOpen] = useState(false)
   const [salonSubTab, setSalonSubTab] = useState<
     'general' | 'temas' | 'expediente' | 'comissao' | 'fila' | undefined
   >()
@@ -302,6 +309,20 @@ export default function AdminDashboard({
               <Plus className="size-3.5" />
               Adicionar unidade
             </button>
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={() => setMyLinkOpen(true)}
+                className={`hidden items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition md:inline-flex ${
+                  lightMode
+                    ? 'border-slate-300 text-slate-700 hover:bg-slate-50'
+                    : 'border-slate-600 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <Link2 className="size-3.5" />
+                Meu link
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => handleNavigateTab('crm')}
@@ -390,6 +411,23 @@ export default function AdminDashboard({
                   </button>
                 </div>
                 <nav aria-label="Navegação administrativa mobile" className="flex-1 space-y-1 overflow-y-auto p-3">
+                  {isOwner ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileNavOpen(false)
+                        setMyLinkOpen(true)
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm font-medium transition ${
+                        lightMode
+                          ? 'border-transparent text-slate-600 hover:bg-slate-50'
+                          : 'border-transparent text-slate-300 hover:bg-[#1d2a3e]/70'
+                      }`}
+                    >
+                      <Link2 className="size-4 shrink-0" />
+                      <span className="flex-1">Meu link</span>
+                    </button>
+                  ) : null}
                   {visibleTabs.map(({ id, label, icon: Icon }) => {
                     const selected = activeTab === id
                     return (
@@ -459,6 +497,9 @@ export default function AdminDashboard({
               <>
                 {activeTab === 'services' && <AdminServicesTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'agenda' && <AdminAgendaTab salonId={resolvedSalonId} lightMode={lightMode} />}
+                {activeTab === 'cancelados' && (
+                  <AdminCancelledTab salonId={resolvedSalonId} lightMode={lightMode} />
+                )}
                 {activeTab === 'clientes' && <AdminClientsTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'financeiro' && canRenderTab('financeiro') && (
                   <AdminFinancialTab salonId={resolvedSalonId} lightMode={lightMode} />
@@ -496,6 +537,15 @@ export default function AdminDashboard({
           </section>
         </div>
       </main>
+
+      {myLinkOpen && resolvedSalonId ? (
+        <AdminMyLinkPanel
+          salonId={resolvedSalonId}
+          salonSlug={salonSlug}
+          lightMode={lightMode}
+          onClose={() => setMyLinkOpen(false)}
+        />
+      ) : null}
     </AdminPageShell>
   )
 }

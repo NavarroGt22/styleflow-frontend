@@ -35,7 +35,13 @@ const formatInstagramUrl = (url: string) => {
   return `https://instagram.com/${handle}`;
 };
 
-const generateTimeSlots = (professional: any, selectedDate: string, serviceDuration: number, busySlotsList: any[]) => {
+const generateTimeSlots = (
+  professional: any,
+  selectedDate: string,
+  serviceDuration: number,
+  busySlotsList: any[],
+  minAdvanceMinutes = 0
+) => {
   if (!professional) return [];
   const slots = [];
   const [startHour, startMin] = (professional.workStart || "09:00").split(':').map(Number);
@@ -59,7 +65,9 @@ const generateTimeSlots = (professional: any, selectedDate: string, serviceDurat
     });
 
     const now = new Date();
-    const isPast = slotStart.getTime() < now.getTime();
+    // Antecedência mínima configurada no "Meu link" (0 = pode agendar em cima da hora)
+    const earliest = now.getTime() + minAdvanceMinutes * 60000;
+    const isPast = slotStart.getTime() < earliest;
 
     slots.push({
       time: slotStart.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -660,7 +668,8 @@ export default function PublicSalonPage() {
       selectedProfessional,
       selectedDate,
       displayService?.duration || 30,
-      busySlots
+      busySlots,
+      Number(data?.salon?.bookingMinAdvanceMinutes) || 0
     );
 
     const brand = primaryColor || '#d5a85c';
@@ -692,6 +701,9 @@ export default function PublicSalonPage() {
             salonId={data?.salon?.id}
             currentUser={currentUser}
             onUserUpdated={(user) => setCurrentUser(user)}
+            allowClientCancel={data?.salon?.bookingAllowClientCancel !== false}
+            cancelMinMinutes={Number(data?.salon?.bookingCancelMinMinutes) || 0}
+            allowClientReschedule={data?.salon?.bookingAllowClientReschedule !== false}
           />
 
           <BookingHero
@@ -703,14 +715,33 @@ export default function PublicSalonPage() {
             mode="booking"
           />
 
+          {data?.salon?.bookingLinkEnabled === false ? (
+            <div className="mx-auto mb-4 max-w-xl rounded-xl border border-amber-500/40 bg-amber-50 p-4 text-center text-xs font-bold leading-relaxed text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              O agendamento online está desativado no momento. Fale com a barbearia para marcar seu horário.
+            </div>
+          ) : null}
+
+          {data?.salon?.bookingExtraText ? (
+            <div className="mx-auto mb-4 max-w-xl rounded-xl border border-slate-200 bg-white p-3 text-center text-xs font-medium leading-relaxed text-slate-600 dark:border-white/10 dark:bg-[#1a1816] dark:text-slate-300">
+              {data.salon.bookingExtraText}
+            </div>
+          ) : null}
+
           {currentUser ? (
             /* WIZARD DE AGENDAMENTO COMERCIAL (LOGADO) */
             bookingSuccess ? (
               /* CARD DE AGENDAMENTO CONFIRMADO */
               <div className="mx-auto max-w-md animate-fade-in rounded-2xl border border-emerald-500/30 bg-white p-8 text-center shadow-xl dark:bg-[#1a1816]">
-                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 shadow-md dark:text-emerald-400">
+                <div
+                  className={`mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 shadow-md dark:text-emerald-400 ${
+                    data?.salon?.bookingSuccessGif === false ? '' : 'animate-bounce'
+                  }`}
+                >
                   <CheckCircle size={32} />
                 </div>
+                {data?.salon?.bookingSuccessGif === false ? null : (
+                  <p className="mb-2 text-2xl">🎉</p>
+                )}
                 <h2 className="mb-2 text-2xl font-black text-slate-900 dark:text-white">Reserva Confirmada!</h2>
                 <p className="mb-6 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
                   Seu horário foi agendado com sucesso no {PRODUCT_NAME}.
@@ -927,7 +958,11 @@ export default function PublicSalonPage() {
                       data?.salon?.closedDayMessage ||
                       'Neste dia o barbeiro está de folga. Escolha outro dia para o corte.'
                     }
-                    daysToShow={data?.salon?.bookingCalendarMode === 'TODAY' ? 1 : 7}
+                    daysToShow={
+                      data?.salon?.bookingCalendarMode === 'TODAY'
+                        ? 1
+                        : Math.min(Math.max(Number(data?.salon?.bookingMaxDaysAhead) || 45, 1), 90)
+                    }
                     selectedDate={selectedDate}
                     onSelectDate={(value) => {
                       setSelectedDate(value);
@@ -1048,7 +1083,14 @@ export default function PublicSalonPage() {
 
                     <button
                       onClick={handleSchedule}
-                      disabled={bookingLoading || !selectedService || !selectedProfessional || !selectedDate || !selectedTime}
+                      disabled={
+                        bookingLoading ||
+                        data?.salon?.bookingLinkEnabled === false ||
+                        !selectedService ||
+                        !selectedProfessional ||
+                        !selectedDate ||
+                        !selectedTime
+                      }
                       className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-none py-3.5 px-6 text-sm font-black uppercase tracking-wider text-[#111] shadow-lg transition-all duration-300 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
                       style={{ backgroundColor: brand }}
                     >
@@ -1123,6 +1165,9 @@ export default function PublicSalonPage() {
           salonId={data?.salon?.id}
           currentUser={currentUser}
           onUserUpdated={(user) => setCurrentUser(user)}
+          allowClientCancel={data?.salon?.bookingAllowClientCancel !== false}
+          cancelMinMinutes={Number(data?.salon?.bookingCancelMinMinutes) || 0}
+          allowClientReschedule={data?.salon?.bookingAllowClientReschedule !== false}
         />
         {confirmDialog}
 
