@@ -164,8 +164,10 @@ export default function PublicSalonPage() {
     originalPrice: number;
   } | null>(null);
 
-  const { brandName, primaryColor, logoUrl, faviconUrl } = useTenantBranding(data?.tenant);
+  const { brandName, primaryColor: tenantColor, logoUrl, faviconUrl } = useTenantBranding(data?.tenant);
   useTenantFavicon(faviconUrl || logoUrl || null);
+  // A cor do link é só desta página; sem ela, cai na cor da marca do tenant
+  const primaryColor = (data?.salon?.bookingPrimaryColor as string | undefined) || tenantColor;
 
   useEffect(() => {
     const sessionUser = readClientSession();
@@ -588,8 +590,7 @@ export default function PublicSalonPage() {
   }, [data?.salon?.id]);
 
   if (loading) {
-    const cached = data?.tenant?.primaryColor as string | undefined;
-    return <ClientSalonLoading accent={cached || '#d5a85c'} />;
+    return <ClientSalonLoading accent={primaryColor || '#d5a85c'} />;
   }
 
   if (error || !data) {

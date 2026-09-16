@@ -140,7 +140,7 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
     bookingSuccessGif: true,
     bookingExtraText: '',
     bookingShareMessage: '',
-    primaryColor: '#d5a85c',
+    bookingPrimaryColor: '',
   })
 
   const applySalon = useCallback((data: SalonSettings) => {
@@ -156,7 +156,7 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
       bookingSuccessGif: data.bookingSuccessGif ?? true,
       bookingExtraText: data.bookingExtraText || '',
       bookingShareMessage: data.bookingShareMessage || '',
-      primaryColor: data.tenant?.primaryColor || '#d5a85c',
+      bookingPrimaryColor: data.bookingPrimaryColor || data.tenant?.primaryColor || '#d5a85c',
     })
   }, [])
 
@@ -281,7 +281,7 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
         bookingSuccessGif: form.bookingSuccessGif,
         bookingExtraText: form.bookingExtraText.trim() || null,
         bookingShareMessage: form.bookingShareMessage.trim() || null,
-        primaryColor: form.primaryColor,
+        bookingPrimaryColor: form.bookingPrimaryColor || null,
       }
       if (slug && slug !== salon?.slug) payload.slug = slug
 
@@ -575,16 +575,31 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
                 </div>
 
                 <div>
-                  <span className={groupLabel}>Cor principal da página de agendamento</span>
+                  <span className={groupLabel}>Cor da página de agendamento</span>
                   <div className="flex items-center gap-3">
                     <input
                       type="color"
-                      aria-label="Cor principal"
-                      value={form.primaryColor}
-                      onChange={(e) => setForm((f) => ({ ...f, primaryColor: e.target.value }))}
+                      aria-label="Cor da página de agendamento"
+                      value={form.bookingPrimaryColor || '#d5a85c'}
+                      onChange={(e) => setForm((f) => ({ ...f, bookingPrimaryColor: e.target.value }))}
                       className="h-14 w-full cursor-pointer rounded-2xl border-0 bg-transparent p-0"
                     />
                   </div>
+                  <p className={`mt-1.5 text-xs leading-relaxed ${mutedText}`}>
+                    Vale só para a página que o cliente abre pelo link. O painel e o resto do sistema continuam com a
+                    cor da marca, que fica em Salão → Design.
+                  </p>
+                  {salon?.bookingPrimaryColor ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({ ...f, bookingPrimaryColor: salon?.tenant?.primaryColor || '#d5a85c' }))
+                      }
+                      className="mt-2 text-xs font-bold text-[var(--brand,#d5a85c)] underline"
+                    >
+                      Usar a cor da marca
+                    </button>
+                  ) : null}
                 </div>
 
                 <Toggle

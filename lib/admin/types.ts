@@ -192,6 +192,8 @@ export type SalonSettings = {
   bookingExtraText?: string | null
   /** Texto do compartilhamento do "Meu link". Aceita {link} e {estabelecimento}. */
   bookingShareMessage?: string | null
+  /** Cor só da página pública de agendamento; vazio usa a cor da marca do tenant. */
+  bookingPrimaryColor?: string | null
   instagramUrl?: string | null
   queueMode?: boolean
   queueAutoAdvance?: boolean
