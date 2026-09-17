@@ -292,18 +292,24 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
       })
 
       if (daily?.days.some((d) => d.gross > 0)) {
-        autoTable(doc, {
-          head: [['Dia', 'Atendimentos', 'Bruto', 'Líquido', 'N/P']],
-          body: daily.days
-            .filter((d) => d.gross > 0 || d.products > 0)
-            .map((d) => [
-              String(d.day),
-              String(d.appointments),
-              money(d.gross),
-              money(d.net),
-              money(d.products),
-            ]),
-        })
+        // Série diária só faz sentido quando o filtro cabe num mês.
+        // No anual (IR) o PDF leva o resumo + serviços do período inteiro.
+        const sameMonth =
+          summary.period.from.slice(0, 7) === summary.period.to.slice(0, 7)
+        if (sameMonth) {
+          autoTable(doc, {
+            head: [['Dia', 'Atendimentos', 'Bruto', 'Líquido', 'N/P']],
+            body: daily.days
+              .filter((d) => d.gross > 0 || d.products > 0)
+              .map((d) => [
+                String(d.day),
+                String(d.appointments),
+                money(d.gross),
+                money(d.net),
+                money(d.products),
+              ]),
+          })
+        }
       }
 
       if (servicesReport?.services.length) {
@@ -700,6 +706,22 @@ function DateFilterModal({
       label: 'Últimos 30 dias',
       range: () => ({ from: shiftYmd(todayYmd(), -29), to: todayYmd() }),
     },
+    {
+      id: 'ano',
+      label: 'Este ano',
+      range: () => {
+        const year = Number(todayYmd().slice(0, 4))
+        return { from: `${year}-01-01`, to: todayYmd() }
+      },
+    },
+    {
+      id: 'ano-passado',
+      label: 'Ano passado (IR)',
+      range: () => {
+        const year = Number(todayYmd().slice(0, 4)) - 1
+        return { from: `${year}-01-01`, to: `${year}-12-31` }
+      },
+    },
   ]
 
   const activePresetId =
@@ -748,6 +770,11 @@ function DateFilterModal({
             )
           })}
         </div>
+
+        <p className={`mb-4 text-[11px] leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+          Use <strong className={lightMode ? 'text-slate-700' : 'text-slate-300'}>Ano passado (IR)</strong> para
+          baixar o balanço do ano-calendário completo e declarar o imposto de renda.
+        </p>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
