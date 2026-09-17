@@ -166,12 +166,12 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
   const scopedProfessionalId = professionalId === ALL_PROFESSIONALS ? undefined : professionalId
   const today = todayYmd()
   const chartAlignDay = (() => {
+    // Mês corrente: sempre o dia de hoje no calendário de São Paulo.
+    if (monthKey === today.slice(0, 7)) return Number(today.slice(8, 10))
     if (customRange) {
       const anchor = customRange.to || customRange.from
       if (anchor?.startsWith(monthKey)) return Number(anchor.slice(8, 10))
-      return null
     }
-    if (monthKey === today.slice(0, 7)) return Number(today.slice(8, 10))
     return null
   })()
 

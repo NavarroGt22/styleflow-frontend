@@ -101,11 +101,14 @@ export default function FinancialDailyChart({
   }, [activeDate])
 
   // Abre com o dia atual na esquerda: os 7 dias à frente ficam na viewport.
-  // Arrastar para a esquerda revela o início do mês.
+  // scrollLeft por índice — scrollIntoView em <g>/<rect> do SVG falha no mobile.
   useEffect(() => {
     if (!focusDate || chartDays.length === 0) return
     const scroller = scrollerRef.current
     if (!scroller) return
+
+    const focusIndex = chartDays.findIndex((d) => d.date === focusDate)
+    if (focusIndex < 0) return
 
     let cancelled = false
     let attempts = 0
@@ -113,12 +116,14 @@ export default function FinancialDailyChart({
     const align = () => {
       if (cancelled) return
       attempts += 1
-      const target = scroller.querySelector<SVGElement>(`[data-chart-date="${focusDate}"]`)
-      if (!target || scroller.clientWidth < 40) {
-        if (attempts < 12) window.setTimeout(align, 50)
+      if (scroller.clientWidth < 40) {
+        if (attempts < 16) window.setTimeout(align, 40)
         return
       }
-      target.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'instant' })
+      const step = BAR_WIDTH + BAR_GAP
+      const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth)
+      scroller.scrollLeft = Math.min(focusIndex * step, maxScroll)
+      setActiveDate(focusDate)
     }
 
     const id = window.requestAnimationFrame(() => align())
@@ -187,7 +192,6 @@ export default function FinancialDailyChart({
                 data-chart-day={point.day}
                 className="cursor-pointer"
                 onClick={() => setActiveDate(selected ? null : point.date)}
-                onMouseEnter={() => setActiveDate(point.date)}
               >
                 <rect
                   x={x - BAR_GAP / 2}
