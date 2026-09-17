@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FinancialDailyPoint } from '@/lib/admin/types'
 
 type Props = {
@@ -9,6 +9,8 @@ type Props = {
   brandColor?: string
   /** Dia do mês para alinhar o scroll inicial (ex.: 17). Sem valor = primeiro dia. */
   alignToDay?: number | null
+  /** Quantos dias à frente do alinhamento entram na janela inicial. */
+  daysAhead?: number
 }
 
 const BAR_WIDTH = 26
@@ -24,58 +26,113 @@ function weekdayOf(ymd: string) {
   return WEEKDAYS[new Date(`${ymd}T12:00:00`).getDay()]
 }
 
+function shiftYmd(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T12:00:00`)
+  d.setDate(d.getDate() + days)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function emptyPoint(ymd: string): FinancialDailyPoint {
+  return {
+    day: Number(ymd.slice(8, 10)),
+    date: ymd,
+    appointments: 0,
+    gross: 0,
+    net: 0,
+    products: 0,
+  }
+}
+
+/**
+ * Mantém o histórico do mês e corta o futuro em "hoje + N dias".
+ * Se o horizonte cruzar o mês, completa com dias zerados do mês seguinte.
+ */
+function buildWindow(days: FinancialDailyPoint[], focusDay: number | null, daysAhead: number) {
+  if (!days.length || !focusDay) return days
+
+  const focus = days.find((d) => d.day === focusDay)
+  if (!focus) return days
+
+  const horizon = shiftYmd(focus.date, daysAhead)
+  const byDate = new Map(days.map((d) => [d.date, d]))
+  const result: FinancialDailyPoint[] = days.filter((d) => d.date <= horizon)
+
+  let cursor = days[days.length - 1]?.date ?? focus.date
+  while (cursor < horizon) {
+    cursor = shiftYmd(cursor, 1)
+    if (byDate.has(cursor) || result.some((d) => d.date === cursor)) continue
+    result.push(emptyPoint(cursor))
+  }
+
+  return result
+}
+
 export default function FinancialDailyChart({
   days,
   lightMode = false,
   brandColor = '#d5a85c',
   alignToDay = null,
+  daysAhead = 7,
 }: Props) {
-  const [activeDay, setActiveDay] = useState<number | null>(null)
+  const [activeDate, setActiveDate] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
-  const alignedKeyRef = useRef<string>('')
 
-  const maxGross = Math.max(...days.map((d) => d.gross), 1)
-  const active = days.find((d) => d.day === activeDay) ?? null
+  const chartDays = useMemo(
+    () => buildWindow(days, alignToDay, daysAhead),
+    [days, alignToDay, daysAhead],
+  )
 
-  // Toque fora do gráfico fecha o balão (no celular não existe "sair com o mouse")
+  const maxGross = Math.max(...chartDays.map((d) => d.gross), 1)
+  const active = chartDays.find((d) => d.date === activeDate) ?? null
+  const focusDate = alignToDay ? chartDays.find((d) => d.day === alignToDay)?.date ?? null : null
+  const monthKey = days[0]?.date?.slice(0, 7) ?? ''
+
   useEffect(() => {
-    if (activeDay === null) return
+    if (activeDate === null) return
     function onPointerDown(event: PointerEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) setActiveDay(null)
+      if (!containerRef.current?.contains(event.target as Node)) setActiveDate(null)
     }
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [activeDay])
+  }, [activeDate])
 
-  // No mês corrente, abre já alinhado no dia de hoje. O usuário ainda pode
-  // arrastar para a esquerda e ver o histórico desde o dia 1.
+  // Abre com o dia atual na esquerda: os 7 dias à frente ficam na viewport.
+  // Arrastar para a esquerda revela o início do mês.
   useEffect(() => {
-    if (!alignToDay || days.length === 0) return
-    const key = `${days[0]?.date ?? ''}:${alignToDay}`
-    if (alignedKeyRef.current === key) return
+    if (!focusDate || chartDays.length === 0) return
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    const index = days.findIndex((d) => d.day === alignToDay)
-    if (index < 0) return
+    let cancelled = false
+    let attempts = 0
 
-    alignedKeyRef.current = key
-    const targetLeft = Math.max(
-      0,
-      index * (BAR_WIDTH + BAR_GAP) - scroller.clientWidth / 2 + BAR_WIDTH / 2
-    )
-    requestAnimationFrame(() => {
-      scroller.scrollLeft = targetLeft
-    })
-  }, [days, alignToDay])
+    const align = () => {
+      if (cancelled) return
+      attempts += 1
+      const target = scroller.querySelector<SVGElement>(`[data-chart-date="${focusDate}"]`)
+      if (!target || scroller.clientWidth < 40) {
+        if (attempts < 12) window.setTimeout(align, 50)
+        return
+      }
+      target.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'instant' })
+    }
+
+    const id = window.requestAnimationFrame(() => align())
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(id)
+    }
+  }, [chartDays, focusDate, monthKey])
 
   const muted = lightMode ? 'text-slate-500' : 'text-slate-400'
   const emptyBar = lightMode ? '#e2e8f0' : '#334155'
 
   return (
     <div ref={containerRef} className="relative">
-      {/* Altura reservada: o balão não pode empurrar o gráfico ao abrir. */}
       <div className="mb-3 min-h-[104px]">
         {active ? (
           <div
@@ -101,7 +158,7 @@ export default function FinancialDailyChart({
           >
             Toque numa barra para ver o resumo do dia.
             <br />
-            Arraste para o lado para ver o mês inteiro.
+            Arraste para a esquerda para ver o início do mês.
           </div>
         )}
       </div>
@@ -113,24 +170,25 @@ export default function FinancialDailyChart({
         <svg
           role="img"
           aria-label="Faturamento por dia do mês"
-          width={days.length * (BAR_WIDTH + BAR_GAP)}
+          width={chartDays.length * (BAR_WIDTH + BAR_GAP)}
           height={CHART_HEIGHT + 38}
           className="block"
         >
-          {days.map((point, index) => {
+          {chartDays.map((point, index) => {
             const height = point.gross > 0 ? Math.max((point.gross / maxGross) * CHART_HEIGHT, 6) : 4
             const x = index * (BAR_WIDTH + BAR_GAP)
             const y = CHART_HEIGHT - height
-            const selected = activeDay === point.day
-            const isToday = alignToDay === point.day
+            const selected = activeDate === point.date
+            const isToday = focusDate === point.date
             return (
               <g
                 key={point.date}
+                data-chart-date={point.date}
+                data-chart-day={point.day}
                 className="cursor-pointer"
-                onClick={() => setActiveDay(selected ? null : point.day)}
-                onMouseEnter={() => setActiveDay(point.day)}
+                onClick={() => setActiveDate(selected ? null : point.date)}
+                onMouseEnter={() => setActiveDate(point.date)}
               >
-                {/* Área de toque da coluna inteira: em dia zerado a barra tem 4px. */}
                 <rect
                   x={x - BAR_GAP / 2}
                   y={0}
@@ -145,7 +203,7 @@ export default function FinancialDailyChart({
                   height={height}
                   rx={6}
                   fill={point.gross > 0 ? brandColor : emptyBar}
-                  opacity={selected || activeDay === null ? 1 : 0.45}
+                  opacity={selected || activeDate === null ? 1 : 0.45}
                   className="transition-opacity"
                 />
                 {isToday ? (

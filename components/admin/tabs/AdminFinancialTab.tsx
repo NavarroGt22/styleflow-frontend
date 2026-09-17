@@ -164,6 +164,47 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
 
   const activeRange = customRange ?? monthRange(monthKey)
   const scopedProfessionalId = professionalId === ALL_PROFESSIONALS ? undefined : professionalId
+  const today = todayYmd()
+  const chartAlignDay = (() => {
+    if (customRange) {
+      const anchor = customRange.to || customRange.from
+      if (anchor?.startsWith(monthKey)) return Number(anchor.slice(8, 10))
+      return null
+    }
+    if (monthKey === today.slice(0, 7)) return Number(today.slice(8, 10))
+    return null
+  })()
+
+  const faturamentoPresets: { id: string; label: string; range: () => { from: string; to: string } | null }[] = [
+    { id: 'hoje', label: 'Hoje', range: () => ({ from: today, to: today }) },
+    {
+      id: 'ontem',
+      label: 'Ontem',
+      range: () => {
+        const y = shiftYmd(today, -1)
+        return { from: y, to: y }
+      },
+    },
+    {
+      id: 'semana',
+      label: 'Esta semana',
+      range: () => {
+        const d = new Date(`${today}T12:00:00`)
+        const day = d.getDay()
+        const diff = day === 0 ? 6 : day - 1
+        return { from: shiftYmd(today, -diff), to: today }
+      },
+    },
+    { id: 'mes', label: 'Este mês', range: () => null },
+  ]
+
+  const activeFaturamentoPreset =
+    faturamentoPresets.find((preset) => {
+      const range = preset.range()
+      if (!range) return !customRange
+      return customRange?.from === range.from && customRange?.to === range.to
+    })?.id ?? (customRange ? 'custom' : 'mes')
+
 
   const loadReports = useCallback(async (opts?: { silent?: boolean }) => {
     if (!salonId) {
@@ -367,6 +408,37 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
             <AdminLoading lightMode={lightMode} text="Carregando faturamento..." />
           ) : summary ? (
             <>
+              <div className="mb-1 flex flex-wrap gap-2">
+                {faturamentoPresets.map((preset) => {
+                  const selected = activeFaturamentoPreset === preset.id
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        const range = preset.range()
+                        if (!range) {
+                          setCustomRange(null)
+                          setMonthKey(today.slice(0, 7))
+                          return
+                        }
+                        setCustomRange(range)
+                        setMonthKey(range.to.slice(0, 7))
+                      }}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                        selected
+                          ? 'border-indigo-500 bg-indigo-500/20 text-indigo-200'
+                          : lightMode
+                            ? 'border-slate-200 text-slate-600'
+                            : 'border-slate-600 text-slate-300'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  )
+                })}
+              </div>
+
               <div className={`rounded-2xl border p-4 ${cardBorder}`}>
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${muted}`}>
@@ -393,17 +465,17 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
                 <p className={`mt-0.5 text-sm font-bold ${title}`}>
                   {summary.services.appointments} atendimento{summary.services.appointments === 1 ? '' : 's'}
                 </p>
+                <p className={`mt-1 text-[11px] ${muted}`}>
+                  Período: {periodLabel(summary.period.from, summary.period.to)}
+                </p>
 
                 {daily ? (
                   <div className="mt-4">
                     <FinancialDailyChart
                       days={daily.days}
                       lightMode={lightMode}
-                      alignToDay={
-                        monthKey === todayYmd().slice(0, 7)
-                          ? Number(todayYmd().slice(8, 10))
-                          : null
-                      }
+                      alignToDay={chartAlignDay}
+                      daysAhead={7}
                     />
                   </div>
                 ) : null}
@@ -659,6 +731,9 @@ function DateFilterModal({
                   const range = preset.range()
                   setFrom(range.from)
                   setTo(range.to)
+                  // Aplica na hora: sem isso o usuário fechava o modal achando
+                  // que o atalho já tinha filtrado, e o balanço seguia no mês.
+                  onApply(range)
                 }}
                 className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                   selected
