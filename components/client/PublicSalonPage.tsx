@@ -740,9 +740,6 @@ export default function PublicSalonPage() {
                 >
                   <CheckCircle size={32} />
                 </div>
-                {data?.salon?.bookingSuccessGif === false ? null : (
-                  <p className="mb-2 text-2xl">🎉</p>
-                )}
                 <h2 className="mb-2 text-2xl font-black text-slate-900 dark:text-white">Reserva Confirmada!</h2>
                 <p className="mb-6 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
                   Seu horário foi agendado com sucesso no {PRODUCT_NAME}.
@@ -962,7 +959,8 @@ export default function PublicSalonPage() {
                     daysToShow={
                       data?.salon?.bookingCalendarMode === 'TODAY'
                         ? 1
-                        : Math.min(Math.max(Number(data?.salon?.bookingMaxDaysAhead) || 45, 1), 90)
+                        : // "Semana toda" são 7 dias; o limite de agendamento só encurta a tira
+                          Math.min(7, Math.max(Number(data?.salon?.bookingMaxDaysAhead) || 45, 1))
                     }
                     selectedDate={selectedDate}
                     onSelectDate={(value) => {
