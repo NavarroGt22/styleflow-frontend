@@ -7,6 +7,8 @@ type Props = {
   days: FinancialDailyPoint[]
   lightMode?: boolean
   brandColor?: string
+  /** Dia do mês para alinhar o scroll inicial (ex.: 17). Sem valor = primeiro dia. */
+  alignToDay?: number | null
 }
 
 const BAR_WIDTH = 26
@@ -22,9 +24,16 @@ function weekdayOf(ymd: string) {
   return WEEKDAYS[new Date(`${ymd}T12:00:00`).getDay()]
 }
 
-export default function FinancialDailyChart({ days, lightMode = false, brandColor = '#d5a85c' }: Props) {
+export default function FinancialDailyChart({
+  days,
+  lightMode = false,
+  brandColor = '#d5a85c',
+  alignToDay = null,
+}: Props) {
   const [activeDay, setActiveDay] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  const alignedKeyRef = useRef<string>('')
 
   const maxGross = Math.max(...days.map((d) => d.gross), 1)
   const active = days.find((d) => d.day === activeDay) ?? null
@@ -38,6 +47,28 @@ export default function FinancialDailyChart({ days, lightMode = false, brandColo
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [activeDay])
+
+  // No mês corrente, abre já alinhado no dia de hoje. O usuário ainda pode
+  // arrastar para a esquerda e ver o histórico desde o dia 1.
+  useEffect(() => {
+    if (!alignToDay || days.length === 0) return
+    const key = `${days[0]?.date ?? ''}:${alignToDay}`
+    if (alignedKeyRef.current === key) return
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    const index = days.findIndex((d) => d.day === alignToDay)
+    if (index < 0) return
+
+    alignedKeyRef.current = key
+    const targetLeft = Math.max(
+      0,
+      index * (BAR_WIDTH + BAR_GAP) - scroller.clientWidth / 2 + BAR_WIDTH / 2
+    )
+    requestAnimationFrame(() => {
+      scroller.scrollLeft = targetLeft
+    })
+  }, [days, alignToDay])
 
   const muted = lightMode ? 'text-slate-500' : 'text-slate-400'
   const emptyBar = lightMode ? '#e2e8f0' : '#334155'
@@ -75,7 +106,10 @@ export default function FinancialDailyChart({ days, lightMode = false, brandColo
         )}
       </div>
 
-      <div className="-mx-1 overflow-x-auto overscroll-x-contain px-1 pb-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
+      <div
+        ref={scrollerRef}
+        className="-mx-1 overflow-x-auto overscroll-x-contain px-1 pb-1 scrollbar-none [-webkit-overflow-scrolling:touch]"
+      >
         <svg
           role="img"
           aria-label="Faturamento por dia do mês"
@@ -88,6 +122,7 @@ export default function FinancialDailyChart({ days, lightMode = false, brandColo
             const x = index * (BAR_WIDTH + BAR_GAP)
             const y = CHART_HEIGHT - height
             const selected = activeDay === point.day
+            const isToday = alignToDay === point.day
             return (
               <g
                 key={point.date}
@@ -113,13 +148,23 @@ export default function FinancialDailyChart({ days, lightMode = false, brandColo
                   opacity={selected || activeDay === null ? 1 : 0.45}
                   className="transition-opacity"
                 />
+                {isToday ? (
+                  <rect
+                    x={x - 2}
+                    y={CHART_HEIGHT + 4}
+                    width={BAR_WIDTH + 4}
+                    height={2}
+                    rx={1}
+                    fill={brandColor}
+                  />
+                ) : null}
                 <text
                   x={x + BAR_WIDTH / 2}
                   y={CHART_HEIGHT + 16}
                   textAnchor="middle"
                   fontSize={11}
-                  fontWeight={selected ? 700 : 500}
-                  fill={selected ? brandColor : lightMode ? '#64748b' : '#94a3b8'}
+                  fontWeight={selected || isToday ? 700 : 500}
+                  fill={selected || isToday ? brandColor : lightMode ? '#64748b' : '#94a3b8'}
                 >
                   {point.day}
                 </text>
@@ -130,7 +175,7 @@ export default function FinancialDailyChart({ days, lightMode = false, brandColo
                   fontSize={8}
                   fontWeight={700}
                   letterSpacing={0.3}
-                  fill={selected ? brandColor : lightMode ? '#94a3b8' : '#64748b'}
+                  fill={selected || isToday ? brandColor : lightMode ? '#94a3b8' : '#64748b'}
                 >
                   {weekdayOf(point.date)}
                 </text>

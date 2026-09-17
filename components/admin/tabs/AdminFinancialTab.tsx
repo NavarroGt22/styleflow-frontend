@@ -54,16 +54,24 @@ function money(value: number) {
 }
 
 function toYmd(date: Date) {
-  return date.toISOString().slice(0, 10)
-}
-
-function todayYmd() {
+  // Sempre pelo calendário de São Paulo — toISOString() (UTC) desloca o dia à noite.
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date())
+  }).format(date)
+}
+
+function todayYmd() {
+  return toYmd(new Date())
+}
+
+/** Soma/subtrai dias civis a partir de um YYYY-MM-DD (meio-dia local evita virar o dia). */
+function shiftYmd(ymd: string, days: number) {
+  const d = new Date(`${ymd}T12:00:00`)
+  d.setDate(d.getDate() + days)
+  return toYmd(d)
 }
 
 /** Últimos 12 meses, do mais antigo para o atual. */
@@ -96,26 +104,22 @@ function periodLabel(from: string, to: string): string {
 type PeriodPreset = 'hoje' | 'ontem' | 'semana' | 'mes' | 'sempre' | 'custom'
 
 function rangeForPreset(preset: PeriodPreset): { from?: string; to?: string } {
-  const now = new Date()
-  const today = toYmd(now)
+  const today = todayYmd()
   if (preset === 'sempre') return {}
   if (preset === 'hoje') return { from: today, to: today }
   if (preset === 'ontem') {
-    const d = new Date(now)
-    d.setDate(d.getDate() - 1)
-    const y = toYmd(d)
+    const y = shiftYmd(today, -1)
     return { from: y, to: y }
   }
   if (preset === 'semana') {
-    const d = new Date(now)
+    // Segunda → hoje (calendário local a partir do YYYY-MM-DD de SP)
+    const d = new Date(`${today}T12:00:00`)
     const day = d.getDay()
     const diff = day === 0 ? 6 : day - 1
-    d.setDate(d.getDate() - diff)
-    return { from: toYmd(d), to: today }
+    return { from: shiftYmd(today, -diff), to: today }
   }
   if (preset === 'mes') {
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-    return { from: toYmd(start), to: today }
+    return { from: `${today.slice(0, 7)}-01`, to: today }
   }
   return {}
 }
@@ -392,7 +396,15 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
 
                 {daily ? (
                   <div className="mt-4">
-                    <FinancialDailyChart days={daily.days} lightMode={lightMode} />
+                    <FinancialDailyChart
+                      days={daily.days}
+                      lightMode={lightMode}
+                      alignToDay={
+                        monthKey === todayYmd().slice(0, 7)
+                          ? Number(todayYmd().slice(8, 10))
+                          : null
+                      }
+                    />
                   </div>
                 ) : null}
 
@@ -601,9 +613,7 @@ function DateFilterModal({
       id: 'ontem',
       label: 'Dia anterior',
       range: () => {
-        const d = new Date(`${todayYmd()}T12:00:00`)
-        d.setDate(d.getDate() - 1)
-        const y = toYmd(d)
+        const y = shiftYmd(todayYmd(), -1)
         return { from: y, to: y }
       },
     },
@@ -611,22 +621,20 @@ function DateFilterModal({
     {
       id: 'semana',
       label: 'Últimos 7 dias',
-      range: () => {
-        const d = new Date(`${todayYmd()}T12:00:00`)
-        d.setDate(d.getDate() - 6)
-        return { from: toYmd(d), to: todayYmd() }
-      },
+      range: () => ({ from: shiftYmd(todayYmd(), -6), to: todayYmd() }),
     },
     {
       id: 'mes',
       label: 'Últimos 30 dias',
-      range: () => {
-        const d = new Date(`${todayYmd()}T12:00:00`)
-        d.setDate(d.getDate() - 29)
-        return { from: toYmd(d), to: todayYmd() }
-      },
+      range: () => ({ from: shiftYmd(todayYmd(), -29), to: todayYmd() }),
     },
   ]
+
+  const activePresetId =
+    presets.find((preset) => {
+      const range = preset.range()
+      return range.from === from && range.to === to
+    })?.id ?? null
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center">
@@ -641,22 +649,29 @@ function DateFilterModal({
         </h3>
 
         <div className="mb-4 grid grid-cols-2 gap-2">
-          {presets.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => {
-                const range = preset.range()
-                setFrom(range.from)
-                setTo(range.to)
-              }}
-              className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
-                lightMode ? 'border-slate-200 text-slate-600' : 'border-slate-600 text-slate-300'
-              }`}
-            >
-              {preset.label}
-            </button>
-          ))}
+          {presets.map((preset) => {
+            const selected = activePresetId === preset.id
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => {
+                  const range = preset.range()
+                  setFrom(range.from)
+                  setTo(range.to)
+                }}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                  selected
+                    ? 'border-indigo-500 bg-indigo-500/20 text-indigo-200'
+                    : lightMode
+                      ? 'border-slate-200 text-slate-600'
+                      : 'border-slate-600 text-slate-300'
+                }`}
+              >
+                {preset.label}
+              </button>
+            )
+          })}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -700,7 +715,7 @@ function CashRegisterPanel({
   const [error, setError] = useState('')
   const [closing, setClosing] = useState(false)
   const [selling, setSelling] = useState(false)
-  const [period, setPeriod] = useState<PeriodPreset>('sempre')
+  const [period, setPeriod] = useState<PeriodPreset>('hoje')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [pos, setPos] = useState({ productId: '', professionalId: '', quantity: '1', paymentMethod: 'PIX' })
@@ -719,8 +734,11 @@ function CashRegisterPanel({
     if (!opts?.silent) setLoading(true)
     setError('')
     try {
+      const range = period === 'custom'
+        ? { from: customFrom || undefined, to: customTo || undefined }
+        : rangeForPreset(period)
       const [financials, productList, professionals] = await Promise.all([
-        fetchFinancials(salonId, activeRange),
+        fetchFinancials(salonId, range),
         fetchProducts(salonId),
         fetchProfessionals(salonId),
       ])
