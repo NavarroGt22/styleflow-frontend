@@ -5,11 +5,28 @@ import { useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { getSessionUser, userCanAccessSalon, clearSession, isAdminSessionExpired } from '@/lib/auth'
 import { PRODUCT_NAME } from '@/lib/brand'
+import { isAdminCustomHost, isPlatformHost } from '@/lib/client/domains'
+import { apiUrl } from '@/lib/config'
 import AdminPageShell from './AdminPageShell'
 
 type Props = {
   salonSlug: string
   children: ReactNode
+}
+
+type HostTenant = {
+  id?: string
+  slug?: string
+}
+
+async function fetchHostTenant(host: string): Promise<HostTenant | null> {
+  try {
+    const res = await fetch(apiUrl(`/tenants/by-subdomain/${encodeURIComponent(host)}`))
+    if (!res.ok) return null
+    return (await res.json()) as HostTenant
+  } catch {
+    return null
+  }
 }
 
 export default function AdminAuthGuard({ salonSlug, children }: Props) {
@@ -18,29 +35,79 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
   const [billingLocked, setBillingLocked] = useState(false)
 
   useEffect(() => {
-    const user = getSessionUser()
-    const next = encodeURIComponent(`/admin/${salonSlug}`)
+    let cancelled = false
 
-    if (!user || isAdminSessionExpired()) {
-      if (user) clearSession()
-      router.replace(`/login?next=${next}&reason=session_expired`)
-      return
-    }
+    async function gate() {
+      const user = getSessionUser()
+      const next = encodeURIComponent(`/admin/${salonSlug}`)
+      const host = window.location.host
 
-    if (!userCanAccessSalon(user, salonSlug)) {
-      const fallback = user.salons?.[0]?.slug ?? user.professionalProfile?.salon?.slug
-      if (fallback) {
-        router.replace(`/admin/${fallback}`)
+      if (!user || isAdminSessionExpired()) {
+        if (user) clearSession()
+        router.replace(`/login?next=${next}&reason=session_expired`)
         return
       }
-      router.replace('/login')
-      return
+
+      // White-label: sessão de outra barbearia (ou Super Admin) não pode ficar neste host.
+      if (isAdminCustomHost(host) && !isPlatformHost(host)) {
+        if (user.role === 'SUPER_ADMIN') {
+          clearSession()
+          router.replace('/login')
+          return
+        }
+
+        const hostTenant = await fetchHostTenant(host)
+        if (cancelled) return
+
+        if (!hostTenant?.slug) {
+          clearSession()
+          router.replace('/login')
+          return
+        }
+
+        const sessionTenantSlug =
+          typeof user.tenant?.slug === 'string' ? user.tenant.slug : null
+        if (sessionTenantSlug && sessionTenantSlug !== hostTenant.slug) {
+          clearSession()
+          router.replace('/login')
+          return
+        }
+
+        // Sem tenant.slug na sessão: só libera se o slug da URL for da conta E bater no host.
+        if (!userCanAccessSalon(user, salonSlug)) {
+          clearSession()
+          router.replace('/login')
+          return
+        }
+
+        setBillingLocked(
+          (user.role === 'OWNER' || user.role === 'PROFESSIONAL') && Boolean(user.tenant?.adminLocked),
+        )
+        setReady(true)
+        return
+      }
+
+      // Plataforma: dono só vê o próprio salão; se a URL for de outro, manda para o dele.
+      if (!userCanAccessSalon(user, salonSlug)) {
+        const fallback = user.salons?.[0]?.slug ?? user.professionalProfile?.salon?.slug
+        if (fallback) {
+          router.replace(`/admin/${fallback}`)
+          return
+        }
+        router.replace('/login')
+        return
+      }
+
+      const locked =
+        (user.role === 'OWNER' || user.role === 'PROFESSIONAL') && Boolean(user.tenant?.adminLocked)
+      setBillingLocked(locked)
+      setReady(true)
     }
 
-    const locked =
-      (user.role === 'OWNER' || user.role === 'PROFESSIONAL') && Boolean(user.tenant?.adminLocked)
-    setBillingLocked(locked)
-    setReady(true)
+    void gate()
+    return () => {
+      cancelled = true
+    }
   }, [router, salonSlug])
 
   useEffect(() => {

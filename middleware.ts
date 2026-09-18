@@ -43,10 +43,27 @@ function isPassthroughPath(pathname: string): boolean {
 }
 
 async function resolveSalonSlug(host: string, pathSlug?: string | null): Promise<string | null> {
-  if (pathSlug) return pathSlug
-
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')
-  if (!apiBase) return null
+  if (!apiBase) return pathSlug || null
+
+  // Com slug na URL: só aceita se o salão pertencer ao tenant deste host (fail-closed na API).
+  if (pathSlug) {
+    try {
+      const res = await fetch(`${apiBase}/api/v1/queue/public/${encodeURIComponent(pathSlug)}`, {
+        headers: {
+          Accept: 'application/json',
+          'X-Custom-Host': host,
+        },
+        cache: 'no-store',
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { salon?: { slug?: string } }
+        if (data?.salon?.slug) return data.salon.slug
+      }
+    } catch {
+      /* tenta fallback sem slug */
+    }
+  }
 
   try {
     const queueRes = await fetch(`${apiBase}/api/v1/queue/public`, {
@@ -119,7 +136,7 @@ export async function middleware(req: NextRequest) {
   // admin.<barbearia> → painel (/admin/:slug), nunca /app e NUNCA /platform.
   // O Super Admin só existe no host da plataforma; aqui qualquer /platform vira login.
   if (isAdminCustomHost(host)) {
-    if (pathname.startsWith('/admin') || pathname.startsWith('/login')) {
+    if (pathname.startsWith('/login')) {
       return NextResponse.next()
     }
 
@@ -128,6 +145,41 @@ export async function middleware(req: NextRequest) {
       loginUrl.pathname = '/login'
       loginUrl.search = ''
       return NextResponse.redirect(loginUrl)
+    }
+
+    const adminMatch = pathname.match(/^\/admin\/([^/]+)/)
+    const pathSlug = adminMatch?.[1] ?? null
+    // Valida slug da URL contra o host; se for de outro tenant, cai no salão deste domínio.
+    const hostSalonSlug = await resolveSalonSlug(host, pathSlug)
+
+    if (adminMatch) {
+      if (!hostSalonSlug) {
+        const loginUrl = req.nextUrl.clone()
+        loginUrl.pathname = '/login'
+        loginUrl.search = ''
+        return NextResponse.redirect(loginUrl)
+      }
+      if (adminMatch[1] !== hostSalonSlug) {
+        const adminUrl = req.nextUrl.clone()
+        adminUrl.pathname = `/admin/${hostSalonSlug}`
+        adminUrl.search = ''
+        return NextResponse.redirect(adminUrl)
+      }
+      return NextResponse.next()
+    }
+
+    if (pathname.startsWith('/admin')) {
+      const fallbackSlug = hostSalonSlug ?? (await resolveSalonSlug(host, null))
+      if (!fallbackSlug) {
+        const loginUrl = req.nextUrl.clone()
+        loginUrl.pathname = '/login'
+        loginUrl.search = ''
+        return NextResponse.redirect(loginUrl)
+      }
+      const adminUrl = req.nextUrl.clone()
+      adminUrl.pathname = `/admin/${fallbackSlug}`
+      adminUrl.search = ''
+      return NextResponse.redirect(adminUrl)
     }
 
     const appMatch = pathname.match(/^\/app\/([^/]+)/)

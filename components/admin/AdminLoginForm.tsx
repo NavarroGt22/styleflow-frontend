@@ -14,7 +14,7 @@ import {
 } from '@/lib/admin/login-lockout'
 import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 import { useTenantFavicon } from '@/lib/client/useTenant'
-import { isPlatformHost } from '@/lib/client/domains'
+import { isAdminCustomHost, isPlatformHost } from '@/lib/client/domains'
 import AdminPageShell from './AdminPageShell'
 
 type AdminLoginBranding = {
@@ -251,6 +251,31 @@ export default function AdminLoginForm() {
         ),
       )
       const nextSlug = next?.match(/^\/admin\/([^/?#]+)/)?.[1]
+      const onWhiteLabelAdmin = isAdminCustomHost(window.location.hostname)
+
+      // White-label: destino = salão DESTE host. Nunca /admin/meucorte em admin.outra.com.
+      if (onWhiteLabelAdmin) {
+        let hostSalonSlug: string | null = null
+        try {
+          const queueRes = await fetch(apiUrl('/queue/public'), {
+            headers: { 'X-Custom-Host': window.location.host },
+          })
+          if (queueRes.ok) {
+            const queueData = (await queueRes.json()) as { salon?: { slug?: string } }
+            hostSalonSlug = queueData.salon?.slug ?? null
+          }
+        } catch {
+          /* abaixo */
+        }
+
+        if (!hostSalonSlug || !ownSlugs.has(hostSalonSlug)) {
+          clearSession()
+          throw new Error('Esta conta não pertence a esta barbearia. Use o painel do seu próprio domínio.')
+        }
+
+        router.replace(`/admin/${hostSalonSlug}`)
+        return
+      }
 
       // `next` só é respeitado se apontar para um salão desta conta — nunca para o de outra barbearia.
       if (nextSlug && ownSlugs.has(nextSlug)) {
