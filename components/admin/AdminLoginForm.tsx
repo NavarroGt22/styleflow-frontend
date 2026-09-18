@@ -253,7 +253,8 @@ export default function AdminLoginForm() {
       const nextSlug = next?.match(/^\/admin\/([^/?#]+)/)?.[1]
       const onWhiteLabelAdmin = isAdminCustomHost(window.location.hostname)
 
-      // White-label: destino = salão DESTE host. Nunca /admin/meucorte em admin.outra.com.
+      // White-label: o backend já validou o host no /auth/login.
+      // Aqui só escolhemos o /admin/:slug deste domínio — sem rejeitar dono válido.
       if (onWhiteLabelAdmin) {
         let hostSalonSlug: string | null = null
         try {
@@ -265,15 +266,22 @@ export default function AdminLoginForm() {
             hostSalonSlug = queueData.salon?.slug ?? null
           }
         } catch {
-          /* abaixo */
+          /* usa salão da sessão */
         }
 
-        if (!hostSalonSlug || !ownSlugs.has(hostSalonSlug)) {
+        const destination =
+          (hostSalonSlug && ownSlugs.has(hostSalonSlug) ? hostSalonSlug : null) ||
+          (nextSlug && ownSlugs.has(nextSlug) ? nextSlug : null) ||
+          user.professionalProfile?.salon?.slug ||
+          user.salons?.[0]?.slug ||
+          null
+
+        if (!destination) {
           clearSession()
-          throw new Error('Esta conta não pertence a esta barbearia. Use o painel do seu próprio domínio.')
+          throw new Error('Esta conta não está vinculada a nenhuma unidade neste painel.')
         }
 
-        router.replace(`/admin/${hostSalonSlug}`)
+        router.replace(`/admin/${destination}`)
         return
       }
 
