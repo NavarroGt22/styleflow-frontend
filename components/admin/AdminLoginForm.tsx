@@ -78,7 +78,7 @@ export default function AdminLoginForm() {
 
       for (const key of candidates) {
         try {
-          const res = await fetch(apiUrl(`/tenants/by-subdomain/${encodeURIComponent(key)}`))
+          const res = await fetch(apiUrl(`/tenants/by-subdomain?host=${encodeURIComponent(key)}`))
           if (!res.ok) continue
           const tenant = (await res.json()) as AdminLoginBranding
           if (!cancelled) {

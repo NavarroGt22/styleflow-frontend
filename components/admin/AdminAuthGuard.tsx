@@ -21,7 +21,7 @@ type HostTenant = {
 
 async function fetchHostTenant(host: string): Promise<HostTenant | null> {
   try {
-    const res = await fetch(apiUrl(`/tenants/by-subdomain/${encodeURIComponent(host)}`))
+    const res = await fetch(apiUrl(`/tenants/by-subdomain?host=${encodeURIComponent(host)}`))
     if (!res.ok) return null
     return (await res.json()) as HostTenant
   } catch {
