@@ -59,20 +59,24 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
         const hostTenant = await fetchHostTenant(host)
         if (cancelled) return
 
-        // Falha transitória da API: não derruba sessão; libera se o slug for da conta.
-        if (hostTenant?.slug) {
-          const sessionTenantSlug =
-            typeof user.tenant?.slug === 'string' ? user.tenant.slug : null
-          if (sessionTenantSlug && sessionTenantSlug !== hostTenant.slug) {
-            clearSession()
-            router.replace('/login?reason=wrong_host')
-            return
-          }
+        const sessionTenantSlug =
+          typeof user.tenant?.slug === 'string' ? user.tenant.slug : null
+        // Só com a API respondendo E os dois slugs presentes dá para AFIRMAR que a conta é deste host.
+        const confirmedSameTenant = Boolean(
+          hostTenant?.slug && sessionTenantSlug && sessionTenantSlug === hostTenant.slug,
+        )
+
+        if (hostTenant?.slug && sessionTenantSlug && sessionTenantSlug !== hostTenant.slug) {
+          clearSession()
+          router.replace('/login?reason=wrong_host')
+          return
         }
 
         if (!userCanAccessSalon(user, salonSlug)) {
+          // Redirecionar para o salão "da conta" só quando a conta é comprovadamente
+          // deste tenant. Sem confirmação, nada de /admin/{slugDeOutro} neste host.
           const fallback = user.salons?.[0]?.slug ?? user.professionalProfile?.salon?.slug
-          if (fallback && fallback !== salonSlug) {
+          if (confirmedSameTenant && fallback && fallback !== salonSlug) {
             router.replace(`/admin/${fallback}`)
             return
           }

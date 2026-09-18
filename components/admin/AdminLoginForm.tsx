@@ -72,9 +72,10 @@ export default function AdminLoginForm() {
     async function loadTenantBranding() {
       const host = window.location.hostname
       const slugFromNext = nextPath.match(/^\/admin\/([^/?#]+)/)?.[1] || null
+      const onPlatform = isPlatformHost(host)
       // Em host white-label a marca é SEMPRE a do host (o `next` pode ser de outra barbearia).
       // Em host de plataforma o host não identifica tenant; usa só o slug do `next`.
-      const candidates = (isPlatformHost(host) ? [slugFromNext] : [host]).filter(Boolean) as string[]
+      const candidates = (onPlatform ? [slugFromNext] : [host]).filter(Boolean) as string[]
 
       for (const key of candidates) {
         try {
@@ -90,6 +91,29 @@ export default function AdminLoginForm() {
           return
         } catch {
           /* tenta próximo */
+        }
+      }
+
+      // Plano B no white-label: a fila pública resolve o tenant pelo X-Custom-Host
+      // (cobre API antiga sem a variante ?host= do by-subdomain).
+      if (!onPlatform) {
+        try {
+          const res = await fetch(apiUrl('/queue/public'), {
+            headers: { 'X-Custom-Host': window.location.host },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const tenant = (data?.tenant || null) as AdminLoginBranding | null
+            if (!cancelled && tenant) {
+              setBranding(tenant)
+              if (tenant.customBrandName || tenant.name) {
+                document.title = tenant.customBrandName || tenant.name || PRODUCT_NAME_UPPER
+              }
+              return
+            }
+          }
+        } catch {
+          /* mantém favicon padrão MeuCorteJá */
         }
       }
 

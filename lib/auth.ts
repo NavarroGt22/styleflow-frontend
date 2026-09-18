@@ -14,6 +14,9 @@ export type SessionUser = {
   salons?: SalonSession[]
   professionalProfile?: { salon?: SalonSession }
   tenant?: {
+    /** Slug do tenant — usado pelo AuthGuard para validar host white-label */
+    slug?: string
+    id?: string
     adminLocked?: boolean
     level?: string
     billingDueDate?: string | null
@@ -103,6 +106,9 @@ export function setSession(token: string, refreshToken: string, user: SessionUse
         : undefined,
       tenant: slim.tenant
         ? {
+            // slug/id ficam mesmo no modo mínimo: o AuthGuard white-label depende deles
+            slug: slim.tenant.slug,
+            id: slim.tenant.id,
             adminLocked: slim.tenant.adminLocked,
             level: slim.tenant.level,
             primaryColor: slim.tenant.primaryColor,
