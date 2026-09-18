@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowUpRight, Eye, EyeOff, Scissors } from 'lucide-react'
 import { apiUrl } from '@/lib/config'
-import { setSession } from '@/lib/auth'
+import { clearSession, setSession } from '@/lib/auth'
 import {
   clearLoginLockout,
   formatLockoutRemaining,
@@ -14,6 +14,7 @@ import {
 } from '@/lib/admin/login-lockout'
 import { PRODUCT_NAME_UPPER } from '@/lib/brand'
 import { useTenantFavicon } from '@/lib/client/useTenant'
+import { isPlatformHost } from '@/lib/client/domains'
 import AdminPageShell from './AdminPageShell'
 
 type AdminLoginBranding = {
@@ -70,7 +71,9 @@ export default function AdminLoginForm() {
     async function loadTenantBranding() {
       const host = window.location.hostname
       const slugFromNext = nextPath.match(/^\/admin\/([^/?#]+)/)?.[1] || null
-      const candidates = [host, slugFromNext].filter(Boolean) as string[]
+      // Em host white-label a marca é SEMPRE a do host (o `next` pode ser de outra barbearia).
+      // Em host de plataforma o host não identifica tenant; usa só o slug do `next`.
+      const candidates = (isPlatformHost(host) ? [slugFromNext] : [host]).filter(Boolean) as string[]
 
       for (const key of candidates) {
         try {
@@ -171,12 +174,19 @@ export default function AdminLoginForm() {
     try {
       const response = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // X-Custom-Host: o backend amarra o login ao endereço do painel.
+        // admin.lelecobarbes.com só aceita contas do Leleco; SUPER_ADMIN só na plataforma.
+        headers: { 'Content-Type': 'application/json', 'X-Custom-Host': window.location.host },
         body: JSON.stringify({ email, password }),
       })
       const data = await parseLoginResponse(response)
 
       if (!response.ok) {
+        if (response.status === 403) {
+          // Endereço errado para esta conta: não é senha errada, não conta no bloqueio.
+          throw new Error(data.error || 'Esta conta não pode entrar por este endereço.')
+        }
+
         if (response.status === 429) {
           const nextLockout = forceLoginLockout(email)
           setLockoutRemainingMs(nextLockout.remainingMs)
@@ -210,7 +220,11 @@ export default function AdminLoginForm() {
         throw new Error('Resposta de login inválida.')
       }
 
-      const user = data.user as { role: string; professionalProfile?: { salon?: { slug?: string } }; salons?: { slug: string }[] }
+      const user = data.user as {
+        role: string
+        professionalProfile?: { salon?: { slug?: string } }
+        salons?: { slug: string }[]
+      }
 
       if (user.role === 'CUSTOMER') {
         throw new Error('Este portal é exclusivo para donos e profissionais.')
@@ -219,8 +233,10 @@ export default function AdminLoginForm() {
       clearLoginLockout(email)
       setSession(data.token, data.refreshToken, user as Parameters<typeof setSession>[2])
 
+      const next = searchParams.get('next')
+
       if (user.role === 'SUPER_ADMIN') {
-        const next = searchParams.get('next')
+        // O backend já recusa SUPER_ADMIN fora da plataforma; aqui é só a rota de destino.
         if (next?.startsWith('/platform/')) {
           router.replace(next)
           return
@@ -229,13 +245,24 @@ export default function AdminLoginForm() {
         return
       }
 
-      const next = searchParams.get('next')
-      if (next?.startsWith('/admin/')) {
-        router.replace(next)
+      const ownSlugs = new Set<string>(
+        [user.professionalProfile?.salon?.slug, ...(user.salons ?? []).map((s) => s.slug)].filter(
+          (slug): slug is string => Boolean(slug),
+        ),
+      )
+      const nextSlug = next?.match(/^\/admin\/([^/?#]+)/)?.[1]
+
+      // `next` só é respeitado se apontar para um salão desta conta — nunca para o de outra barbearia.
+      if (nextSlug && ownSlugs.has(nextSlug)) {
+        router.replace(next as string)
         return
       }
 
-      const salonSlug = user.professionalProfile?.salon?.slug ?? user.salons?.[0]?.slug ?? 'leleco'
+      const salonSlug = user.professionalProfile?.salon?.slug ?? user.salons?.[0]?.slug
+      if (!salonSlug) {
+        clearSession()
+        throw new Error('Esta conta não está vinculada a nenhuma unidade. Fale com o suporte.')
+      }
       router.replace(`/admin/${salonSlug}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível entrar.')

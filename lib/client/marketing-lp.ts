@@ -1,7 +1,6 @@
 /**
- * Salões com LP de marketing fora do app Next (repo/site separado).
- * Em /app/:slug não mostramos ClientLanding — evitamos LP duplicada.
- * Visitante vai para login (fluxo de agendar).
+ * Salões com LP de marketing fora do app Next (site/domínio próprio).
+ * Usado só para exibir o link público no admin — o app do cliente não tem mais vitrine interna.
  */
 export const EXTERNAL_MARKETING_LP: Record<string, string> = {
   leleco: 'https://www.lelecobarbes.com',

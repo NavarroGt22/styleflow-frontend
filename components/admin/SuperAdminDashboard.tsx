@@ -34,6 +34,7 @@ import {
   type TenantLevel,
 } from '@/lib/admin/tenant-plans'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
+import { isPlatformHost } from '@/lib/client/domains'
 
 type TenantRow = {
   id: string
@@ -181,6 +182,13 @@ export default function SuperAdminDashboard() {
   const [provisioningDnsId, setProvisioningDnsId] = useState<string | null>(null)
 
   useEffect(() => {
+    // Super Admin só existe no host da plataforma (admin.meucorteja.com / localhost).
+    // Em admin.<barbearia> nem com sessão válida: derruba a sessão e volta ao login do salão.
+    if (!isPlatformHost(window.location.hostname)) {
+      clearSession()
+      router.replace('/login')
+      return
+    }
     const user = getSessionUser()
     if (!user || user.role !== 'SUPER_ADMIN') {
       router.replace('/login?next=/platform/super')
@@ -670,10 +678,13 @@ export default function SuperAdminDashboard() {
                             )}
                           </td>
                           <td className="space-y-1 px-5 py-4 text-xs">
+                            {/* Links sempre no domínio DESTA barbearia (white-label) ou em app./admin. da
+                                plataforma — nunca no host de onde o Super Admin está aberto. */}
                             <a
                               href={resolveClientLink(linkSlug(t), t.clientDomain)}
                               target="_blank"
                               rel="noreferrer"
+                              title={resolveClientLink(linkSlug(t), t.clientDomain)}
                               className="flex items-center gap-1 text-indigo-400 hover:underline"
                             >
                               Cliente <ExternalLink size={10} />
@@ -682,11 +693,14 @@ export default function SuperAdminDashboard() {
                               href={resolveAdminLink(linkSlug(t), t.adminDomain)}
                               target="_blank"
                               rel="noreferrer"
-                              title={ownerAdminUrl(linkSlug(t))}
+                              title={resolveAdminLink(linkSlug(t), t.adminDomain)}
                               className="flex items-center gap-1 text-violet-400 hover:underline"
                             >
                               Admin (dono) <ExternalLink size={10} />
                             </a>
+                            <p className="max-w-[180px] truncate font-mono text-[10px] text-slate-600" title={resolveAdminLink(linkSlug(t), t.adminDomain)}>
+                              {resolveAdminLink(linkSlug(t), t.adminDomain).replace(/^https?:\/\//, '')}
+                            </p>
                           </td>
                           <td className="px-5 py-4">
                             <div className="flex flex-col gap-1">
@@ -779,7 +793,7 @@ export default function SuperAdminDashboard() {
 
             <form onSubmit={handleCreate} className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="text-xs text-slate-400">Copiar configuração de</label>
+                <label className="text-xs text-slate-400">Copiar configuração comercial de</label>
                 <select
                   value={form.copyFromTenantId}
                   onChange={(e) => setForm({ ...form, copyFromTenantId: e.target.value })}
@@ -792,6 +806,11 @@ export default function SuperAdminDashboard() {
                     </option>
                   ))}
                 </select>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  Copia só taxa da plataforma e gateway de pagamento. Logo, favicon, cores e nome de marca
+                  <strong className="text-slate-400"> não</strong> são copiados — a barbearia nova nasce com a marca
+                  {PRODUCT_NAME} até o dono subir a dele.
+                </p>
               </div>
 
               <div>
@@ -1179,6 +1198,36 @@ export default function SuperAdminDashboard() {
                 ))}
               </div>
             ) : null}
+
+            <div
+              className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
+                dnsModal.dns.vercel?.ok
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : dnsModal.dns.vercel
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                    : 'border-slate-700 bg-slate-800/60 text-slate-400'
+              }`}
+            >
+              <p className="font-bold uppercase tracking-wide">Vercel · Domains do projeto do front</p>
+              {dnsModal.dns.vercel ? (
+                <>
+                  <p className="mt-1">
+                    {dnsModal.dns.vercel.ok
+                      ? 'Hosts adicionados ao projeto — o Next já responde por eles.'
+                      : 'Parcial ou com erro — confira em Vercel → projeto do front → Settings → Domains.'}
+                  </p>
+                  {dnsModal.dns.vercel.domains?.length ? (
+                    <p className="mt-1 font-mono text-[11px]">{dnsModal.dns.vercel.domains.join(' · ')}</p>
+                  ) : null}
+                  {dnsModal.dns.vercel.error ? <p className="mt-1">{dnsModal.dns.vercel.error}</p> : null}
+                </>
+              ) : (
+                <p className="mt-1">
+                  Não executado: falta VERCEL_TOKEN / VERCEL_PROJECT_ID na API, ou o DNS falhou antes. Sem isso,
+                  adicione apex, www, app e admin manualmente em Settings → Domains.
+                </p>
+              )}
+            </div>
 
             {dnsModal.dns.records?.length ? (
               <div className="mb-4 max-h-40 overflow-y-auto rounded-lg border border-slate-700 text-[11px]">

@@ -23,7 +23,7 @@ import {
   X,
   BriefcaseBusiness,
 } from 'lucide-react'
-import { PRODUCT_NAME_UPPER } from '@/lib/brand'
+import { PRODUCT_NAME, PRODUCT_NAME_UPPER } from '@/lib/brand'
 import { useTenantFavicon } from '@/lib/client/useTenant'
 import { apiUrl } from '@/lib/config'
 import {
@@ -87,7 +87,7 @@ function resolveBrandColor(options: {
 }
 
 export default function AdminDashboard({
-  salonSlug = 'leleco',
+  salonSlug,
   brandName,
   unitName,
   ownerName,
@@ -98,9 +98,10 @@ export default function AdminDashboard({
   const sessionUser = getSessionUser()
   const salonFromSession = sessionUser ? resolveSalonForSlug(sessionUser, salonSlug) : null
 
-  const resolvedBrand = brandName ?? salonFromSession?.name ?? 'Leleco'
-  const resolvedUnit = unitName ?? salonFromSession?.name ?? 'Leleco Barbers'
-  const resolvedOwner = ownerName ?? sessionUser?.name ?? 'Joel'
+  // Sem dado do salão, cai na marca do produto — nunca no nome de outra barbearia.
+  const resolvedBrand = brandName ?? salonFromSession?.name ?? PRODUCT_NAME
+  const resolvedUnit = unitName ?? salonFromSession?.name ?? 'Painel'
+  const resolvedOwner = ownerName ?? sessionUser?.name ?? ''
   const brandUpper = resolvedBrand.toUpperCase()
   const [tenantLevel, setTenantLevel] = useState<TenantLevel>(() => {
     const level = sessionUser?.tenant?.level

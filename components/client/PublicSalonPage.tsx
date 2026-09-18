@@ -9,9 +9,7 @@ import { useTenantBranding, useTenantFavicon, type TenantBranding } from '@/lib/
 import { PRODUCT_NAME, PRODUCT_NAME_UPPER } from '@/lib/brand';
 import { apiUrl, wsUrl } from '@/lib/client/config';
 import { isCustomDomainHost } from '@/lib/client/domains';
-import { hasExternalMarketingLp } from '@/lib/client/marketing-lp';
 import { getClientGeolocation } from '@/lib/client/geolocation';
-import ClientLanding from '@/components/client/ClientLanding';
 import BookingDateTimePicker from '@/components/client/BookingDateTimePicker';
 import { ClientSalonError, ClientSalonLoading, clientBrandStyles } from '@/components/client/ClientSalonShell';
 import { ClientTopBar } from '@/components/client/ClientTopBar';
@@ -21,19 +19,6 @@ import { DynamicQueueSection } from '@/components/client/queue/DynamicQueueSecti
 import type { QueueSession } from '@/components/client/queue/types';
 import { readClientSession, setSalonCache } from '@/lib/client/salon-cache';
 import { useConfirm } from '@/components/admin/ui/useConfirm';
-
-const formatInstagramUrl = (url: string) => {
-  if (!url) return '';
-  const clean = url.trim();
-  if (clean.startsWith('http://') || clean.startsWith('https://')) {
-    return clean;
-  }
-  if (clean.startsWith('www.instagram.com') || clean.startsWith('instagram.com')) {
-    return `https://${clean}`;
-  }
-  const handle = clean.startsWith('@') ? clean.slice(1) : clean;
-  return `https://instagram.com/${handle}`;
-};
 
 const generateTimeSlots = (
   professional: any,
@@ -84,7 +69,7 @@ const generateTimeSlots = (
 
 const isCustomDomain = isCustomDomainHost();
 
-function ExternalLpBookingRedirect({ loginPath }: { loginPath: string }) {
+function GuestLoginRedirect({ loginPath }: { loginPath: string }) {
   const router = useRouter()
   useEffect(() => {
     router.replace(loginPath)
@@ -207,6 +192,8 @@ export default function PublicSalonPage() {
     setSelectedDate('');
     setSelectedTime('');
     setBookingSuccess(null);
+    const loginPath = salonSlug ? `/app/${salonSlug}/login` : '/login';
+    router.replace(loginPath);
   };
 
   const getServiceDisplayInfo = () => {
@@ -636,33 +623,8 @@ export default function PublicSalonPage() {
   if (!salon.queueMode) {
     if (!currentUser) {
       const loginPath = salonSlug ? `/app/${salonSlug}/login` : '/login';
-      // LP marketing em site separado — não duplicar ClientLanding; manda para login/agenda
-      if (hasExternalMarketingLp(typeof salonSlug === 'string' ? salonSlug : null)) {
-        return <ExternalLpBookingRedirect loginPath={loginPath} />
-      }
-      const digits = salon.phone ? String(salon.phone).replace(/\D/g, '') : '';
-      const whatsappUrl = digits
-        ? `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}`
-        : undefined;
-
-      return (
-        <div className="min-h-screen bg-[#0b0d0e]">
-          {unitPicker}
-          <ClientLanding
-            brandName={brandName}
-            salonName={salon.name}
-            salonAddress={salon.address || undefined}
-            logoUrl={logoUrl}
-            heroImageUrl={data?.tenant?.heroImageUrl}
-            historyText={data?.tenant?.historyText}
-            lpSinceYear={data?.tenant?.lpSinceYear}
-            primaryColor={primaryColor || '#d5a85c'}
-            whatsappUrl={whatsappUrl}
-            instagramUrl={salon.instagramUrl ? formatInstagramUrl(salon.instagramUrl) : undefined}
-            loginPath={loginPath}
-          />
-        </div>
-      );
+      // Sem vitrine interna: visitante vai direto para login/cadastro
+      return <GuestLoginRedirect loginPath={loginPath} />
     }
 
     const timeSlots = generateTimeSlots(

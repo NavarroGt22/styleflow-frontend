@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isPlatformHost, platformBaseDomain } from '@/lib/client/domains'
 
 function requestHost(req: NextRequest): string {
   const raw =
@@ -8,14 +9,19 @@ function requestHost(req: NextRequest): string {
   return raw.split(',')[0].trim().split(':')[0].toLowerCase()
 }
 
-/** Painel do dono: admin.suabarbearia.com */
+/** Painel do dono em white-label: admin.suabarbearia.com (admin.meucorteja.com NÃO entra aqui). */
 export function isAdminCustomHost(host: string): boolean {
-  return host.startsWith('admin.')
+  return host.startsWith('admin.') && !isPlatformHost(host)
 }
 
-/** App do cliente: app.suabarbearia.com */
+/** App do cliente em white-label: app.suabarbearia.com (app.meucorteja.com NÃO entra aqui). */
 export function isClientAppCustomHost(host: string): boolean {
-  return host.startsWith('app.')
+  return host.startsWith('app.') && !isPlatformHost(host)
+}
+
+/** Painel da plataforma: admin.meucorteja.com — único host onde /platform (Super Admin) existe. */
+export function isPlatformAdminHost(host: string): boolean {
+  return host.startsWith('admin.') && isPlatformHost(host)
 }
 
 function isPassthroughPath(pathname: string): boolean {
@@ -85,14 +91,43 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // admin.* → painel (/admin/:slug), nunca /app
-  if (isAdminCustomHost(host)) {
+  // admin.meucorteja.com → painel da plataforma: /admin/:slug, /login e /platform (Super Admin).
+  // /app/... aqui vai para o host do cliente (app.meucorteja.com), nunca renderiza vitrine.
+  if (isPlatformAdminHost(host)) {
     if (
       pathname.startsWith('/admin') ||
       pathname.startsWith('/login') ||
       pathname.startsWith('/platform')
     ) {
       return NextResponse.next()
+    }
+
+    if (pathname.startsWith('/app')) {
+      const appUrl = new URL(req.nextUrl)
+      appUrl.protocol = 'https:'
+      appUrl.host = `app.${platformBaseDomain()}`
+      appUrl.port = ''
+      return NextResponse.redirect(appUrl)
+    }
+
+    const loginUrl = req.nextUrl.clone()
+    loginUrl.pathname = '/login'
+    loginUrl.search = ''
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // admin.<barbearia> → painel (/admin/:slug), nunca /app e NUNCA /platform.
+  // O Super Admin só existe no host da plataforma; aqui qualquer /platform vira login.
+  if (isAdminCustomHost(host)) {
+    if (pathname.startsWith('/admin') || pathname.startsWith('/login')) {
+      return NextResponse.next()
+    }
+
+    if (pathname.startsWith('/platform')) {
+      const loginUrl = req.nextUrl.clone()
+      loginUrl.pathname = '/login'
+      loginUrl.search = ''
+      return NextResponse.redirect(loginUrl)
     }
 
     const appMatch = pathname.match(/^\/app\/([^/]+)/)

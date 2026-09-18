@@ -12,9 +12,9 @@ type ClientRegisterProps = {
 }
 
 export default function ClientRegister({
-  brandName = 'LELECO',
-  salonName = 'Leleco Barbers',
-  salonAddress = 'Rua Harmonia, 217 · Vila Madalena, São Paulo',
+  brandName = 'MEUCORTEJA',
+  salonName = 'Sua barbearia',
+  salonAddress = '',
   logoUrl,
   primaryColor = '#d5a85c',
   backHref = '/',

@@ -3,12 +3,11 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowUpRight, Loader2, MapPin, Scissors } from 'lucide-react'
+import { ArrowUpRight, Loader2, MapPin, Scissors } from 'lucide-react'
 import { apiUrl } from '@/lib/client/config'
 import { getSalonCache, setSalonCache } from '@/lib/client/salon-cache'
 import { parseApiError, useTenantBranding, useTenantFavicon } from '@/lib/client/useTenant'
 import type { TenantBranding } from '@/lib/client/useTenant'
-import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
 import { slimSessionUser } from '@/lib/auth'
 
 type ClientAuthProps = {
@@ -40,8 +39,6 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
   useTenantFavicon(faviconUrl || logoUrl || null)
 
   const publicSalonPath = salonSlug ? `/app/${salonSlug}` : '/'
-  const vitrineHref =
-    externalMarketingLpUrl(typeof salonSlug === 'string' ? salonSlug : null) ?? publicSalonPath
   const loginPath = salonSlug ? `/app/${salonSlug}/login` : '/login'
   const registerPath = salonSlug ? `/app/${salonSlug}/cadastro` : '/cadastro'
   const alternatePath = mode === 'login' ? registerPath : loginPath
@@ -160,14 +157,6 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
       <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:46px_46px] [mask-image:linear-gradient(to_bottom,black,transparent_75%)]" />
 
       <div className="relative w-full max-w-md animate-[fade-in-up_700ms_ease-out_both]">
-        <Link
-          href={vitrineHref}
-          className="mb-10 inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[#a1a1aa] transition-colors hover:text-[var(--brand)]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar para vitrine
-        </Link>
-
         <div className="mb-8 flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center overflow-hidden border border-[var(--brand)]/60 bg-[var(--brand)]/10 text-[var(--brand)]">
             {logoUrl ? (

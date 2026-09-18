@@ -242,7 +242,8 @@ export type QueueSession = {
 }
 
 export type AdminDashboardProps = {
-  salonSlug?: string
+  /** Slug do salão da rota /admin/:slug — obrigatório; não existe salão padrão. */
+  salonSlug: string
   brandName?: string
   unitName?: string
   ownerName?: string
