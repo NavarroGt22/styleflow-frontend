@@ -46,7 +46,26 @@ async function resolveSalonSlug(host: string, pathSlug?: string | null): Promise
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')
   if (!apiBase) return pathSlug || null
 
-  // Com slug na URL: só aceita se o salão pertencer ao tenant deste host (fail-closed na API).
+  async function firstSalonOfHost(): Promise<string | null> {
+    try {
+      const queueRes = await fetch(`${apiBase}/api/v1/queue/public`, {
+        headers: {
+          Accept: 'application/json',
+          'X-Custom-Host': host,
+        },
+        cache: 'no-store',
+      })
+      if (queueRes.ok) {
+        const data = (await queueRes.json()) as { salon?: { slug?: string } }
+        if (data?.salon?.slug) return data.salon.slug
+      }
+    } catch {
+      /* ignore */
+    }
+    return null
+  }
+
+  // Com slug na URL: só aceita se o salão pertencer ao tenant deste host.
   if (pathSlug) {
     try {
       const res = await fetch(`${apiBase}/api/v1/queue/public/${encodeURIComponent(pathSlug)}`, {
@@ -60,44 +79,17 @@ async function resolveSalonSlug(host: string, pathSlug?: string | null): Promise
         const data = (await res.json()) as { salon?: { slug?: string } }
         if (data?.salon?.slug) return data.salon.slug
       }
-    } catch {
-      /* tenta fallback sem slug */
-    }
-  }
-
-  try {
-    const queueRes = await fetch(`${apiBase}/api/v1/queue/public`, {
-      headers: {
-        Accept: 'application/json',
-        'X-Custom-Host': host,
-      },
-      cache: 'no-store',
-    })
-    if (queueRes.ok) {
-      const data = (await queueRes.json()) as { salon?: { slug?: string } }
-      if (data?.salon?.slug) return data.salon.slug
-    }
-  } catch {
-    /* fallback abaixo */
-  }
-
-  try {
-    const tenantRes = await fetch(
-      `${apiBase}/api/v1/tenants/by-subdomain/${encodeURIComponent(host)}`,
-      {
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
+      // Slug de outro tenant / inexistente neste host → salão correto do domínio (se a API responder).
+      if (res.status === 404 || res.status === 403 || res.status === 400) {
+        return (await firstSalonOfHost()) ?? pathSlug
       }
-    )
-    if (tenantRes.ok) {
-      const data = (await tenantRes.json()) as { slug?: string }
-      if (data?.slug) return data.slug
+    } catch {
+      // API indisponível no edge → deixa passar o slug; AuthGuard decide.
+      return pathSlug
     }
-  } catch {
-    /* ignore */
   }
 
-  return null
+  return firstSalonOfHost()
 }
 
 export async function middleware(req: NextRequest) {
@@ -149,17 +141,12 @@ export async function middleware(req: NextRequest) {
 
     const adminMatch = pathname.match(/^\/admin\/([^/]+)/)
     const pathSlug = adminMatch?.[1] ?? null
-    // Valida slug da URL contra o host; se for de outro tenant, cai no salão deste domínio.
     const hostSalonSlug = await resolveSalonSlug(host, pathSlug)
 
     if (adminMatch) {
-      if (!hostSalonSlug) {
-        const loginUrl = req.nextUrl.clone()
-        loginUrl.pathname = '/login'
-        loginUrl.search = ''
-        return NextResponse.redirect(loginUrl)
-      }
-      if (adminMatch[1] !== hostSalonSlug) {
+      // Só redireciona quando a API confirmou outro slug válido neste host.
+      // Se a API falhou (null com pathSlug preservado ou igual), deixa passar — AuthGuard decide.
+      if (hostSalonSlug && hostSalonSlug !== adminMatch[1]) {
         const adminUrl = req.nextUrl.clone()
         adminUrl.pathname = `/admin/${hostSalonSlug}`
         adminUrl.search = ''
@@ -169,7 +156,7 @@ export async function middleware(req: NextRequest) {
     }
 
     if (pathname.startsWith('/admin')) {
-      const fallbackSlug = hostSalonSlug ?? (await resolveSalonSlug(host, null))
+      const fallbackSlug = await resolveSalonSlug(host, null)
       if (!fallbackSlug) {
         const loginUrl = req.nextUrl.clone()
         loginUrl.pathname = '/login'

@@ -54,6 +54,7 @@ export default function AdminLoginForm() {
   const [branding, setBranding] = useState<AdminLoginBranding | null>(null)
 
   const sessionExpired = searchParams.get('reason') === 'session_expired'
+  const wrongHost = searchParams.get('reason') === 'wrong_host'
   const lockout = getLoginLockout(email)
   const isLocked = !isLocalHost && (lockout.locked || lockoutRemainingMs > 0)
   const brandLabel = branding?.customBrandName || branding?.name || null
@@ -118,8 +119,12 @@ export default function AdminLoginForm() {
   useEffect(() => {
     if (sessionExpired) {
       setInfo('Por segurança, confirme sua senha novamente. A sessão do painel expira a cada 30 minutos.')
+      return
     }
-  }, [sessionExpired])
+    if (wrongHost) {
+      setError('Esta conta não pode usar este painel. Entre com o e-mail da barbearia deste domínio.')
+    }
+  }, [sessionExpired, wrongHost])
 
   // Em localhost, limpa lockout para não travar o ambiente de teste
   useEffect(() => {
@@ -254,13 +259,17 @@ export default function AdminLoginForm() {
       const onWhiteLabelAdmin = isAdminCustomHost(window.location.hostname)
 
       // White-label: o backend já validou o host no /auth/login.
-      // Aqui só escolhemos o /admin/:slug deste domínio — sem rejeitar dono válido.
+      // Destino = salão da sessão (confiável). queue/public é só preferência, com timeout.
       if (onWhiteLabelAdmin) {
         let hostSalonSlug: string | null = null
         try {
+          const ac = new AbortController()
+          const timer = window.setTimeout(() => ac.abort(), 4000)
           const queueRes = await fetch(apiUrl('/queue/public'), {
             headers: { 'X-Custom-Host': window.location.host },
+            signal: ac.signal,
           })
+          window.clearTimeout(timer)
           if (queueRes.ok) {
             const queueData = (await queueRes.json()) as { salon?: { slug?: string } }
             hostSalonSlug = queueData.salon?.slug ?? null

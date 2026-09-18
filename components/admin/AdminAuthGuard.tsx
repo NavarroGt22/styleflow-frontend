@@ -40,7 +40,7 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
     async function gate() {
       const user = getSessionUser()
       const next = encodeURIComponent(`/admin/${salonSlug}`)
-      const host = window.location.host
+      const host = window.location.hostname
 
       if (!user || isAdminSessionExpired()) {
         if (user) clearSession()
@@ -52,31 +52,32 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
       if (isAdminCustomHost(host) && !isPlatformHost(host)) {
         if (user.role === 'SUPER_ADMIN') {
           clearSession()
-          router.replace('/login')
+          router.replace('/login?reason=wrong_host')
           return
         }
 
         const hostTenant = await fetchHostTenant(host)
         if (cancelled) return
 
-        if (!hostTenant?.slug) {
-          clearSession()
-          router.replace('/login')
-          return
+        // Falha transitória da API: não derruba sessão; libera se o slug for da conta.
+        if (hostTenant?.slug) {
+          const sessionTenantSlug =
+            typeof user.tenant?.slug === 'string' ? user.tenant.slug : null
+          if (sessionTenantSlug && sessionTenantSlug !== hostTenant.slug) {
+            clearSession()
+            router.replace('/login?reason=wrong_host')
+            return
+          }
         }
 
-        const sessionTenantSlug =
-          typeof user.tenant?.slug === 'string' ? user.tenant.slug : null
-        if (sessionTenantSlug && sessionTenantSlug !== hostTenant.slug) {
-          clearSession()
-          router.replace('/login')
-          return
-        }
-
-        // Sem tenant.slug na sessão: só libera se o slug da URL for da conta E bater no host.
         if (!userCanAccessSalon(user, salonSlug)) {
+          const fallback = user.salons?.[0]?.slug ?? user.professionalProfile?.salon?.slug
+          if (fallback && fallback !== salonSlug) {
+            router.replace(`/admin/${fallback}`)
+            return
+          }
           clearSession()
-          router.replace('/login')
+          router.replace('/login?reason=wrong_host')
           return
         }
 
