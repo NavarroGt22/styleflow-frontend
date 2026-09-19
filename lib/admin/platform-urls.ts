@@ -87,8 +87,7 @@ function extractHostname(domain: string): string {
 export function isRealCustomDomain(domain?: string | null): boolean {
   if (!domain?.trim()) return false
   const raw = domain.trim().toLowerCase()
-  if (raw.startsWith('/') || raw.startsWith('http')) return false
-  if (raw.includes('/')) return false
+  if (raw.startsWith('/')) return false
 
   const host = extractHostname(raw)
   if (!host || host.includes(' ')) return false
@@ -105,7 +104,8 @@ export function isRealCustomDomain(domain?: string | null): boolean {
 
 export function resolveClientLink(salonSlug: string, storedDomain?: string | null): string {
   if (isRealCustomDomain(storedDomain)) {
-    return `https://${extractHostname(storedDomain!)}`
+    // White-label ainda usa path /app/:slug (ex.: app.lelecobarbes.com/app/leleco/login)
+    return `https://${extractHostname(storedDomain!)}/app/${salonSlug}/login`
   }
   return clientPublicUrl(salonSlug)
 }
@@ -116,10 +116,10 @@ export function resolveQueuePublicUrl(
   opts?: { clientDomain?: string | null; customDomain?: string | null }
 ): string {
   if (isRealCustomDomain(opts?.clientDomain)) {
-    return `https://${extractHostname(opts!.clientDomain!)}`
+    return `https://${extractHostname(opts!.clientDomain!)}/app/${salonSlug}/login`
   }
   if (isRealCustomDomain(opts?.customDomain)) {
-    return `https://${extractHostname(opts!.customDomain!)}/app/${salonSlug}`
+    return `https://${extractHostname(opts!.customDomain!)}/app/${salonSlug}/login`
   }
   return clientPublicUrl(salonSlug)
 }

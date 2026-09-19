@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import { fetchSalon, updateSalon } from '@/lib/admin/api'
-import { resolveClientLink } from '@/lib/admin/platform-urls'
+import { resolveClientLink, isRealCustomDomain } from '@/lib/admin/platform-urls'
 import type { SalonSettings } from '@/lib/admin/types'
 import { AdminError, AdminLoading, inputClass } from './ui/AdminUi'
 
@@ -193,14 +193,15 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
     () => resolveClientLink(salon?.slug || salonSlug, salon?.tenant?.clientDomain),
     [salon?.slug, salon?.tenant?.clientDomain, salonSlug]
   )
-  // Com domínio próprio o link do cliente é a raiz do domínio, então o slug não aparece nele
+  // Domínio white-label ainda inclui /app/:slug no path
   const usesCustomDomain = useMemo(() => {
     const probe = resolveClientLink('__slug__', salon?.tenant?.clientDomain)
-    return !probe.includes('__slug__')
+    return isRealCustomDomain(salon?.tenant?.clientDomain) && !probe.includes('/app/__slug__')
   }, [salon?.tenant?.clientDomain])
   const linkPrefix = useMemo(() => {
     const probe = resolveClientLink('__slug__', salon?.tenant?.clientDomain)
-    return usesCustomDomain ? `${probe.replace(/\/$/, '')}/` : probe.replace('__slug__', '')
+    if (usesCustomDomain) return `${probe.replace(/\/$/, '')}/`
+    return probe.replace('__slug__/login', '').replace('__slug__', '')
   }, [salon?.tenant?.clientDomain, usesCustomDomain])
 
   const shareMessage = useMemo(
