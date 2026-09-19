@@ -3,15 +3,18 @@
 import { CheckCircle2, Clock, Lock, Plus, Scissors, User } from 'lucide-react'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import AdminCheckoutModal from '../AdminCheckoutModal'
+import QueuePermanentQrCard from '../QueuePermanentQrCard'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminModal, inputClass, labelClass } from '../ui/AdminUi'
 import { useConfirm } from '../ui/useConfirm'
-import type { AdminTabProps, Appointment, Professional } from '@/lib/admin/types'
+import type { AdminTabProps, Appointment, Professional, SalonSettings } from '@/lib/admin/types'
 import {
   blockAppointment,
   fetchAppointments,
   fetchProfessionals,
+  fetchSalon,
   updateAppointmentStatus,
 } from '@/lib/admin/api'
+import { resolveClientLink } from '@/lib/admin/platform-urls'
 
 function formatPhone(phone?: string) {
   if (!phone) return ''
@@ -135,7 +138,28 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   const [error, setError] = useState('')
   const [filter, setFilter] = useState<'PENDING' | 'COMPLETED'>('PENDING')
   const [checkoutApt, setCheckoutApt] = useState<Appointment | null>(null)
+  const [salon, setSalon] = useState<SalonSettings | null>(null)
   const { confirm, confirmDialog } = useConfirm(lightMode)
+
+  const bookingUrl = useMemo(() => {
+    const slug = salon?.slug
+    if (!slug) return ''
+    return resolveClientLink(slug, salon?.tenant?.clientDomain)
+  }, [salon?.slug, salon?.tenant?.clientDomain])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchSalon(salonId)
+      .then((data) => {
+        if (!cancelled) setSalon(data)
+      })
+      .catch(() => {
+        /* QR opcional — agenda continua sem o card */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [salonId])
 
   async function requestCancel(apt: Appointment) {
     const ok = await confirm({
@@ -351,6 +375,17 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
           </div>
         </div>
       </div>
+
+      {bookingUrl ? (
+        <div className="mb-6">
+          <QueuePermanentQrCard
+            url={bookingUrl}
+            salonName={salon?.name}
+            lightMode={lightMode}
+            variant="booking"
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mb-4">

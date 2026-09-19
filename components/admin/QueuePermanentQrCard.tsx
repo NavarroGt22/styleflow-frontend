@@ -9,9 +9,55 @@ type Props = {
   url: string
   salonName?: string
   lightMode?: boolean
+  /** Padrão: fila. Use "booking" para o link de marcar horário. */
+  variant?: 'queue' | 'booking'
+  title?: string
+  description?: string
+  printNote?: string
+  imageAlt?: string
+  downloadPrefix?: string
 }
 
-export default function QueuePermanentQrCard({ url, salonName, lightMode = false }: Props) {
+const VARIANT_DEFAULTS = {
+  queue: {
+    title: 'QR Code permanente da fila',
+    description:
+      'Imprima uma vez. Fechar a fila ou abrir só agendamento não invalida o QR — no outro dia, ao abrir a fila de novo, o mesmo código continua válido.',
+    printNote:
+      'QR permanente: continue válido ao fechar e reabrir a fila em outro dia. Escaneie para abrir a página do salão.',
+    imageAlt: 'QR Code permanente da fila',
+    downloadPrefix: 'qr-fila',
+    printTitlePrefix: 'Fila',
+  },
+  booking: {
+    title: 'QR Code do agendamento',
+    description:
+      'Mesmo estilo do QR da fila. O cliente escaneia e abre o link para marcar horário. Imprima e deixe no balcão ou no Instagram.',
+    printNote: 'Escaneie para abrir o link de agendamento online do salão.',
+    imageAlt: 'QR Code do agendamento',
+    downloadPrefix: 'qr-agendamento',
+    printTitlePrefix: 'Agendamento',
+  },
+} as const
+
+export default function QueuePermanentQrCard({
+  url,
+  salonName,
+  lightMode = false,
+  variant = 'queue',
+  title,
+  description,
+  printNote,
+  imageAlt,
+  downloadPrefix,
+}: Props) {
+  const defaults = VARIANT_DEFAULTS[variant]
+  const cardTitle = title ?? defaults.title
+  const cardDescription = description ?? defaults.description
+  const cardPrintNote = printNote ?? defaults.printNote
+  const cardImageAlt = imageAlt ?? defaults.imageAlt
+  const cardDownloadPrefix = downloadPrefix ?? defaults.downloadPrefix
+
   const [dataUrl, setDataUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
@@ -56,26 +102,26 @@ export default function QueuePermanentQrCard({ url, salonName, lightMode = false
     if (!dataUrl) return
     const a = document.createElement('a')
     a.href = dataUrl
-    a.download = `qr-fila-${(salonName || 'salao').toLowerCase().replace(/\s+/g, '-')}.png`
+    a.download = `${cardDownloadPrefix}-${(salonName || 'salao').toLowerCase().replace(/\s+/g, '-')}.png`
     a.click()
   }
 
   function handlePrint() {
     if (!dataUrl) return
-    const title = salonName ? `Fila — ${salonName}` : 'Fila do salão'
+    const printTitle = salonName
+      ? `${defaults.printTitlePrefix} — ${salonName}`
+      : defaults.printTitlePrefix
     const win = window.open('', '_blank', 'noopener,noreferrer,width=480,height=720')
     if (!win) {
       setError('Permita pop-ups para imprimir o QR.')
       return
     }
-    // Monta o documento via DOM API (sem document.write/innerHTML com dados do salão) — evita XSS
-    // caso salonName/url contenham HTML (achado #10 da auditoria).
     const doc = win.document
     doc.open()
     doc.write('<!doctype html><html><head></head><body></body></html>')
     doc.close()
 
-    doc.title = title
+    doc.title = printTitle
 
     const style = doc.createElement('style')
     style.textContent = `
@@ -88,17 +134,15 @@ export default function QueuePermanentQrCard({ url, salonName, lightMode = false
     doc.head.appendChild(style)
 
     const h1 = doc.createElement('h1')
-    h1.textContent = title
+    h1.textContent = printTitle
     const urlP = doc.createElement('p')
     urlP.textContent = url
     const img = doc.createElement('img')
-    img.alt = 'QR Code da fila'
-    // dataUrl vem do gerador de QR (data:image/png;base64,...) — só aceita esse formato
+    img.alt = cardImageAlt
     img.src = dataUrl.startsWith('data:image/') ? dataUrl : ''
     const note = doc.createElement('p')
     note.className = 'note'
-    note.textContent =
-      'QR permanente: continue válido ao fechar e reabrir a fila em outro dia. Escaneie para abrir a página do salão.'
+    note.textContent = cardPrintNote
 
     doc.body.append(h1, urlP, img, note)
 
@@ -131,12 +175,9 @@ export default function QueuePermanentQrCard({ url, salonName, lightMode = false
           <QrCode className="size-5" />
         </div>
         <div>
-          <h3 className={`text-sm font-bold ${lightMode ? 'text-gray-900' : 'text-white'}`}>
-            QR Code permanente da fila
-          </h3>
+          <h3 className={`text-sm font-bold ${lightMode ? 'text-gray-900' : 'text-white'}`}>{cardTitle}</h3>
           <p className={`mt-1 text-xs leading-relaxed ${lightMode ? 'text-gray-500' : 'text-slate-400'}`}>
-            Imprima uma vez. Fechar a fila ou abrir só agendamento <strong>não invalida</strong> o QR — no outro dia,
-            ao abrir a fila de novo, o mesmo código continua válido.
+            {cardDescription}
           </p>
         </div>
       </div>
@@ -149,7 +190,7 @@ export default function QueuePermanentQrCard({ url, salonName, lightMode = false
         >
           {dataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={dataUrl} alt="QR Code permanente da fila" className="size-44 sm:size-52" />
+            <img src={dataUrl} alt={cardImageAlt} className="size-44 sm:size-52" />
           ) : (
             <div className="grid size-44 place-items-center text-xs text-slate-400 sm:size-52">Gerando…</div>
           )}
