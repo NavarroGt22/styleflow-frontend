@@ -78,19 +78,26 @@ export default function AdminLoginForm() {
       const candidates = (onPlatform ? [slugFromNext] : [host]).filter(Boolean) as string[]
 
       for (const key of candidates) {
-        try {
-          const res = await fetch(apiUrl(`/tenants/by-subdomain?host=${encodeURIComponent(key)}`))
-          if (!res.ok) continue
-          const tenant = (await res.json()) as AdminLoginBranding
-          if (!cancelled) {
-            setBranding(tenant)
-            if (tenant.customBrandName || tenant.name) {
-              document.title = tenant.customBrandName || tenant.name || PRODUCT_NAME_UPPER
+        // Query primeiro (API nova); path como plano B (API antiga em produção resolve o host).
+        const urls = [
+          apiUrl(`/tenants/by-subdomain?host=${encodeURIComponent(key)}`),
+          apiUrl(`/tenants/by-subdomain/${encodeURIComponent(key)}`),
+        ]
+        for (const url of urls) {
+          try {
+            const res = await fetch(url)
+            if (!res.ok) continue
+            const tenant = (await res.json()) as AdminLoginBranding
+            if (!cancelled) {
+              setBranding(tenant)
+              if (tenant.customBrandName || tenant.name) {
+                document.title = tenant.customBrandName || tenant.name || PRODUCT_NAME_UPPER
+              }
             }
+            return
+          } catch {
+            /* tenta próxima variante */
           }
-          return
-        } catch {
-          /* tenta próximo */
         }
       }
 

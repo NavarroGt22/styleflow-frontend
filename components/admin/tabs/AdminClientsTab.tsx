@@ -113,11 +113,22 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [savingCustomer, setSavingCustomer] = useState(false)
+  const [clientsPage, setClientsPage] = useState(1)
+  const CLIENTS_PER_PAGE = 10
 
   const rewardProducts = useMemo(
     () => products.filter((p) => p.isReward && p.isActive !== false),
     [products],
   )
+
+  const clientsTotal = data?.customers.length ?? 0
+  const clientsTotalPages = Math.max(1, Math.ceil(clientsTotal / CLIENTS_PER_PAGE))
+  const pagedCustomers = useMemo(() => {
+    if (!data?.customers.length) return []
+    const page = Math.min(clientsPage, clientsTotalPages)
+    const start = (page - 1) * CLIENTS_PER_PAGE
+    return data.customers.slice(start, start + CLIENTS_PER_PAGE)
+  }, [data?.customers, clientsPage, clientsTotalPages])
 
   async function load(search = query) {
     if (!salonId) {
@@ -155,11 +166,13 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
 
   async function handleSearch(event: FormEvent) {
     event.preventDefault()
+    setClientsPage(1)
     await load(query)
   }
 
   async function handleClearSearch() {
     setQuery('')
+    setClientsPage(1)
     await load('')
   }
 
@@ -420,7 +433,7 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
               <>
                 {/* Mobile: cards — scroll vertical da página livre */}
                 <ul className={`divide-y sm:hidden ${lightMode ? 'divide-slate-100' : 'divide-slate-700/80'}`}>
-                  {data.customers.map((customer) => (
+                  {pagedCustomers.map((customer) => (
                     <li key={customer.id} className="px-3 py-3">
                       {editingCustomerId === customer.id ? (
                         <div className="grid gap-2">
@@ -515,7 +528,7 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                       </tr>
                     </thead>
                     <tbody>
-                      {data.customers.map((customer) => (
+                      {pagedCustomers.map((customer) => (
                         <tr
                           key={customer.id}
                           className={`border-b last:border-0 ${lightMode ? 'border-slate-100' : 'border-slate-700/80'}`}
@@ -603,6 +616,40 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                     </tbody>
                   </table>
                 </div>
+
+                {clientsTotalPages > 1 ? (
+                  <div
+                    className={`flex flex-wrap items-center justify-between gap-3 border-t px-3 py-3 sm:px-4 ${
+                      lightMode ? 'border-slate-200' : 'border-slate-700'
+                    }`}
+                  >
+                    <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Página {Math.min(clientsPage, clientsTotalPages)} de {clientsTotalPages}
+                      {' · '}
+                      {clientsTotal} cliente{clientsTotal === 1 ? '' : 's'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <AdminButton
+                        type="button"
+                        variant="ghost"
+                        className="h-9 px-3 text-xs"
+                        disabled={clientsPage <= 1}
+                        onClick={() => setClientsPage((p) => Math.max(1, p - 1))}
+                      >
+                        Anterior
+                      </AdminButton>
+                      <AdminButton
+                        type="button"
+                        variant="ghost"
+                        className="h-9 px-3 text-xs"
+                        disabled={clientsPage >= clientsTotalPages}
+                        onClick={() => setClientsPage((p) => Math.min(clientsTotalPages, p + 1))}
+                      >
+                        Próxima
+                      </AdminButton>
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
           </div>

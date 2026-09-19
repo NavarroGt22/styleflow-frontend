@@ -180,6 +180,8 @@ export type SalonSettings = {
   openTime?: string
   closeTime?: string
   openWeekdays?: number[]
+  /** Horário por dia: chave "0"…"6". Ausente = fechado naquele dia. */
+  dayHours?: Record<string, { open: string; close: string }>
   closedDayMessage?: string | null
   bookingCalendarMode?: 'WEEK' | 'TODAY'
   bookingLinkEnabled?: boolean

@@ -1,16 +1,21 @@
 'use client'
 
 import { CalendarDays } from 'lucide-react'
+import {
+  type DayHoursMap,
+  legacyRangeFromDayHours,
+  openWeekdaysFromDayHours,
+} from '@/lib/day-hours'
 import { inputClass, labelClass } from './ui/AdminUi'
 
 const WEEKDAYS = [
-  { value: 0, label: 'Dom', full: 'Domingo' },
-  { value: 1, label: 'Seg', full: 'Segunda' },
-  { value: 2, label: 'Ter', full: 'Terça' },
-  { value: 3, label: 'Qua', full: 'Quarta' },
-  { value: 4, label: 'Qui', full: 'Quinta' },
-  { value: 5, label: 'Sex', full: 'Sexta' },
-  { value: 6, label: 'Sáb', full: 'Sábado' },
+  { value: 0, label: 'DOMINGO' },
+  { value: 1, label: 'SEGUNDA-FEIRA' },
+  { value: 2, label: 'TERÇA-FEIRA' },
+  { value: 3, label: 'QUARTA-FEIRA' },
+  { value: 4, label: 'QUINTA-FEIRA' },
+  { value: 5, label: 'SEXTA-FEIRA' },
+  { value: 6, label: 'SÁBADO' },
 ] as const
 
 export const DEFAULT_OPEN_WEEKDAYS = [1, 2, 3, 4, 5, 6]
@@ -20,33 +25,50 @@ export const DEFAULT_CLOSED_DAY_MESSAGE =
 type WeekdayHoursEditorProps = {
   lightMode?: boolean
   brandColor?: string
-  openWeekdays: number[]
-  onToggleDay: (day: number) => void
-  openTime: string
-  closeTime: string
-  onChangeOpenTime: (value: string) => void
-  onChangeCloseTime: (value: string) => void
+  dayHours: DayHoursMap
+  onChangeDayHours: (next: DayHoursMap) => void
   closedDayMessage: string
   onChangeClosedDayMessage: (value: string) => void
   bookingCalendarMode: 'WEEK' | 'TODAY'
   onChangeBookingCalendarMode: (value: 'WEEK' | 'TODAY') => void
 }
 
+function defaultSlot(): { open: string; close: string } {
+  return { open: '09:00', close: '18:00' }
+}
+
 export default function WeekdayHoursEditor({
   lightMode = false,
   brandColor = '#d5a85c',
-  openWeekdays,
-  onToggleDay,
-  openTime,
-  closeTime,
-  onChangeOpenTime,
-  onChangeCloseTime,
+  dayHours,
+  onChangeDayHours,
   closedDayMessage,
   onChangeClosedDayMessage,
   bookingCalendarMode,
   onChangeBookingCalendarMode,
 }: WeekdayHoursEditorProps) {
-  const openSet = new Set(openWeekdays)
+  function toggleDay(day: number) {
+    const key = String(day)
+    const next = { ...dayHours }
+    if (next[key]) {
+      delete next[key]
+    } else {
+      const range = legacyRangeFromDayHours(dayHours)
+      next[key] = { open: range.openTime, close: range.closeTime }
+    }
+    onChangeDayHours(next)
+  }
+
+  function updateDay(day: number, field: 'open' | 'close', value: string) {
+    const key = String(day)
+    const current = dayHours[key] ?? defaultSlot()
+    onChangeDayHours({
+      ...dayHours,
+      [key]: { ...current, [field]: value },
+    })
+  }
+
+  const openCount = openWeekdaysFromDayHours(dayHours).length
 
   return (
     <div
@@ -57,34 +79,102 @@ export default function WeekdayHoursEditor({
       <div>
         <h4 className={`flex items-center gap-2 text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
           <CalendarDays className="size-4" style={{ color: brandColor }} />
-          Dias em que o salão atende
+          Configure o horário de funcionamento
         </h4>
         <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-          Dias marcados liberam agendamento. Dias apagados mostram a mensagem de folga para o cliente.
+          Cada dia pode ter início e fim próprios. Dias desligados mostram a mensagem de folga
+          para o cliente.
+          {openCount === 0 ? (
+            <span className="mt-1 block font-semibold text-amber-500">
+              Ative pelo menos um dia para liberar agendamentos.
+            </span>
+          ) : null}
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="space-y-3">
         {WEEKDAYS.map((day) => {
-          const active = openSet.has(day.value)
+          const key = String(day.value)
+          const active = Boolean(dayHours[key])
+          const slot = dayHours[key] ?? defaultSlot()
+
           return (
-            <button
+            <div
               key={day.value}
-              type="button"
-              title={day.full}
-              aria-pressed={active}
-              onClick={() => onToggleDay(day.value)}
-              className={`min-w-[3rem] rounded-xl border px-3 py-2.5 text-center text-xs font-bold uppercase tracking-wide transition ${
-                active
-                  ? 'border-transparent text-slate-950 shadow-md'
-                  : lightMode
-                    ? 'border-slate-200 bg-slate-50 text-slate-400 hover:border-slate-300'
-                    : 'border-slate-600 bg-slate-800/80 text-slate-400 hover:border-slate-500'
+              className={`rounded-xl border px-3 py-3 sm:px-4 ${
+                lightMode
+                  ? active
+                    ? 'border-slate-200 bg-slate-50/80'
+                    : 'border-slate-100 bg-slate-50/40 opacity-70'
+                  : active
+                    ? 'border-slate-600 bg-[#162033]'
+                    : 'border-slate-700/80 bg-[#121c2c] opacity-70'
               }`}
-              style={active ? { backgroundColor: brandColor } : undefined}
             >
-              {day.label}
-            </button>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p
+                  className={`text-xs font-bold uppercase tracking-wide ${
+                    lightMode ? 'text-slate-800' : 'text-slate-100'
+                  }`}
+                >
+                  {day.label}
+                </p>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={active}
+                  aria-label={active ? `${day.label} atendendo` : `${day.label} fechado`}
+                  onClick={() => toggleDay(day.value)}
+                  className="inline-flex items-center gap-2"
+                >
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wide ${
+                      active ? 'text-emerald-400' : lightMode ? 'text-slate-400' : 'text-slate-500'
+                    }`}
+                  >
+                    {active ? 'Atendendo' : 'Fechado'}
+                  </span>
+                  <span
+                    className={`relative h-6 w-11 rounded-full transition-colors ${
+                      active ? 'bg-emerald-500' : lightMode ? 'bg-slate-300' : 'bg-slate-600'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform ${
+                        active ? 'translate-x-[22px]' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Início
+                  </label>
+                  <input
+                    type="time"
+                    value={slot.open}
+                    disabled={!active}
+                    onChange={(e) => updateDay(day.value, 'open', e.target.value)}
+                    className={inputClass(lightMode)}
+                  />
+                </div>
+                <div>
+                  <label className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Fim
+                  </label>
+                  <input
+                    type="time"
+                    value={slot.close}
+                    disabled={!active}
+                    onChange={(e) => updateDay(day.value, 'close', e.target.value)}
+                    className={inputClass(lightMode)}
+                  />
+                </div>
+              </div>
+            </div>
           )
         })}
       </div>
@@ -106,7 +196,15 @@ export default function WeekdayHoursEditor({
             style={bookingCalendarMode === 'WEEK' ? { backgroundColor: brandColor } : undefined}
           >
             <p className="text-xs font-bold uppercase tracking-wide">Semana toda</p>
-            <p className={`mt-1 text-[11px] leading-snug ${bookingCalendarMode === 'WEEK' ? 'text-slate-800/80' : lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+            <p
+              className={`mt-1 text-[11px] leading-snug ${
+                bookingCalendarMode === 'WEEK'
+                  ? 'text-slate-800/80'
+                  : lightMode
+                    ? 'text-slate-500'
+                    : 'text-slate-400'
+              }`}
+            >
               Mostra os próximos 7 dias para o cliente escolher.
             </p>
           </button>
@@ -124,31 +222,18 @@ export default function WeekdayHoursEditor({
             style={bookingCalendarMode === 'TODAY' ? { backgroundColor: brandColor } : undefined}
           >
             <p className="text-xs font-bold uppercase tracking-wide">Só o dia de hoje</p>
-            <p className={`mt-1 text-[11px] leading-snug ${bookingCalendarMode === 'TODAY' ? 'text-slate-800/80' : lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+            <p
+              className={`mt-1 text-[11px] leading-snug ${
+                bookingCalendarMode === 'TODAY'
+                  ? 'text-slate-800/80'
+                  : lightMode
+                    ? 'text-slate-500'
+                    : 'text-slate-400'
+              }`}
+            >
               Ex.: quarta mostra só quarta; amanhã aparece quinta automaticamente.
             </p>
           </button>
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className={labelClass(lightMode)}>Horário de abertura</label>
-          <input
-            type="time"
-            value={openTime}
-            onChange={(e) => onChangeOpenTime(e.target.value)}
-            className={inputClass(lightMode)}
-          />
-        </div>
-        <div>
-          <label className={labelClass(lightMode)}>Horário de fechamento</label>
-          <input
-            type="time"
-            value={closeTime}
-            onChange={(e) => onChangeCloseTime(e.target.value)}
-            className={inputClass(lightMode)}
-          />
         </div>
       </div>
 

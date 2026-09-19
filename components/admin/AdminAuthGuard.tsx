@@ -20,13 +20,21 @@ type HostTenant = {
 }
 
 async function fetchHostTenant(host: string): Promise<HostTenant | null> {
-  try {
-    const res = await fetch(apiUrl(`/tenants/by-subdomain?host=${encodeURIComponent(host)}`))
-    if (!res.ok) return null
-    return (await res.json()) as HostTenant
-  } catch {
-    return null
+  // Query primeiro (API nova); path como plano B (API antiga aceita e resolve o host).
+  const urls = [
+    apiUrl(`/tenants/by-subdomain?host=${encodeURIComponent(host)}`),
+    apiUrl(`/tenants/by-subdomain/${encodeURIComponent(host)}`),
+  ]
+  for (const url of urls) {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) continue
+      return (await res.json()) as HostTenant
+    } catch {
+      /* tenta a próxima variante */
+    }
   }
+  return null
 }
 
 export default function AdminAuthGuard({ salonSlug, children }: Props) {

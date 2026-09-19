@@ -19,22 +19,39 @@ import { DynamicQueueSection } from '@/components/client/queue/DynamicQueueSecti
 import type { QueueSession } from '@/components/client/queue/types';
 import { readClientSession, setSalonCache } from '@/lib/client/salon-cache';
 import { useConfirm } from '@/components/admin/ui/useConfirm';
+import { hoursForWeekday, resolveDayHoursFromSalon } from '@/lib/day-hours';
 
 const generateTimeSlots = (
   professional: any,
   selectedDate: string,
   serviceDuration: number,
   busySlotsList: any[],
-  minAdvanceMinutes = 0
+  minAdvanceMinutes = 0,
+  salonDayHours?: { open: string; close: string } | null
 ) => {
   if (!professional) return [];
+  if (salonDayHours === null) return [];
   const slots = [];
-  const [startHour, startMin] = (professional.workStart || "09:00").split(':').map(Number);
-  const [endHour, endMin] = (professional.workEnd || "18:00").split(':').map(Number);
+  const [startHour, startMin] = (professional.workStart || salonDayHours?.open || '09:00')
+    .split(':')
+    .map(Number);
+  const [endHour, endMin] = (professional.workEnd || salonDayHours?.close || '18:00')
+    .split(':')
+    .map(Number);
 
-  // Começo e fim do expediente como Date na data selecionada
-  const workStart = new Date(`${selectedDate}T${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00`);
-  const workEnd = new Date(`${selectedDate}T${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00`);
+  let workStart = new Date(
+    `${selectedDate}T${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00`
+  );
+  let workEnd = new Date(
+    `${selectedDate}T${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00`
+  );
+
+  if (salonDayHours) {
+    const salonStart = new Date(`${selectedDate}T${salonDayHours.open}:00`);
+    const salonEnd = new Date(`${selectedDate}T${salonDayHours.close}:00`);
+    if (salonStart > workStart) workStart = salonStart;
+    if (salonEnd < workEnd) workEnd = salonEnd;
+  }
 
   let current = new Date(workStart);
 
@@ -43,10 +60,10 @@ const generateTimeSlots = (
     const slotEnd = new Date(slotStart.getTime() + serviceDuration * 60000);
 
     // Verifica se bate com algum horário ocupado
-    const isBusy = busySlotsList.some(busy => {
+    const isBusy = busySlotsList.some((busy) => {
       const busyStart = new Date(busy.startTime);
       const busyEnd = new Date(busy.endTime);
-      return (slotStart < busyEnd && slotEnd > busyStart);
+      return slotStart < busyEnd && slotEnd > busyStart;
     });
 
     const now = new Date();
@@ -58,7 +75,7 @@ const generateTimeSlots = (
       time: slotStart.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       available: !isBusy && !isPast,
       start: slotStart,
-      end: slotEnd
+      end: slotEnd,
     });
 
     current.setMinutes(current.getMinutes() + 30);
@@ -127,9 +144,11 @@ export default function PublicSalonPage() {
   const [joinQueueError, setJoinQueueError] = useState<string | null>(null);
   const [joinQueueSuccess, setJoinQueueSuccess] = useState<boolean>(false);
 
-  const displayServices = (activeQueueSession?.services && activeQueueSession.services.length > 0)
-    ? activeQueueSession.services.filter((s: any) => s.isActive !== false)
-    : services.filter((s: any) => s.isActive !== false);
+  const displayServices = (() => {
+    const fromSession = (activeQueueSession?.services ?? []).filter((s: any) => s.isActive !== false)
+    if (fromSession.length > 0) return fromSession
+    return services.filter((s: any) => s.isActive !== false)
+  })()
 
   const [busySlots, setBusySlots] = useState<any[]>([]);
   const [loadingBookingData, setLoadingBookingData] = useState(false);
@@ -627,12 +646,21 @@ export default function PublicSalonPage() {
       return <GuestLoginRedirect loginPath={loginPath} />
     }
 
+    const dayHoursMap = resolveDayHoursFromSalon(data?.salon || {});
+    const selectedWeekday = selectedDate
+      ? new Date(`${selectedDate}T12:00:00`).getDay()
+      : new Date().getDay();
+    const salonDayHours = selectedDate
+      ? hoursForWeekday(dayHoursMap, selectedWeekday)
+      : null;
+
     const timeSlots = generateTimeSlots(
       selectedProfessional,
       selectedDate,
       displayService?.duration || 30,
       busySlots,
-      Number(data?.salon?.bookingMinAdvanceMinutes) || 0
+      Number(data?.salon?.bookingMinAdvanceMinutes) || 0,
+      salonDayHours
     );
 
     const brand = primaryColor || '#d5a85c';
@@ -1198,11 +1226,17 @@ export default function PublicSalonPage() {
                     </label>
                     {salon?.queueGeofenceRequired ? (
                       <p className="mb-3 text-[11px] font-semibold leading-relaxed text-amber-700 dark:text-amber-300/90">
-                        Esta fila exige GPS: você precisa estar a até {salon.queueRadiusMeters ?? 250} m da barbearia.
+                        Esta fila exige GPS: ao confirmar, o celular pede localização. Você precisa estar a até{' '}
+                        {salon.queueRadiusMeters ?? 250} m da barbearia.
                       </p>
                     ) : null}
                     {displayServices.length === 0 ? (
-                      <p className="text-sm font-semibold text-gray-500 italic">Nenhum serviço disponível.</p>
+                      <p className="text-sm font-semibold text-gray-500 dark:text-slate-400 leading-relaxed">
+                        Nenhum serviço disponível para este profissional.
+                        {' '}
+                        No painel admin, vincule serviços em <strong>Equipe</strong> ou cadastre em{' '}
+                        <strong>Meus Serviços</strong>.
+                      </p>
                     ) : (
                       <div className="grid grid-cols-1 gap-2.5 max-h-60 overflow-y-auto pr-1">
                         {displayServices.map((s: any) => {

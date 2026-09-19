@@ -29,6 +29,15 @@ import WeekdayHoursEditor, {
   DEFAULT_CLOSED_DAY_MESSAGE,
   DEFAULT_OPEN_WEEKDAYS,
 } from '../WeekdayHoursEditor'
+import {
+  type DayHoursMap,
+  dayHoursFromLegacy,
+  hoursForWeekday,
+  legacyRangeFromDayHours,
+  openWeekdaysFromDayHours,
+  resolveDayHoursFromSalon,
+  weekdayInSaoPaulo,
+} from '@/lib/day-hours'
 
 type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila'
 
@@ -87,6 +96,7 @@ export default function AdminSalonTab({
     openTime: '09:00',
     closeTime: '18:00',
     openWeekdays: DEFAULT_OPEN_WEEKDAYS as number[],
+    dayHours: dayHoursFromLegacy(DEFAULT_OPEN_WEEKDAYS, '09:00', '18:00') as DayHoursMap,
     closedDayMessage: DEFAULT_CLOSED_DAY_MESSAGE,
     bookingCalendarMode: 'WEEK' as 'WEEK' | 'TODAY',
     tenantName: '',
@@ -110,6 +120,8 @@ export default function AdminSalonTab({
   function applySalonData(data: SalonSettings) {
     setSalon(data)
     setCep(data.cep || '')
+    const dayHours = resolveDayHoursFromSalon(data)
+    const range = legacyRangeFromDayHours(dayHours)
     setForm({
       name: data.name || '',
       phone: data.phone || '',
@@ -118,11 +130,10 @@ export default function AdminSalonTab({
       latitude: data.latitude != null ? String(data.latitude) : '',
       longitude: data.longitude != null ? String(data.longitude) : '',
       queueRadiusMeters: String(data.queueRadiusMeters ?? 250),
-      openTime: data.openTime || '09:00',
-      closeTime: data.closeTime || '18:00',
-      openWeekdays: Array.isArray(data.openWeekdays) && data.openWeekdays.length
-        ? data.openWeekdays
-        : DEFAULT_OPEN_WEEKDAYS,
+      openTime: range.openTime,
+      closeTime: range.closeTime,
+      openWeekdays: openWeekdaysFromDayHours(dayHours),
+      dayHours,
       closedDayMessage: data.closedDayMessage || DEFAULT_CLOSED_DAY_MESSAGE,
       bookingCalendarMode: data.bookingCalendarMode === 'TODAY' ? 'TODAY' : 'WEEK',
       tenantName: data.tenant?.name || '',
@@ -267,6 +278,7 @@ export default function AdminSalonTab({
         throw new Error('Longitude inválida.')
       }
 
+      const range = legacyRangeFromDayHours(form.dayHours)
       const updated = await updateSalon(salonId, {
         name: form.name,
         phone: onlyDigits(form.phone),
@@ -275,9 +287,10 @@ export default function AdminSalonTab({
         latitude,
         longitude,
         queueRadiusMeters: Number(form.queueRadiusMeters) || 250,
-        openTime: form.openTime,
-        closeTime: form.closeTime,
-        openWeekdays: form.openWeekdays,
+        dayHours: form.dayHours,
+        openTime: range.openTime,
+        closeTime: range.closeTime,
+        openWeekdays: openWeekdaysFromDayHours(form.dayHours),
         closedDayMessage: form.closedDayMessage.trim() || DEFAULT_CLOSED_DAY_MESSAGE,
         bookingCalendarMode: form.bookingCalendarMode,
         instagramUrl: normalizeInstagram(form.instagramUrl) || null,
@@ -351,13 +364,20 @@ export default function AdminSalonTab({
                 <p className={lightMode ? 'text-slate-700' : 'text-slate-300'}>{form.address || 'Não cadastrado'}</p>
               </div>
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Expediente do Salão</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Expediente de hoje
+                </p>
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full border border-slate-600 px-3 py-1 text-xs font-semibold text-slate-200"
                   style={{ borderColor: `${form.primaryColor}55`, color: form.primaryColor }}
                 >
                   <Clock3 className="size-3.5" />
-                  {form.openTime} às {form.closeTime}
+                  {(() => {
+                    const todayHours = hoursForWeekday(form.dayHours, weekdayInSaoPaulo())
+                    return todayHours
+                      ? `${todayHours.open} às ${todayHours.close}`
+                      : 'Fechado hoje'
+                  })()}
                 </span>
               </div>
             </div>
@@ -528,19 +548,17 @@ export default function AdminSalonTab({
             <WeekdayHoursEditor
               lightMode={lightMode}
               brandColor={form.primaryColor || '#d5a85c'}
-              openWeekdays={form.openWeekdays}
-              onToggleDay={(day) => {
-                setForm((current) => {
-                  const set = new Set(current.openWeekdays)
-                  if (set.has(day)) set.delete(day)
-                  else set.add(day)
-                  return { ...current, openWeekdays: Array.from(set).sort((a, b) => a - b) }
-                })
+              dayHours={form.dayHours}
+              onChangeDayHours={(next) => {
+                const range = legacyRangeFromDayHours(next)
+                setForm((current) => ({
+                  ...current,
+                  dayHours: next,
+                  openWeekdays: openWeekdaysFromDayHours(next),
+                  openTime: range.openTime,
+                  closeTime: range.closeTime,
+                }))
               }}
-              openTime={form.openTime}
-              closeTime={form.closeTime}
-              onChangeOpenTime={(value) => setForm({ ...form, openTime: value })}
-              onChangeCloseTime={(value) => setForm({ ...form, closeTime: value })}
               closedDayMessage={form.closedDayMessage}
               onChangeClosedDayMessage={(value) => setForm({ ...form, closedDayMessage: value })}
               bookingCalendarMode={form.bookingCalendarMode}
