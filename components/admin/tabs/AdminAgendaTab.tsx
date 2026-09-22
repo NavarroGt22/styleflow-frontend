@@ -148,6 +148,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   }, [salon?.slug, salon?.tenant?.clientDomain])
 
   useEffect(() => {
+    if (!salonId) return
     let cancelled = false
     fetchSalon(salonId)
       .then((data) => {

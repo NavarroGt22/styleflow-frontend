@@ -43,6 +43,7 @@ function emptyPoint(ymd: string): FinancialDailyPoint {
     gross: 0,
     net: 0,
     products: 0,
+    barbers: [],
   }
 }
 
@@ -151,6 +152,15 @@ export default function FinancialDailyChart({
             <p className={`mt-1 ${muted}`}>
               {active.appointments} atendimento{active.appointments === 1 ? '' : 's'}
             </p>
+            {active.barbers && active.barbers.length > 0 ? (
+              <div className={`mt-1.5 space-y-0.5 ${muted}`}>
+                {active.barbers.map((b) => (
+                  <p key={b.name}>
+                    {b.name}: {b.appointments} · {money(b.gross)}
+                  </p>
+                ))}
+              </div>
+            ) : null}
             <p className={muted}>Bruto: {money(active.gross)}</p>
             <p className="font-semibold text-emerald-500">Líquido: {money(active.net)}</p>
             <p className={muted}>N/P (produtos): {money(active.products)}</p>

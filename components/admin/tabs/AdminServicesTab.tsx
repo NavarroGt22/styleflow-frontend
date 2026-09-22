@@ -18,7 +18,13 @@ import { createService, deleteService, fetchServices, updateService } from '@/li
 
 const CATEGORIES = ['Cabelo', 'Sobrancelha', 'Coloração', 'Barba', 'Unha', 'Maquiagem', 'Depilação', 'Estética']
 
-const emptyForm = { name: '', category: 'Cabelo', customCategory: '', price: '', duration: '' }
+const emptyForm = {
+  name: '',
+  category: 'Cabelo',
+  customCategory: '',
+  price: '',
+  duration: '',
+}
 
 export default function AdminServicesTab({ salonId, lightMode = false }: AdminTabProps) {
   const [query, setQuery] = useState('')
@@ -96,6 +102,7 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
       if (editing) {
         await updateService(editing.id, payload)
       } else {
+        // Cada barbeiro cria para si: o backend vincula ao perfil de quem está logado.
         await createService({ salonId, ...payload })
       }
       setModalOpen(false)
@@ -263,6 +270,11 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
                 className={inputClass(lightMode)}
               />
             </div>
+            {!editing ? (
+              <p className={`text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Este corte fica só no seu menu. Clientes que escolherem outro barbeiro não veem ele.
+              </p>
+            ) : null}
             <div>
               <label className={labelClass(lightMode)}>Categoria do Serviço</label>
               <select

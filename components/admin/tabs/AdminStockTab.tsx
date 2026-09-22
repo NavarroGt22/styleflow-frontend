@@ -6,6 +6,7 @@ import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminStat, inputClas
 import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, Product } from '@/lib/admin/types'
 import { createProduct, fetchProducts, restockProduct, sellProduct, softDeleteProduct, updateProduct } from '@/lib/admin/api'
+import { getSessionUser } from '@/lib/auth'
 
 type StockSubTab = 'estoque' | 'financeiro'
 
@@ -19,6 +20,9 @@ function isArchived(product: Product) {
 
 export default function AdminStockTab({ salonId, lightMode = false }: AdminTabProps) {
   const { confirm, confirmDialog } = useConfirm(lightMode)
+  // Cadastrar, reestocar, marcar prêmio e remover são do dono (PRODUCT_MANAGE na API).
+  const sessionRole = getSessionUser()?.role
+  const canManage = sessionRole === 'OWNER' || sessionRole === 'SUPER_ADMIN'
   const [subTab, setSubTab] = useState<StockSubTab>('estoque')
   const [items, setItems] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -162,6 +166,7 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
   ]
 
   function restockControls(product: Product) {
+    if (!canManage) return null
     return (
       <div className="flex items-center gap-2">
         <input
@@ -213,9 +218,15 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
 
       {subTab === 'estoque' ? (
         <div className={sectionClass(lightMode)}>
-          <div className="mb-4 flex justify-end">
-            <AdminButton onClick={() => setShowForm((v) => !v)}>Novo produto</AdminButton>
-          </div>
+          {canManage ? (
+            <div className="mb-4 flex justify-end">
+              <AdminButton onClick={() => setShowForm((v) => !v)}>Novo produto</AdminButton>
+            </div>
+          ) : (
+            <p className={`mb-4 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              Você pode vender produtos aqui. Cadastrar, reestocar e remover é só com o dono.
+            </p>
+          )}
           {showForm ? (
             <form
               onSubmit={handleCreate}
@@ -280,9 +291,11 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {restockControls(product)}
-                    <AdminButton variant="ghost" className="h-9 px-3 text-xs" onClick={() => toggleReward(product)}>
-                      {product.isReward ? 'Remover prêmio' : 'Marcar prêmio'}
-                    </AdminButton>
+                    {canManage ? (
+                      <AdminButton variant="ghost" className="h-9 px-3 text-xs" onClick={() => toggleReward(product)}>
+                        {product.isReward ? 'Remover prêmio' : 'Marcar prêmio'}
+                      </AdminButton>
+                    ) : null}
                     <AdminButton
                       className="h-9 px-3 text-xs"
                       onClick={() => handleSell(product)}
@@ -290,15 +303,17 @@ export default function AdminStockTab({ salonId, lightMode = false }: AdminTabPr
                     >
                       Vender 1
                     </AdminButton>
-                    <button
-                      type="button"
-                      onClick={() => handleSoftDelete(product)}
-                      disabled={busyId === product.id}
-                      className="grid size-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 disabled:opacity-50"
-                      aria-label={`Remover ${product.name} do estoque`}
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                    {canManage ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSoftDelete(product)}
+                        disabled={busyId === product.id}
+                        className="grid size-9 place-items-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 disabled:opacity-50"
+                        aria-label={`Remover ${product.name} do estoque`}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    ) : null}
                   </div>
                 </article>
               ))}

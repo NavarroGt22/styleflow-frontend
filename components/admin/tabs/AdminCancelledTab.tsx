@@ -124,24 +124,42 @@ export default function AdminCancelledTab({ salonId, lightMode = false }: AdminT
         ) : null}
       </div>
 
-      <div className={`mb-4 flex items-center justify-between rounded-xl border px-2 py-2 ${cardBg}`}>
+      <div className={`mb-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-2 ${cardBg}`}>
         <button
           type="button"
           aria-label="Dia anterior"
           onClick={() => setDate((d) => shiftYmd(d, -1))}
-          className={`grid size-9 place-items-center rounded-lg transition ${
+          className={`grid size-9 shrink-0 place-items-center rounded-lg transition ${
             lightMode ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300 hover:bg-slate-800'
           }`}
         >
           <ChevronLeft className="size-5" />
         </button>
-        <div className="text-center">
-          <p className={`text-sm font-bold capitalize ${title}`}>{longDateLabel(date)}</p>
+        <div className="min-w-0 flex-1 text-center">
+          <label className="sr-only" htmlFor="cancelled-date">
+            Escolher dia
+          </label>
+          <input
+            id="cancelled-date"
+            type="date"
+            value={date}
+            max={todayYmd()}
+            onChange={(e) => {
+              const next = e.target.value
+              if (next) setDate(next)
+            }}
+            className={`mx-auto block w-full max-w-[11.5rem] rounded-lg border px-2 py-1.5 text-center text-sm font-bold capitalize ${
+              lightMode
+                ? 'border-slate-200 bg-white text-slate-900'
+                : 'border-slate-600 bg-[#142035] text-white'
+            }`}
+          />
+          <p className={`mt-1 text-[11px] capitalize ${muted}`}>{longDateLabel(date)}</p>
           {!isToday ? (
             <button
               type="button"
               onClick={() => setDate(todayYmd())}
-              className="text-[11px] font-semibold text-[var(--brand)] underline"
+              className="mt-0.5 text-[11px] font-semibold text-[var(--brand)] underline"
             >
               Voltar para hoje
             </button>
@@ -152,7 +170,7 @@ export default function AdminCancelledTab({ salonId, lightMode = false }: AdminT
           aria-label="Próximo dia"
           disabled={isToday}
           onClick={() => setDate((d) => shiftYmd(d, 1))}
-          className={`grid size-9 place-items-center rounded-lg transition disabled:opacity-30 ${
+          className={`grid size-9 shrink-0 place-items-center rounded-lg transition disabled:opacity-30 ${
             lightMode ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300 hover:bg-slate-800'
           }`}
         >

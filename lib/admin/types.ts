@@ -6,6 +6,7 @@ export type AdminTab =
   | 'equipe'
   | 'estoque'
   | 'fila'
+  | 'expediente'
   | 'salao'
   | 'clientes'
   | 'crm'
@@ -35,6 +36,35 @@ export type Service = {
   price: number
   active: boolean
   description?: string | null
+  /** Serviços são individuais: barbeiros que oferecem este corte. */
+  professionalNames?: string[]
+  professionalIds?: string[]
+  /** Se o barbeiro logado oferece este corte. */
+  isMine?: boolean
+}
+
+export type MyProfessionalProfile = {
+  id: string
+  name: string
+  workStart: string
+  workEnd: string
+  queueMode?: boolean
+  commissionRate?: number
+  /** false = ainda usa o horário do salão como ponto de partida. */
+  hasCustomHours: boolean
+  /** Expediente por dia deste barbeiro: { "1": { open, close } }. */
+  dayHours: Record<string, { open: string; close: string }>
+  bookingCalendarMode: 'WEEK' | 'TODAY'
+  salon: {
+    id: string
+    name: string
+    openTime?: string | null
+    closeTime?: string | null
+    dayHours?: Record<string, { open: string; close: string }>
+    closedDayMessage?: string | null
+    bookingCalendarMode: 'WEEK' | 'TODAY'
+    bookingMaxDaysAhead: number
+  }
 }
 
 export type Appointment = {
@@ -95,6 +125,8 @@ export type FinancialDailyPoint = {
   gross: number
   net: number
   products: number
+  /** Quem cortou no dia (balanço geral do salão). */
+  barbers?: Array<{ name: string; appointments: number; gross: number }>
 }
 
 export type FinancialDailySeries = {
@@ -109,6 +141,8 @@ export type FinancialServiceRow = {
   category: string | null
   count: number
   gross: number
+  professionalId?: string | null
+  professionalName?: string | null
 }
 
 export type FinancialServicesReport = {
@@ -116,6 +150,7 @@ export type FinancialServicesReport = {
   professionalId: string | null
   services: FinancialServiceRow[]
   categories: { category: string; count: number; gross: number }[]
+  byProfessional?: Array<{ professionalId: string; name: string; count: number; gross: number }>
 }
 
 export type FinancialDashboard = {
@@ -276,6 +311,9 @@ export type SalonCustomer = {
   phone?: string | null
   isActive: boolean
   completedCuts: number
+  /** Com quem o cliente já cortou (histórico completo), do que mais cortou para o menos. */
+  barbers?: Array<{ professionalId: string; name: string; cuts: number }>
+  groups?: Array<{ id: string; name: string; color: string }>
   availableRewards: Array<{
     earnId: string
     rewardId: string

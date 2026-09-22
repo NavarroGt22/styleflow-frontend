@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { PRODUCT_NAME } from '@/lib/brand'
@@ -11,6 +10,9 @@ import { PRODUCT_NAME } from '@/lib/brand'
  * - Qualquer outro caso (app.meucorteja.com/, localhost/, apex) não tem barbearia
  *   implícita: mostra uma tela neutra do produto. Nunca cai na vitrine de um tenant
  *   específico — cada barbearia é independente e só abre pelo próprio link.
+ *
+ * Login de dono/profissional fica só em admin.* (ou URL direta /login) —
+ * não aparece aqui para o cliente achar que precisa entrar no painel.
  */
 export default async function HomePage() {
   const h = await headers()
@@ -34,12 +36,6 @@ export default async function HomePage() {
           <span className="font-mono text-slate-300">app.suabarbearia.com</span> ou{' '}
           <span className="font-mono text-slate-300">/app/nome-da-barbearia</span>).
         </p>
-        <Link
-          href="/login"
-          className="mt-8 inline-flex h-11 items-center justify-center rounded-xl border border-white/15 px-5 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-        >
-          Sou dono ou profissional
-        </Link>
       </div>
     </main>
   )

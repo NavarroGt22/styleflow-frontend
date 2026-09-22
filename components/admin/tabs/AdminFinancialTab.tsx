@@ -530,8 +530,8 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
                     <div className="-mx-1 flex gap-2 overflow-x-auto overscroll-x-contain px-1 pb-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
                       {servicesReport.services.map((row) => (
                         <div
-                          key={row.serviceId ?? row.name}
-                          className={`w-32 shrink-0 rounded-xl border p-3 ${
+                          key={`${row.serviceId ?? row.name}-${row.professionalId ?? 'all'}`}
+                          className={`w-36 shrink-0 rounded-xl border p-3 ${
                             lightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-600 bg-[#142035]'
                           }`}
                         >
@@ -541,10 +541,33 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
                           <p className={`mt-1 truncate text-xs font-semibold ${title}`} title={row.name}>
                             {row.name}
                           </p>
+                          {row.professionalName ? (
+                            <p className={`truncate text-[10px] font-medium ${muted}`} title={row.professionalName}>
+                              {row.professionalName}
+                            </p>
+                          ) : null}
                           <p className={`text-[10px] ${muted}`}>{money(row.gross)}</p>
                         </div>
                       ))}
                     </div>
+
+                    {servicesReport.byProfessional && servicesReport.byProfessional.length > 0 ? (
+                      <div className={`mt-4 border-t pt-3 ${lightMode ? 'border-slate-200' : 'border-slate-700'}`}>
+                        <p className={`mb-2 text-[10px] font-bold uppercase tracking-[0.14em] ${muted}`}>
+                          Por barbeiro
+                        </p>
+                        <div className="space-y-1.5">
+                          {servicesReport.byProfessional.map((row) => (
+                            <div key={row.professionalId} className="flex items-center justify-between text-sm">
+                              <span className={lightMode ? 'text-slate-700' : 'text-slate-300'}>{row.name}</span>
+                              <span className={`font-bold ${title}`}>
+                                {row.count} · {money(row.gross)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
 
                     {servicesReport.categories.length ? (
                       <div className={`mt-4 border-t pt-3 ${lightMode ? 'border-slate-200' : 'border-slate-700'}`}>
@@ -1070,7 +1093,16 @@ function CashRegisterPanel({
               </h4>
               {data.recentRecords.length ? (
                 <div className="space-y-2">
-                  {data.recentRecords.slice(0, 20).map((record) => (
+                  {data.recentRecords.slice(0, 20).map((record) => {
+                    const serviceName =
+                      record.appointment?.service?.name ||
+                      record.productSale?.product?.name ||
+                      'Movimentação'
+                    const barberName =
+                      record.appointment?.professional?.user?.name ||
+                      record.productSale?.professional?.user?.name ||
+                      null
+                    return (
                     <div
                       key={record.id}
                       className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm ${
@@ -1078,14 +1110,20 @@ function CashRegisterPanel({
                       }`}
                     >
                       <span className={lightMode ? 'text-slate-700' : 'text-slate-300'}>
-                        {record.appointment?.service?.name || record.productSale?.product?.name || 'Movimentação'}
+                        {serviceName}
+                        {barberName ? (
+                          <span className={`block text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                            {barberName}
+                          </span>
+                        ) : null}
                       </span>
                       <span className={record.isExpense ? 'font-semibold text-rose-500' : 'font-semibold text-emerald-600'}>
                         {record.isExpense ? '-' : '+'}
                         {money(record.amount)}
                       </span>
                     </div>
-                  ))}
+                    )
+                  })}
                   {data.recentRecords.length > 20 ? (
                     <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                       Mostrando 20 de {data.recentRecords.length}. O CSV de fechamento inclui todos.

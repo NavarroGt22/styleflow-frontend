@@ -27,10 +27,14 @@ type WeekdayHoursEditorProps = {
   brandColor?: string
   dayHours: DayHoursMap
   onChangeDayHours: (next: DayHoursMap) => void
-  closedDayMessage: string
-  onChangeClosedDayMessage: (value: string) => void
+  closedDayMessage?: string
+  onChangeClosedDayMessage?: (value: string) => void
   bookingCalendarMode: 'WEEK' | 'TODAY'
   onChangeBookingCalendarMode: (value: 'WEEK' | 'TODAY') => void
+  /** A mensagem de folga é do salão: não aparece na tela do funcionário. */
+  showClosedDayMessage?: boolean
+  title?: string
+  description?: string
 }
 
 function defaultSlot(): { open: string; close: string } {
@@ -42,10 +46,13 @@ export default function WeekdayHoursEditor({
   brandColor = '#d5a85c',
   dayHours,
   onChangeDayHours,
-  closedDayMessage,
+  closedDayMessage = '',
   onChangeClosedDayMessage,
   bookingCalendarMode,
   onChangeBookingCalendarMode,
+  showClosedDayMessage = true,
+  title = 'Configure o horário de funcionamento',
+  description = 'Cada dia pode ter início e fim próprios. Dias desligados mostram a mensagem de folga para o cliente.',
 }: WeekdayHoursEditorProps) {
   function toggleDay(day: number) {
     const key = String(day)
@@ -79,11 +86,10 @@ export default function WeekdayHoursEditor({
       <div>
         <h4 className={`flex items-center gap-2 text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
           <CalendarDays className="size-4" style={{ color: brandColor }} />
-          Configure o horário de funcionamento
+          {title}
         </h4>
         <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-          Cada dia pode ter início e fim próprios. Dias desligados mostram a mensagem de folga
-          para o cliente.
+          {description}
           {openCount === 0 ? (
             <span className="mt-1 block font-semibold text-amber-500">
               Ative pelo menos um dia para liberar agendamentos.
@@ -237,19 +243,21 @@ export default function WeekdayHoursEditor({
         </div>
       </div>
 
-      <div>
-        <label className={labelClass(lightMode)}>Mensagem nos dias de folga</label>
-        <textarea
-          rows={2}
-          value={closedDayMessage}
-          onChange={(e) => onChangeClosedDayMessage(e.target.value)}
-          placeholder={DEFAULT_CLOSED_DAY_MESSAGE}
-          className={`${inputClass(lightMode)} h-auto py-3`}
-        />
-        <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-          Exibida no app do cliente quando o dia escolhido estiver fechado.
-        </p>
-      </div>
+      {showClosedDayMessage && onChangeClosedDayMessage ? (
+        <div>
+          <label className={labelClass(lightMode)}>Mensagem nos dias de folga</label>
+          <textarea
+            rows={2}
+            value={closedDayMessage}
+            onChange={(e) => onChangeClosedDayMessage(e.target.value)}
+            placeholder={DEFAULT_CLOSED_DAY_MESSAGE}
+            className={`${inputClass(lightMode)} h-auto py-3`}
+          />
+          <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+            Exibida no app do cliente quando o dia escolhido estiver fechado.
+          </p>
+        </div>
+      ) : null}
     </div>
   )
 }

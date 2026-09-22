@@ -19,6 +19,7 @@ import type {
   LoyaltyReward,
   LoyaltyRewardType,
   Product,
+  Professional,
 } from '@/lib/admin/types'
 import {
   createClientGroup,
@@ -32,6 +33,7 @@ import {
   fetchCustomers,
   fetchLoyaltyRewards,
   fetchProducts,
+  fetchProfessionals,
   redeemLoyaltyEarn,
   updateClientGroup,
   updateCoupon,
@@ -67,6 +69,9 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
   const [groups, setGroups] = useState<ClientGroup[]>([])
   const [coupons, setCoupons] = useState<SalonCoupon[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [professionals, setProfessionals] = useState<Professional[]>([])
+  const [groupFilter, setGroupFilter] = useState('')
+  const [barberFilter, setBarberFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -130,7 +135,13 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
     return data.customers.slice(start, start + CLIENTS_PER_PAGE)
   }, [data?.customers, clientsPage, clientsTotalPages])
 
-  async function load(search = query) {
+  async function load(
+    search = query,
+    filters: { groupId?: string; professionalId?: string } = {
+      groupId: groupFilter,
+      professionalId: barberFilter,
+    },
+  ) {
     if (!salonId) {
       setLoading(false)
       setError('Salão não identificado. Faça login novamente.')
@@ -139,18 +150,21 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
     setLoading(true)
     setError('')
     try {
-      const [customers, loyaltyRewards, productList, groupList, couponList] = await Promise.all([
-        fetchCustomers(salonId, search),
-        fetchLoyaltyRewards(salonId),
-        fetchProducts(salonId),
-        fetchClientGroups(salonId),
-        fetchCoupons(salonId),
-      ])
+      const [customers, loyaltyRewards, productList, groupList, couponList, professionalList] =
+        await Promise.all([
+          fetchCustomers(salonId, { q: search, ...filters }),
+          fetchLoyaltyRewards(salonId),
+          fetchProducts(salonId),
+          fetchClientGroups(salonId),
+          fetchCoupons(salonId),
+          fetchProfessionals(salonId).catch(() => [] as Professional[]),
+        ])
       setData(customers)
       setRewards(loyaltyRewards)
       setProducts(productList)
       setGroups(groupList)
       setCoupons(couponList)
+      setProfessionals(professionalList)
       if (!selectedGroupId && groupList[0]) setSelectedGroupId(groupList[0].id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar clientes.')
@@ -172,8 +186,19 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
 
   async function handleClearSearch() {
     setQuery('')
+    setGroupFilter('')
+    setBarberFilter('')
     setClientsPage(1)
-    await load('')
+    await load('', { groupId: '', professionalId: '' })
+  }
+
+  async function applyFilter(next: { groupId?: string; professionalId?: string }) {
+    const groupId = next.groupId ?? groupFilter
+    const professionalId = next.professionalId ?? barberFilter
+    setGroupFilter(groupId)
+    setBarberFilter(professionalId)
+    setClientsPage(1)
+    await load(query, { groupId, professionalId })
   }
 
   async function handleCreateGroup(event: FormEvent) {
@@ -424,6 +449,43 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
             </div>
           </form>
 
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <label className={labelClass(lightMode)}>Grupo</label>
+              <select
+                value={groupFilter}
+                onChange={(e) => applyFilter({ groupId: e.target.value })}
+                className={inputClass(lightMode)}
+              >
+                <option value="">Todos os grupos</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass(lightMode)}>Cortou com</label>
+              <select
+                value={barberFilter}
+                onChange={(e) => applyFilter({ professionalId: e.target.value })}
+                className={inputClass(lightMode)}
+              >
+                <option value="">Qualquer barbeiro</option>
+                {professionals.map((pro) => (
+                  <option key={pro.id} value={pro.id}>
+                    {pro.user?.name || 'Profissional'}
+                  </option>
+                ))}
+              </select>
+              <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Mostra só quem já concluiu corte com esse barbeiro — bom para montar um grupo dos
+                clientes dele.
+              </p>
+            </div>
+          </div>
+
           <div className={`${sectionClass(lightMode)} overflow-hidden p-0`}>
             {!data.customers.length ? (
               <div className="p-4">
@@ -477,6 +539,12 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                               <Phone className="mr-1 inline size-3" />
                               {formatPhone(customer.phone)}
                             </p>
+                            {customer.barbers?.length ? (
+                              <p className="mt-0.5 text-[11px] text-slate-400">
+                                Cortou com{' '}
+                                {customer.barbers.map((b) => `${b.name} (${b.cuts})`).join(', ')}
+                              </p>
+                            ) : null}
                             {customer.availableRewards.length ? (
                               <div className="mt-2 flex flex-wrap gap-1">
                                 {customer.availableRewards.map((earn) => (
@@ -522,6 +590,7 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                       >
                         <th className="px-4 py-3">Cliente</th>
                         <th className="px-4 py-3">Telefone</th>
+                        <th className="px-4 py-3">Cortou com</th>
                         <th className="px-4 py-3">Cortes</th>
                         <th className="px-4 py-3">Prêmios</th>
                         <th className="px-4 py-3">Ações</th>
@@ -534,7 +603,7 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                           className={`border-b last:border-0 ${lightMode ? 'border-slate-100' : 'border-slate-700/80'}`}
                         >
                           {editingCustomerId === customer.id ? (
-                            <td colSpan={5} className="px-4 py-3">
+                            <td colSpan={6} className="px-4 py-3">
                               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
                                 <div>
                                   <label className={labelClass(lightMode)}>Nome</label>
@@ -581,6 +650,11 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                               <td className="px-4 py-3 text-slate-400">
                                 <Phone className="mr-1 inline size-3" />
                                 {formatPhone(customer.phone)}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-slate-400">
+                                {customer.barbers?.length
+                                  ? customer.barbers.map((b) => `${b.name} (${b.cuts})`).join(', ')
+                                  : '—'}
                               </td>
                               <td className="px-4 py-3 font-semibold tabular-nums text-emerald-400">
                                 {customer.completedCuts}

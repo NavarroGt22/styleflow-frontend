@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from '@/lib/client/toast';
 import { useParams, useRouter } from 'next/navigation';
 import { Clock, AlertCircle, Check, CheckCircle, Gift } from 'lucide-react';
@@ -294,23 +294,22 @@ export default function PublicSalonPage() {
     }
   }, [data?.tenant, data?.salon]);
 
-  // Carregar dados adicionais de agendamento (serviços) se o salão estiver carregado
+  // Carregar profissionais + catálogo. Serviços do booking vêm do profissional escolhido.
   useEffect(() => {
     if (data?.salon) {
       const fetchBookingData = async () => {
         setLoadingBookingData(true);
         try {
+          const pRes = await fetch(apiUrl(`/professionals/${data.salon.id}`));
+          let pJson = [];
+          if (pRes.ok) pJson = await pRes.json();
+          setProfessionals(pJson);
+
+          // Catálogo do salão só como fallback legado; booking filtra pelo profissional.
           const sRes = await fetch(apiUrl(`/services/${data.salon.id}`));
           let sJson = [];
           if (sRes.ok) sJson = await sRes.json();
           setServices(sJson);
-
-          if (!data.salon.queueMode && currentUser) {
-            const pRes = await fetch(apiUrl(`/professionals/${data.salon.id}`));
-            let pJson = [];
-            if (pRes.ok) pJson = await pRes.json();
-            setProfessionals(pJson);
-          }
         } catch (err) {
           console.error("Erro ao buscar dados de agendamento:", err);
         } finally {
@@ -321,6 +320,38 @@ export default function PublicSalonPage() {
       fetchBookingData();
     }
   }, [data?.salon?.id, currentUser]);
+
+  const bookingServicesForProfessional = useMemo(() => {
+    if (!selectedProfessional) return [];
+    const linked = (selectedProfessional.services || [])
+      .filter((ps: any) => ps.isActive !== false && ps.service && ps.service.isActive !== false && !ps.service.deletedAt)
+      .map((ps: any) => ({
+        id: ps.service.id,
+        name: ps.customName || ps.service.name,
+        price: ps.customPrice != null ? ps.customPrice : ps.service.price,
+        duration: ps.customDuration != null ? ps.customDuration : ps.service.duration,
+        isActive: true,
+        serviceId: ps.serviceId,
+      }));
+    if (linked.length > 0) return linked;
+    // Legado: se o profissional não tem vínculo, não mostra catálogo global.
+    return [];
+  }, [selectedProfessional]);
+
+  // Cada barbeiro tem o próprio expediente e o próprio calendário no app.
+  const bookingWeekdaysForProfessional = useMemo<number[]>(() => {
+    const fromPro = selectedProfessional?.openWeekdays;
+    if (Array.isArray(fromPro) && fromPro.length) return fromPro;
+    const fromSalon = data?.salon?.openWeekdays;
+    if (Array.isArray(fromSalon) && fromSalon.length) return fromSalon;
+    return [1, 2, 3, 4, 5, 6];
+  }, [selectedProfessional, data?.salon?.openWeekdays]);
+
+  const bookingCalendarModeForProfessional = useMemo<'WEEK' | 'TODAY'>(() => {
+    const fromPro = selectedProfessional?.bookingCalendarMode;
+    if (fromPro === 'TODAY' || fromPro === 'WEEK') return fromPro;
+    return data?.salon?.bookingCalendarMode === 'TODAY' ? 'TODAY' : 'WEEK';
+  }, [selectedProfessional, data?.salon?.bookingCalendarMode]);
 
   const lastProfessionalStorageKey = data?.salon?.id && currentUser?.id
     ? `sf_last_pro_${data.salon.id}_${currentUser.id}`
@@ -821,10 +852,10 @@ export default function PublicSalonPage() {
                     </div>
                   ) : null}
                   
-                  {/* SELEÇÃO DE SERVIÇO */}
+                  {/* SELEÇÃO DE PROFISSIONAL (1º — serviços são individuais) */}
                   <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#1a1816]">
                     <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                      <span className="client-accent-text">1</span> SELECIONE O SERVIÇO
+                      <span className="client-accent-text">1</span> SELECIONE O PROFISSIONAL
                     </h3>
                     {loadingBookingData ? (
                       <div className="flex justify-center py-8">
@@ -833,11 +864,63 @@ export default function PublicSalonPage() {
                           style={{ borderColor: brand, borderTopColor: 'transparent' }}
                         />
                       </div>
-                    ) : services.length === 0 ? (
-                      <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">Nenhum serviço disponível no catálogo no momento.</p>
+                    ) : professionals.length === 0 ? (
+                      <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">Nenhum profissional disponível no momento.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        <select
+                          value={selectedProfessional?.id ?? ''}
+                          onChange={(e) => {
+                            const pro = professionals.find((p) => p.id === e.target.value) ?? null;
+                            setSelectedProfessional(pro);
+                            setSelectedService(null);
+                            setSelectedTime('');
+                          }}
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-1 dark:border-white/10 dark:bg-black/30 dark:text-white"
+                          style={{ '--tw-ring-color': brand } as React.CSSProperties}
+                        >
+                          <option value="" disabled>Selecione um profissional...</option>
+                          {professionals.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.user.name}
+                              {lastProfessionalId === p.id ? ' (seu barbeiro habitual)' : ''}
+                              {` — ${p.workStart} às ${p.workEnd}`}
+                            </option>
+                          ))}
+                        </select>
+
+                        {selectedProfessional && lastProfessionalId === selectedProfessional.id && (
+                          <p className="flex items-center gap-1.5 text-xs font-bold client-accent-text">
+                            Seu último barbeiro — já selecionado para você
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SELEÇÃO DE SERVIÇO (só do profissional) */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#1a1816]">
+                    <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                      <span className="client-accent-text">2</span> SELECIONE O SERVIÇO
+                    </h3>
+                    {!selectedProfessional ? (
+                      <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">
+                        Escolha o profissional primeiro para ver os cortes dele.
+                      </p>
+                    ) : loadingBookingData ? (
+                      <div className="flex justify-center py-8">
+                        <div
+                          className="h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+                          style={{ borderColor: brand, borderTopColor: 'transparent' }}
+                        />
+                      </div>
+                    ) : bookingServicesForProfessional.length === 0 ? (
+                      <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">
+                        Este profissional ainda não tem serviços cadastrados.
+                      </p>
                     ) : (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {services.map((s) => {
+                        {bookingServicesForProfessional.map((s: any) => {
                           const selected = selectedService?.id === s.id;
                           return (
                           <div
@@ -859,7 +942,7 @@ export default function PublicSalonPage() {
                                 <Clock size={10} />
                                 {s.duration} min
                               </span>
-                              <span className="client-accent-text">R$ {s.price.toFixed(2)}</span>
+                              <span className="client-accent-text">R$ {Number(s.price).toFixed(2)}</span>
                             </div>
                           </div>
                           );
@@ -868,86 +951,16 @@ export default function PublicSalonPage() {
                     )}
                   </div>
 
-                  {/* SELEÇÃO DE PROFISSIONAL */}
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#1a1816]">
-                    <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                      <span className="client-accent-text">2</span> SELECIONE O PROFISSIONAL
-                    </h3>
-                    {loadingBookingData ? (
-                      <div className="flex justify-center py-8">
-                        <div
-                          className="h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
-                          style={{ borderColor: brand, borderTopColor: 'transparent' }}
-                        />
-                      </div>
-                    ) : professionals.length === 0 ? (
-                      <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">Nenhum profissional disponível no momento.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        <select
-                          value={selectedProfessional?.id ?? ''}
-                          onChange={(e) => {
-                            const pro = professionals.find((p) => p.id === e.target.value) ?? null;
-                            setSelectedProfessional(pro);
-                            setSelectedTime('');
-                          }}
-                          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-1 dark:border-white/10 dark:bg-black/30 dark:text-white"
-                          style={{ '--tw-ring-color': brand } as React.CSSProperties}
-                        >
-                          <option value="" disabled>Selecione um profissional...</option>
-                          {professionals.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.user.name}
-                              {lastProfessionalId === p.id ? ' ★ (seu barbeiro habitual)' : ''}
-                              {` — ${p.workStart} às ${p.workEnd}`}
-                            </option>
-                          ))}
-                        </select>
-
-                        {selectedProfessional && lastProfessionalId === selectedProfessional.id && (
-                          <p className="flex items-center gap-1.5 text-xs font-bold client-accent-text">
-                            <span className="text-base">★</span>
-                            Seu último barbeiro — já selecionado para você
-                          </p>
-                        )}
-
-                        {selectedProfessional && selectedService && (() => {
-                          const custom = selectedProfessional.services?.find(
-                            (ps: any) => ps.serviceId === selectedService.id
-                          );
-                          if (!custom || !custom.isActive) return null;
-                          const hasCustomPrice = custom.customPrice !== null && custom.customPrice !== selectedService.price;
-                          const hasCustomDuration = custom.customDuration !== null && custom.customDuration !== selectedService.duration;
-                          if (!hasCustomPrice && !hasCustomDuration) return null;
-                          return (
-                            <div
-                              className="rounded-xl border p-3 text-xs font-bold"
-                              style={{ borderColor: `${brand}40`, backgroundColor: `${brand}12`, color: brand }}
-                            >
-                              Valores personalizados deste profissional:
-                              {hasCustomPrice && <span className="ml-2">R$ {custom.customPrice.toFixed(2)}</span>}
-                              {hasCustomDuration && <span className="ml-2">⏱️ {custom.customDuration} min</span>}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
                   {/* SELEÇÃO DE DATA E HORÁRIO */}
                   <BookingDateTimePicker
                     brandColor={primaryColor || '#d5a85c'}
-                    openWeekdays={
-                      Array.isArray(data?.salon?.openWeekdays) && data.salon.openWeekdays.length
-                        ? data.salon.openWeekdays
-                        : [1, 2, 3, 4, 5, 6]
-                    }
+                    openWeekdays={bookingWeekdaysForProfessional}
                     closedDayMessage={
                       data?.salon?.closedDayMessage ||
                       'Neste dia o barbeiro está de folga. Escolha outro dia para o corte.'
                     }
                     daysToShow={
-                      data?.salon?.bookingCalendarMode === 'TODAY'
+                      bookingCalendarModeForProfessional === 'TODAY'
                         ? 1
                         : // "Semana toda" são 7 dias; o limite de agendamento só encurta a tira
                           Math.min(7, Math.max(Number(data?.salon?.bookingMaxDaysAhead) || 45, 1))

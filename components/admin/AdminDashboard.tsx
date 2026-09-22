@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CalendarX2,
   Camera,
+  Clock3,
   Contact,
   DollarSign,
   Link2,
@@ -43,6 +44,7 @@ import AdminTeamTab from './tabs/AdminTeamTab'
 import AdminStockTab from './tabs/AdminStockTab'
 import AdminQueueTab from './tabs/AdminQueueTab'
 import AdminSalonTab from './tabs/AdminSalonTab'
+import AdminMyScheduleTab from './tabs/AdminMyScheduleTab'
 import AdminClientsTab from './tabs/AdminClientsTab'
 import AdminCrmTab from './tabs/AdminCrmTab'
 import AdminMyLinkPanel from './AdminMyLinkPanel'
@@ -66,6 +68,8 @@ const tabs: { id: AdminTab; label: string; icon: typeof Scissors; ownerOnly?: bo
   { id: 'equipe', label: 'Equipe', icon: Users, ownerOnly: true },
   { id: 'estoque', label: 'Estoque', icon: Package },
   { id: 'fila', label: 'Fila Dinâmica', icon: Timer },
+  // Cada barbeiro (dono ou funcionário) escolhe o próprio expediente aqui.
+  { id: 'expediente', label: 'Meu Horário', icon: Clock3 },
   { id: 'crm', label: 'CRM', icon: BriefcaseBusiness, ownerOnly: true },
   { id: 'salao', label: 'Salão', icon: Store, ownerOnly: true },
 ]
@@ -525,6 +529,9 @@ export default function AdminDashboard({
                     salonSlug={salonSlug}
                     lightMode={lightMode}
                   />
+                )}
+                {activeTab === 'expediente' && (
+                  <AdminMyScheduleTab salonId={resolvedSalonId} lightMode={lightMode} />
                 )}
                 {activeTab === 'salao' && canRenderTab('salao') && (
                   <AdminSalonTab

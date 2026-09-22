@@ -9,6 +9,7 @@ import type {
   FinancialSummary,
   LoyaltyReward,
   LoyaltyRewardType,
+  MyProfessionalProfile,
   Product,
   Professional,
   QueueSession,
@@ -40,6 +41,13 @@ export function mapService(item: Record<string, unknown>): Service {
     price: Number(item.price ?? 0),
     active: item.isActive !== false,
     description: item.description ? String(item.description) : null,
+    professionalNames: Array.isArray(item.professionalNames)
+      ? (item.professionalNames as unknown[]).map(String)
+      : [],
+    professionalIds: Array.isArray(item.professionalIds)
+      ? (item.professionalIds as unknown[]).map(String)
+      : [],
+    isMine: item.isMine === true,
   }
 }
 
@@ -56,6 +64,7 @@ export async function createService(payload: {
   duration: number
   description?: string
   category?: string
+  professionalId?: string
 }): Promise<Service> {
   const response = await authFetch('/services', {
     method: 'POST',
@@ -88,6 +97,25 @@ export async function deleteService(id: string): Promise<void> {
     const data = await response.json().catch(() => ({}))
     throw new Error(data.error || 'Não foi possível excluir o serviço.')
   }
+}
+
+export async function fetchMyProfessionalProfile(): Promise<MyProfessionalProfile> {
+  const response = await authFetch('/professionals/me/profile')
+  return parseJson(response)
+}
+
+export async function updateMySchedule(payload: {
+  dayHours?: Record<string, { open: string; close: string }>
+  workStart?: string
+  workEnd?: string
+  bookingCalendarMode?: 'WEEK' | 'TODAY'
+}): Promise<MyProfessionalProfile> {
+  const response = await authFetch('/professionals/me/schedule', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  const data = await parseJson<{ profile: MyProfessionalProfile }>(response)
+  return data.profile
 }
 
 export async function fetchAppointments(salonId: string): Promise<Appointment[]> {
@@ -441,9 +469,14 @@ export async function restockProduct(id: string, quantity: number): Promise<Prod
   return parseJson(response)
 }
 
-export async function fetchCustomers(salonId: string, q?: string): Promise<CustomersListResponse> {
+export async function fetchCustomers(
+  salonId: string,
+  filters: { q?: string; groupId?: string; professionalId?: string } = {},
+): Promise<CustomersListResponse> {
   const params = new URLSearchParams()
-  if (q?.trim()) params.set('q', q.trim())
+  if (filters.q?.trim()) params.set('q', filters.q.trim())
+  if (filters.groupId) params.set('groupId', filters.groupId)
+  if (filters.professionalId) params.set('professionalId', filters.professionalId)
   const qs = params.toString()
   const response = await authFetch(`/customers/salon/${salonId}${qs ? `?${qs}` : ''}`)
   return parseJson(response)

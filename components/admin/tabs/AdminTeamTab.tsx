@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Clock3, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, Clock3, Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import {
   AdminButton,
@@ -36,6 +36,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
   const [modal, setModal] = useState<'create' | 'edit' | null>(null)
   const [editing, setEditing] = useState<Professional | null>(null)
   const [saving, setSaving] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -69,6 +70,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
 
   function openCreate() {
     setEditing(null)
+    setShowPassword(false)
     setForm({
       name: '',
       email: '',
@@ -83,6 +85,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
 
   function openEdit(member: Professional) {
     setEditing(member)
+    setShowPassword(false)
     setForm({
       name: member.user?.name || '',
       email: member.user?.email || '',
@@ -331,14 +334,28 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
             </div>
             <div>
               <label className={labelClass(lightMode)}>
-                {modal === 'create' ? 'Senha temporária (opcional)' : 'Nova senha (opcional)'}
+                {modal === 'create' ? 'Senha do funcionário' : 'Nova senha (opcional)'}
               </label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className={inputClass(lightMode)}
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  autoComplete="new-password"
+                  className={`${inputClass(lightMode)} pr-11`}
+                  placeholder={modal === 'create' ? 'Mínimo 8 caracteres' : 'Deixe em branco para manter'}
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 transition-colors ${
+                    lightMode ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <button type="button" onClick={() => setModal(null)} className="text-sm font-semibold text-slate-500">
