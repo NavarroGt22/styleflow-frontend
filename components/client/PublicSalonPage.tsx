@@ -334,9 +334,22 @@ export default function PublicSalonPage() {
         serviceId: ps.serviceId,
       }));
     if (linked.length > 0) return linked;
-    // Legado: se o profissional não tem vínculo, não mostra catálogo global.
+
+    // Fallback: barbeiro dono sem vínculo ainda — usa catálogo público do salão.
+    if (selectedProfessional.isOwnerBarber && Array.isArray(services) && services.length > 0) {
+      return services
+        .filter((s: any) => s && s.isActive !== false && !s.deletedAt)
+        .map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          price: s.price,
+          duration: s.duration,
+          isActive: true,
+          serviceId: s.id,
+        }));
+    }
     return [];
-  }, [selectedProfessional]);
+  }, [selectedProfessional, services]);
 
   // Cada barbeiro tem o próprio expediente e o próprio calendário no app.
   const bookingWeekdaysForProfessional = useMemo<number[]>(() => {
