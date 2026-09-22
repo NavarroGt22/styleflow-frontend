@@ -212,7 +212,9 @@ export default function AdminDashboard({
           null
 
         if (!cancelled) {
-          if (!resolvedSalonId && typeof id === 'string' && id.trim()) {
+          // Sempre preferir o id do slug público — sessão antiga pode ter salonId
+          // desatualizado e a aba Meus Serviços fica vazia sem erro.
+          if (typeof id === 'string' && id.trim()) {
             setResolvedSalonId(id.trim())
           }
           if (!primaryColor && typeof color === 'string' && color.trim()) {
