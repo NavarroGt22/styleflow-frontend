@@ -17,6 +17,12 @@ import type {
   Service,
 } from './types'
 
+function errorWithStatus(message: string, status: number): Error {
+  const err = new Error(message) as Error & { status?: number }
+  err.status = status
+  return err
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   const data = await response.json()
   if (!response.ok) {
@@ -24,9 +30,12 @@ async function parseJson<T>(response: Response): Promise<T> {
     if (payload.details && Array.isArray(payload.details)) {
       const first = payload.details[0] as { message?: string; path?: (string | number)[] }
       const field = first?.path?.join('.') || 'campo'
-      throw new Error(first?.message ? `${field}: ${first.message}` : payload.error || 'Erro na requisição.')
+      throw errorWithStatus(
+        first?.message ? `${field}: ${first.message}` : payload.error || 'Erro na requisição.',
+        response.status,
+      )
     }
-    throw new Error(payload.error || 'Erro na requisição.')
+    throw errorWithStatus(payload.error || 'Erro na requisição.', response.status)
   }
   return data as T
 }
@@ -139,6 +148,44 @@ export async function updateAppointmentStatus(id: string, status: string): Promi
     body: JSON.stringify({ status }),
   })
   await parseJson(response)
+}
+
+export async function markAppointmentPaid(appointmentId: string): Promise<{
+  status: 'PAID'
+  appointmentId: string
+  paidAt: string
+  amount: number | null
+}> {
+  const response = await authFetch(`/appointments/${appointmentId}/mark-paid`, { method: 'POST' })
+  const data = (await response.json().catch(() => ({}))) as {
+    status?: string
+    appointmentId?: string
+    paidAt?: string | null
+    amount?: number | null
+    code?: string
+    error?: string
+  }
+  if (response.status === 409 && data.code === 'ALREADY_PAID') {
+    return {
+      status: 'PAID',
+      appointmentId: data.appointmentId || appointmentId,
+      paidAt: data.paidAt || new Date().toISOString(),
+      amount: data.amount ?? null,
+    }
+  }
+  if (!response.ok) {
+    const err = errorWithStatus(data.error || 'Não foi possível registrar o pagamento.', response.status) as Error & {
+      code?: string
+    }
+    err.code = data.code
+    throw err
+  }
+  return {
+    status: 'PAID',
+    appointmentId: data.appointmentId || appointmentId,
+    paidAt: data.paidAt || new Date().toISOString(),
+    amount: data.amount ?? null,
+  }
 }
 
 export async function blockAppointment(payload: {
@@ -332,6 +379,15 @@ export async function updateSalon(salonId: string, data: Record<string, unknown>
   })
   const payload = await parseJson<SalonSettings & { establishment?: SalonSettings }>(response)
   return payload.establishment ?? payload
+}
+
+/** E-mail PIX em claro. Só o OWNER; o valor fica só na memória de quem revelou. */
+export async function revealSalonPixKey(salonId: string): Promise<{ pixKeyEmail: string | null }> {
+  const response = await authFetch(`/establishments/${salonId}/pix-key`)
+  if (response.status === 503) {
+    throw errorWithStatus('Chave PIX indisponível no servidor, tente mais tarde', 503)
+  }
+  return parseJson(response)
 }
 
 export async function testSalonWhatsApp(

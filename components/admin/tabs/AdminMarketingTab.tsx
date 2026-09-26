@@ -71,6 +71,18 @@ const DEFAULT_RESCHEDULE_TEMPLATE =
   '(antes era {data_anterior} às {horario_anterior}).\n\n' +
   'Te esperamos!'
 
+const DEFAULT_PIX_CHARGE_TEMPLATE =
+  'Olá {cliente}! Para adiantar o pagamento do seu {servico} na {estabelecimento}, faça um PIX de R$ {valor}.\n\n' +
+  'Chave PIX (e-mail): {chave_pix}\n\n' +
+  'PIX copia e cola:\n{copia_e_cola}'
+
+const DEFAULT_PAYMENT_CONFIRMED_TEMPLATE =
+  'Olá {cliente}! Recebemos seu pagamento de R$ {valor} referente a {servico} na {estabelecimento}, dia {data} às {horario}. Obrigado!'
+
+const PIX_PREVIEW_KEY = 'exemplo@email.com'
+const PIX_PREVIEW_COPY = '00020126...EXEMPLO'
+const PIX_PREVIEW_AMOUNT = '25,00'
+
 const SYSTEM_TEMPLATE_OPTIONS = [
   { id: 'system-reminder', label: 'Lembrete da agenda (automático)' },
   { id: 'system-booking', label: 'Confirmação de agendamento (automático)' },
@@ -92,6 +104,9 @@ function formatBookingPreview(template: string, estabelecimento: string, link = 
     .replace(/{horario_anterior}|{hora_anterior}/g, '22:00')
     .replace(/{data}|{data_agendamento}/g, '19/09/2026')
     .replace(/{horario}|{hora_agendamento}|{tempo}/g, '19:30')
+    .replace(/{valor}/g, PIX_PREVIEW_AMOUNT)
+    .replace(/{chave_pix}/g, PIX_PREVIEW_KEY)
+    .replace(/{copia_e_cola}/g, PIX_PREVIEW_COPY)
     .replace(/{estabelecimento}/g, estabelecimento)
     .replace(/{link}|{link_agendamento}/g, link)
 }
@@ -105,7 +120,47 @@ const APPOINTMENT_TOKENS = [
   ['{estabelecimento}', 'Salão'],
 ] as const
 
-/** Campo de template automático (confirmação, cancelamento, remarcação). */
+function AutoMsgSwitch({
+  checked,
+  onChange,
+  label,
+  lightMode,
+}: {
+  checked: boolean
+  onChange: (next: boolean) => void
+  label: string
+  lightMode: boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className="inline-flex shrink-0 items-center gap-2"
+    >
+      <span
+        className={`text-[10px] font-bold uppercase tracking-wide ${
+          checked ? 'text-emerald-400' : lightMode ? 'text-slate-400' : 'text-slate-500'
+        }`}
+      >
+        {checked ? 'Ligada' : 'Desligada'}
+      </span>
+      <span
+        className={`relative inline-flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${
+          checked ? 'bg-emerald-500' : lightMode ? 'bg-slate-300' : 'bg-slate-600'
+        }`}
+      >
+        <span
+          className={`size-5 rounded-full bg-white shadow transition-transform duration-200 ${
+            checked ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </span>
+    </button>
+  )
+}
 function AutoTemplateField({
   label,
   hint,
@@ -116,6 +171,8 @@ function AutoTemplateField({
   previewName,
   previewLink,
   lightMode,
+  enabled,
+  onEnabledChange,
 }: {
   label: string
   hint: ReactNode
@@ -126,10 +183,15 @@ function AutoTemplateField({
   previewName: string
   previewLink?: string
   lightMode: boolean
+  enabled: boolean
+  onEnabledChange: (next: boolean) => void
 }) {
   return (
     <div className="sm:col-span-2">
-      <label className={labelClass(lightMode)}>{label}</label>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <label className={labelClass(lightMode)}>{label}</label>
+        <AutoMsgSwitch checked={enabled} onChange={onEnabledChange} label={label} lightMode={lightMode} />
+      </div>
       <p className={`mb-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>{hint}</p>
       <textarea
         value={value}
@@ -196,12 +258,6 @@ function persistSavedTemplates(salonId: string, list: SavedTemplate[]) {
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, '')
-}
-
-function checkboxClass(lightMode: boolean) {
-  return `size-4 cursor-pointer rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 ${
-    lightMode ? '' : 'border-slate-600 bg-slate-800'
-  }`
 }
 
 function formatPreview(
@@ -318,12 +374,20 @@ export default function AdminMarketingTab({
 
   const [remindEnabled, setRemindEnabled] = useState(false)
   const [remindMinutes, setRemindMinutes] = useState('10')
+  const [autoBookingEnabled, setAutoBookingEnabled] = useState(true)
+  const [autoPixChargeEnabled, setAutoPixChargeEnabled] = useState(true)
+  const [autoPaymentConfirmedEnabled, setAutoPaymentConfirmedEnabled] = useState(true)
+  const [autoCancelSalonEnabled, setAutoCancelSalonEnabled] = useState(true)
+  const [autoCancelClientEnabled, setAutoCancelClientEnabled] = useState(true)
+  const [autoRescheduleEnabled, setAutoRescheduleEnabled] = useState(true)
   const { confirm, confirmDialog } = useConfirm(lightMode)
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
   const [bookingTemplate, setBookingTemplate] = useState(DEFAULT_BOOKING_TEMPLATE)
   const [cancelSalonTemplate, setCancelSalonTemplate] = useState(DEFAULT_CANCEL_SALON_TEMPLATE)
   const [cancelClientTemplate, setCancelClientTemplate] = useState(DEFAULT_CANCEL_CLIENT_TEMPLATE)
   const [rescheduleTemplate, setRescheduleTemplate] = useState(DEFAULT_RESCHEDULE_TEMPLATE)
+  const [pixChargeTemplate, setPixChargeTemplate] = useState(DEFAULT_PIX_CHARGE_TEMPLATE)
+  const [paymentConfirmedTemplate, setPaymentConfirmedTemplate] = useState(DEFAULT_PAYMENT_CONFIRMED_TEMPLATE)
   const [gatewayUrl, setGatewayUrl] = useState('')
   const [gatewayToken, setGatewayToken] = useState('')
 
@@ -389,6 +453,12 @@ export default function AdminMarketingTab({
       setGroups(activeGroups)
       setRemindEnabled(Boolean(data.queueNotifyClient))
       setRemindMinutes(String(data.appointmentRemindMinutes ?? 10))
+      setAutoBookingEnabled(data.autoMsgBookingEnabled !== false)
+      setAutoPixChargeEnabled(data.autoMsgPixChargeEnabled !== false)
+      setAutoPaymentConfirmedEnabled(data.autoMsgPaymentConfirmedEnabled !== false)
+      setAutoCancelSalonEnabled(data.autoMsgCancelSalonEnabled !== false)
+      setAutoCancelClientEnabled(data.autoMsgCancelClientEnabled !== false)
+      setAutoRescheduleEnabled(data.autoMsgRescheduleEnabled !== false)
       const loadedTemplate = data.whatsappTemplate || DEFAULT_TEMPLATE
       // Templates antigos de fila → troca pelo texto padrão da agenda
       setTemplate(
@@ -398,6 +468,10 @@ export default function AdminMarketingTab({
       setCancelSalonTemplate(data.whatsappCancelSalonTemplate?.trim() || DEFAULT_CANCEL_SALON_TEMPLATE)
       setCancelClientTemplate(data.whatsappCancelClientTemplate?.trim() || DEFAULT_CANCEL_CLIENT_TEMPLATE)
       setRescheduleTemplate(data.whatsappRescheduleTemplate?.trim() || DEFAULT_RESCHEDULE_TEMPLATE)
+      setPixChargeTemplate(data.whatsappPixChargeTemplate?.trim() || DEFAULT_PIX_CHARGE_TEMPLATE)
+      setPaymentConfirmedTemplate(
+        data.whatsappPaymentConfirmedTemplate?.trim() || DEFAULT_PAYMENT_CONFIRMED_TEMPLATE,
+      )
       setGatewayUrl(data.whatsappGatewayUrl || '')
       setGatewayToken(data.whatsappGatewayToken || '')
       setEvoPhone((current) => current || data.phone || '')
@@ -528,12 +602,20 @@ export default function AdminMarketingTab({
       const minutes = Number(remindMinutes) || 10
       const updated = await updateSalon(salonId, {
         queueNotifyClient: remindEnabled,
+        autoMsgBookingEnabled: autoBookingEnabled,
+        autoMsgPixChargeEnabled: autoPixChargeEnabled,
+        autoMsgPaymentConfirmedEnabled: autoPaymentConfirmedEnabled,
+        autoMsgCancelSalonEnabled: autoCancelSalonEnabled,
+        autoMsgCancelClientEnabled: autoCancelClientEnabled,
+        autoMsgRescheduleEnabled: autoRescheduleEnabled,
         appointmentRemindMinutes: minutes,
         whatsappTemplate: template,
         whatsappBookingTemplate: bookingTemplate.trim() || null,
         whatsappCancelSalonTemplate: cancelSalonTemplate.trim() || null,
         whatsappCancelClientTemplate: cancelClientTemplate.trim() || null,
         whatsappRescheduleTemplate: rescheduleTemplate.trim() || null,
+        whatsappPixChargeTemplate: pixChargeTemplate.trim() || null,
+        whatsappPaymentConfirmedTemplate: paymentConfirmedTemplate.trim() || null,
         whatsappGatewayUrl: gatewayUrl.trim() || null,
         whatsappGatewayToken: gatewayToken.trim() || null,
       })
@@ -878,7 +960,15 @@ export default function AdminMarketingTab({
             />
           </div>
           <div className="sm:col-span-2">
-            <label className={labelClass(lightMode)}>Texto do lembrete automático (agenda)</label>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <label className={labelClass(lightMode)}>Texto do lembrete automático (agenda)</label>
+              <AutoMsgSwitch
+                checked={remindEnabled}
+                onChange={setRemindEnabled}
+                label="Lembrete automático"
+                lightMode={lightMode}
+              />
+            </div>
             <p className={`mb-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
               Quando o horário do cliente estiver perto (ex.: corte às <strong>09:00</strong> e aviso com{' '}
               <strong>10 min</strong> → envia ~<strong>08:50</strong>), o sistema monta a mensagem sozinho com
@@ -932,7 +1022,15 @@ export default function AdminMarketingTab({
           </div>
 
           <div className="sm:col-span-2">
-            <label className={labelClass(lightMode)}>Mensagem de confirmação de agendamento (automática)</label>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <label className={labelClass(lightMode)}>Mensagem de confirmação de agendamento (automática)</label>
+              <AutoMsgSwitch
+                checked={autoBookingEnabled}
+                onChange={setAutoBookingEnabled}
+                label="Confirmação de agendamento"
+                lightMode={lightMode}
+              />
+            </div>
             <p className={`mb-2 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
               Enviada na hora em que o cliente <strong>marca o corte</strong>. Escreva o texto do seu jeito: o
               sistema troca as variáveis pelo nome do cliente, barbeiro, serviço, data e horário.
@@ -1002,6 +1100,8 @@ export default function AdminMarketingTab({
             defaultValue={DEFAULT_CANCEL_SALON_TEMPLATE}
             tokens={APPOINTMENT_TOKENS}
             previewName={salon?.name || 'Barbearia'}
+            enabled={autoCancelSalonEnabled}
+            onEnabledChange={setAutoCancelSalonEnabled}
           />
 
           <AutoTemplateField
@@ -1019,6 +1119,8 @@ export default function AdminMarketingTab({
             tokens={[...APPOINTMENT_TOKENS, ['{link}', 'Link de agendar']] as const}
             previewName={salon?.name || 'Barbearia'}
             previewLink={publicUrl || 'https://app.suabarbearia.com'}
+            enabled={autoCancelClientEnabled}
+            onEnabledChange={setAutoCancelClientEnabled}
           />
 
           <AutoTemplateField
@@ -1040,6 +1142,57 @@ export default function AdminMarketingTab({
               ] as const
             }
             previewName={salon?.name || 'Barbearia'}
+            enabled={autoRescheduleEnabled}
+            onEnabledChange={setAutoRescheduleEnabled}
+          />
+
+          <AutoTemplateField
+            lightMode={lightMode}
+            label="Cobrança PIX (automática)"
+            hint={
+              <>
+                Texto da cobrança. A prévia usa dados fictícios. A chave PIX de verdade fica em Salão → PIX e não
+                aparece aqui.
+              </>
+            }
+            value={pixChargeTemplate}
+            onChange={setPixChargeTemplate}
+            defaultValue={DEFAULT_PIX_CHARGE_TEMPLATE}
+            tokens={
+              [
+                ['{cliente}', 'Nome'],
+                ['{servico}', 'Serviço'],
+                ['{valor}', 'Valor'],
+                ['{chave_pix}', 'Chave'],
+                ['{copia_e_cola}', 'Copia e cola'],
+                ['{estabelecimento}', 'Salão'],
+              ] as const
+            }
+            previewName={salon?.name || 'Barbearia'}
+            enabled={autoPixChargeEnabled}
+            onEnabledChange={setAutoPixChargeEnabled}
+          />
+
+          <AutoTemplateField
+            lightMode={lightMode}
+            label="Pagamento confirmado (recibo automático)"
+            hint={<>Enviada quando o pagamento do serviço é confirmado.</>}
+            value={paymentConfirmedTemplate}
+            onChange={setPaymentConfirmedTemplate}
+            defaultValue={DEFAULT_PAYMENT_CONFIRMED_TEMPLATE}
+            tokens={
+              [
+                ['{cliente}', 'Nome'],
+                ['{servico}', 'Serviço'],
+                ['{valor}', 'Valor'],
+                ['{estabelecimento}', 'Salão'],
+                ['{data}', 'Data'],
+                ['{horario}', 'Horário'],
+              ] as const
+            }
+            previewName={salon?.name || 'Barbearia'}
+            enabled={autoPaymentConfirmedEnabled}
+            onEnabledChange={setAutoPaymentConfirmedEnabled}
           />
         </div>
 
@@ -1051,22 +1204,9 @@ export default function AdminMarketingTab({
           <h4 className={`mb-3 text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
             3. Automação da agenda
           </h4>
-          <label
-            className={`mb-3 flex cursor-pointer items-center gap-3 text-sm font-medium ${
-              lightMode ? 'text-slate-700' : 'text-slate-300'
-            }`}
-          >
-            <input
-              type="checkbox"
-              className={checkboxClass(lightMode)}
-              checked={remindEnabled}
-              onChange={(e) => setRemindEnabled(e.target.checked)}
-            />
-            Enviar lembrete automático antes do horário
-          </label>
           <p className={`mb-3 text-[11px] leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-            Ex.: cliente agendou às 9:00 e você escolhe 10 min → a mensagem sai por volta das 8:50, com o nome e o
-            telefone já cadastrados na Agenda/Clientes.
+            O lembrete usa o interruptor ao lado do texto acima. Desligá-lo não desliga as outras mensagens.
+            Ex.: cliente agendou às 9:00 e você escolhe 10 min → a mensagem sai por volta das 8:50.
           </p>
           <div className="max-w-xs">
             <label className={labelClass(lightMode)}>Minutos antes do horário</label>

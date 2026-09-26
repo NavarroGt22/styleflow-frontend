@@ -9,6 +9,7 @@ import {
   Palette,
   Store,
   Users,
+  Wallet,
 } from 'lucide-react'
 import InstagramIcon from '@/components/icons/InstagramIcon'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
@@ -22,7 +23,8 @@ import {
   sectionClass,
 } from '../ui/AdminUi'
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
-import { fetchSalon, normalizeInstagram, updateSalon } from '@/lib/admin/api'
+import { fetchSalon, normalizeInstagram, revealSalonPixKey, updateSalon } from '@/lib/admin/api'
+import { getSessionUser } from '@/lib/auth'
 import { resolveAdminLink, resolveClientLink } from '@/lib/admin/platform-urls'
 import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
 import WeekdayHoursEditor, {
@@ -39,7 +41,10 @@ import {
   weekdayInSaoPaulo,
 } from '@/lib/day-hours'
 
-type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila'
+type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila' | 'pix'
+type PixProvider = 'MANUAL' | 'XGATE' | 'MERCADO_PAGO'
+
+const PIX_UNAVAILABLE = 'Chave PIX indisponível no servidor, tente mais tarde'
 
 const subTabs: { id: SubTab; label: string; shortLabel: string; icon: typeof Store }[] = [
   { id: 'general', label: 'Dados Gerais', shortLabel: 'Dados', icon: Store },
@@ -47,10 +52,18 @@ const subTabs: { id: SubTab; label: string; shortLabel: string; icon: typeof Sto
   { id: 'expediente', label: 'Funcionamento', shortLabel: 'Horário', icon: Clock3 },
   { id: 'comissao', label: 'Comissões', shortLabel: 'Comissão', icon: DollarSign },
   { id: 'fila', label: 'Fila & Agendamento', shortLabel: 'Fila', icon: Users },
+  { id: 'pix', label: 'PIX', shortLabel: 'PIX', icon: Wallet },
 ]
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, '')
+}
+
+function pixRequestMessage(err: unknown, fallback: string) {
+  const status =
+    err && typeof err === 'object' && 'status' in err ? Number((err as { status?: number }).status) : 0
+  if (status === 503) return PIX_UNAVAILABLE
+  return err instanceof Error ? err.message : fallback
 }
 
 function checkboxClass(lightMode: boolean) {
@@ -85,6 +98,13 @@ export default function AdminSalonTab({
   const [success, setSuccess] = useState('')
   const [cep, setCep] = useState('')
   const [geoBusy, setGeoBusy] = useState(false)
+  const [pixMasked, setPixMasked] = useState<string | null>(null)
+  const [pixCity, setPixCity] = useState('')
+  const [pixEmailDraft, setPixEmailDraft] = useState('')
+  const [pixEmailTouched, setPixEmailTouched] = useState(false)
+  const [pixRevealed, setPixRevealed] = useState<string | null>(null)
+  const [pixRevealing, setPixRevealing] = useState(false)
+  const [pixProvider, setPixProvider] = useState<PixProvider>('MANUAL')
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -153,6 +173,18 @@ export default function AdminSalonTab({
       queueAllowSkip: Boolean(data.queueAllowSkip),
       loyaltyResetMode: data.loyaltyResetMode === 'MONTHLY' ? 'MONTHLY' : 'LIFETIME',
     })
+    if ('pixKeyEmailMasked' in data || 'pixMerchantCity' in data) {
+      setPixMasked(data.pixKeyEmailMasked ?? null)
+      setPixCity(data.pixMerchantCity ?? '')
+      setPixEmailDraft('')
+      setPixEmailTouched(false)
+      setPixRevealed(null)
+    }
+    if (data.pixChargeProvider === 'XGATE' || data.pixChargeProvider === 'MERCADO_PAGO') {
+      setPixProvider(data.pixChargeProvider)
+    } else if ('pixChargeProvider' in data) {
+      setPixProvider('MANUAL')
+    }
   }
 
   async function load() {
@@ -260,8 +292,52 @@ export default function AdminSalonTab({
     setSuccess('Geofence desativado (sem ponto). Salve para aplicar — join sem GPS.')
   }
 
+  const sessionUser = getSessionUser()
+  const canEditPix =
+    sessionUser?.role === 'OWNER' && (!salon?.ownerId || salon.ownerId === sessionUser.id)
+
+  async function revealPix() {
+    if (!salonId || !canEditPix) return
+    setPixRevealing(true)
+    setError('')
+    try {
+      const data = await revealSalonPixKey(salonId)
+      setPixRevealed(data.pixKeyEmail ?? '')
+    } catch (err) {
+      setError(pixRequestMessage(err, 'Não foi possível revelar a chave PIX.'))
+    } finally {
+      setPixRevealing(false)
+    }
+  }
+
+  async function savePix() {
+    if (!salonId || !canEditPix) return
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const payload: Record<string, unknown> = {
+        pixMerchantCity: pixCity.trim(),
+      }
+      if (pixEmailTouched) {
+        payload.pixKeyEmail = pixEmailDraft.trim()
+      }
+      const updated = await updateSalon(salonId, payload)
+      applySalonData(updated)
+      setSuccess('Dados do PIX salvos.')
+    } catch (err) {
+      setError(pixRequestMessage(err, 'Erro ao salvar o PIX.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (subTab === 'pix') {
+      await savePix()
+      return
+    }
     if (!salonId) return
     setSaving(true)
     setError('')
@@ -400,7 +476,9 @@ export default function AdminSalonTab({
             className="mb-3 flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none sm:mb-5 sm:gap-2 sm:pb-2 [-webkit-overflow-scrolling:touch]"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            {subTabs.map(({ id, label, shortLabel, icon: Icon }) => {
+            {subTabs
+              .filter((tab) => tab.id !== 'pix' || canEditPix)
+              .map(({ id, label, shortLabel, icon: Icon }) => {
               const active = subTab === id
               return (
                 <button
@@ -725,8 +803,108 @@ export default function AdminSalonTab({
             </div>
           ) : null}
 
+          {subTab === 'pix' && canEditPix ? (
+            <div
+              className={`space-y-4 rounded-2xl border p-5 sm:p-6 ${
+                lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
+              }`}
+            >
+              <div>
+                <h4 className={`text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+                  Chave PIX do salão
+                </h4>
+                <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  E-mail e cidade usados na mensagem de PIX para o cliente. A chave fica cifrada no servidor.
+                </p>
+              </div>
+
+              <div>
+                <p className={labelClass(lightMode)}>E-mail PIX atual</p>
+                <p className={`mt-1 break-all text-sm font-medium ${lightMode ? 'text-slate-800' : 'text-slate-100'}`}>
+                  {pixRevealed !== null
+                    ? pixRevealed || 'Nenhuma chave cadastrada'
+                    : pixMasked || 'Nenhuma chave cadastrada'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void revealPix()}
+                  disabled={pixRevealing}
+                  className="mt-2 text-xs font-semibold text-indigo-400 underline disabled:opacity-60"
+                >
+                  {pixRevealing ? 'Revelando…' : 'Revelar'}
+                </button>
+              </div>
+
+              <div>
+                <label className={labelClass(lightMode)}>Novo e-mail PIX</label>
+                <input
+                  type="email"
+                  autoComplete="off"
+                  value={pixEmailDraft}
+                  placeholder="Somente se for trocar o e-mail"
+                  onChange={(e) => {
+                    setPixEmailDraft(e.target.value)
+                    setPixEmailTouched(true)
+                  }}
+                  className={inputClass(lightMode)}
+                />
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold text-rose-400 underline"
+                  onClick={() => {
+                    setPixEmailDraft('')
+                    setPixEmailTouched(true)
+                  }}
+                >
+                  Apagar e-mail ao salvar
+                </button>
+              </div>
+
+              <div>
+                <label className={labelClass(lightMode)}>Cidade do recebedor</label>
+                <input
+                  value={pixCity}
+                  maxLength={15}
+                  autoComplete="off"
+                  placeholder="Até 15 caracteres"
+                  onChange={(e) => setPixCity(e.target.value.slice(0, 15))}
+                  className={inputClass(lightMode)}
+                />
+              </div>
+
+              {(() => {
+                const hasEmail = pixEmailTouched ? pixEmailDraft.trim().length > 0 : Boolean(pixMasked)
+                const hasCity = pixCity.trim().length > 0
+                if (hasEmail && hasCity) return null
+                return (
+                  <p className="text-xs font-medium text-amber-400">
+                    Sem e-mail e cidade, a mensagem de PIX não será enviada ao cliente.
+                  </p>
+                )
+              })()}
+
+              <div>
+                <p className={labelClass(lightMode)}>Provedor</p>
+                <p className={`mt-1 text-sm font-medium ${lightMode ? 'text-slate-800' : 'text-slate-100'}`}>
+                  {pixProvider === 'XGATE'
+                    ? 'XGate'
+                    : pixProvider === 'MERCADO_PAGO'
+                      ? 'Mercado Pago'
+                      : 'Manual (QR gerado pelo sistema)'}
+                </p>
+                {pixProvider !== 'MANUAL' ? (
+                  <p className="mt-2 text-xs font-medium text-amber-400">
+                    A cobrança automática por este provedor ainda não está ligada. A mensagem de PIX fica suspensa até a integração.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="mt-4 flex justify-end sm:mt-6">
-            <AdminButton type="submit" disabled={saving}>{saving ? 'Salvando...' : 'Salvar Configurações'}</AdminButton>
+            <AdminButton type="submit" disabled={saving}>
+              {saving ? 'Salvando...' : subTab === 'pix' ? 'Salvar PIX' : 'Salvar Configurações'}
+            </AdminButton>
           </div>
         </form>
       </div>

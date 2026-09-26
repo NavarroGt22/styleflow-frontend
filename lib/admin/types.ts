@@ -79,6 +79,8 @@ export type Appointment = {
   customer?: { user?: { name?: string; phone?: string } }
   service?: { name?: string; price?: number }
   professional?: { user?: { name?: string } }
+  /** Preenchido quando o PIX do serviço já foi registrado. null = ainda não pago. */
+  paidAt?: string | null
 }
 
 export type CanceledAppointmentsResult = {
@@ -245,12 +247,24 @@ export type SalonSettings = {
   whatsappCancelSalonTemplate?: string | null
   whatsappCancelClientTemplate?: string | null
   whatsappRescheduleTemplate?: string | null
+  whatsappPixChargeTemplate?: string | null
+  whatsappPaymentConfirmedTemplate?: string | null
+  autoMsgBookingEnabled?: boolean
+  autoMsgPixChargeEnabled?: boolean
+  autoMsgPaymentConfirmedEnabled?: boolean
+  autoMsgCancelSalonEnabled?: boolean
+  autoMsgCancelClientEnabled?: boolean
+  autoMsgRescheduleEnabled?: boolean
   whatsappGatewayUrl?: string | null
   whatsappGatewayToken?: string | null
   ownerId?: string
   productCommissionEnabled?: boolean
   productCommissionRate?: number
   loyaltyResetMode?: 'LIFETIME' | 'MONTHLY'
+  /** E-mail PIX mascarado. Só o OWNER recebe este campo. Nunca é a chave em claro. */
+  pixKeyEmailMasked?: string | null
+  pixMerchantCity?: string | null
+  pixChargeProvider?: 'MANUAL' | 'XGATE' | 'MERCADO_PAGO'
   tenant?: {
     id?: string
     name?: string
