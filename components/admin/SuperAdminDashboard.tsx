@@ -48,6 +48,7 @@ type TenantRow = {
   isActive: boolean
   deletedAt: string | null
   salonsCount: number
+  primarySalonId: string | null
   primarySalonSlug: string | null
   owner: { name: string; email: string } | null
   inventoryEnabled?: boolean

@@ -17,6 +17,7 @@ type Props = {
 }
 
 export default function AdminCheckoutModal({ appointment, salonId, lightMode = false, onClose, onSuccess }: Props) {
+  const alreadyPaid = Boolean(appointment.paidAt)
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [prodId, setProdId] = useState('')
@@ -35,7 +36,7 @@ export default function AdminCheckoutModal({ appointment, salonId, lightMode = f
   }, [salonId])
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart])
-  const servicePrice = Number(finalPrice.replace(',', '.')) || 0
+  const servicePrice = alreadyPaid ? 0 : Number(finalPrice.replace(',', '.')) || 0
   const grandTotal = servicePrice + cartTotal
 
   function addToCart() {
@@ -60,10 +61,11 @@ export default function AdminCheckoutModal({ appointment, salonId, lightMode = f
     setSaving(true)
     setError('')
     try {
+      // Serviço já pago via "Cliente já pagou": manda o valor cotado; o backend não cria 2ª receita.
       await completeAppointment(
         appointment.id,
-        servicePrice,
-        paymentMethod,
+        alreadyPaid ? discountedServicePrice : servicePrice,
+        alreadyPaid ? 'PIX' : paymentMethod,
         cart.map((item) => ({ productId: item.productId, quantity: item.quantity })),
       )
       onSuccess()
@@ -89,10 +91,10 @@ export default function AdminCheckoutModal({ appointment, salonId, lightMode = f
         >
           <div>
             <h2 className={`text-xl font-bold ${lightMode ? 'text-emerald-900' : 'text-emerald-400'}`}>
-              Finalizar & Cobrar
+              {alreadyPaid ? 'Finalizar atendimento' : 'Finalizar & Cobrar'}
             </h2>
             <p className={`text-xs font-medium ${lightMode ? 'text-emerald-700' : 'text-emerald-500'}`}>
-              Checkout de Agendamento
+              {alreadyPaid ? 'Serviço já pago — só conclui o horário' : 'Checkout de Agendamento'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-emerald-400 hover:text-emerald-300">
@@ -208,35 +210,59 @@ export default function AdminCheckoutModal({ appointment, salonId, lightMode = f
             ) : null}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass(lightMode)}>Forma de Pagamento</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className={inputClass(lightMode)}
-              >
-                <option value="PIX">PIX</option>
-                <option value="CASH">Dinheiro</option>
-                <option value="CREDIT_CARD">Crédito</option>
-                <option value="DEBIT_CARD">Débito</option>
-              </select>
+          {alreadyPaid ? (
+            <div
+              className={`rounded-xl border p-4 text-sm ${
+                lightMode
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+              }`}
+            >
+              <p className="font-bold">Serviço já pago via PIX</p>
+              <p className="mt-1 text-xs opacity-90">
+                Valor R$ {discountedServicePrice.toFixed(2).replace('.', ',')} já entrou no financeiro. Ao
+                finalizar, o horário é concluído sem lançar o serviço de novo. Produtos abaixo, se houver,
+                entram como lançamentos separados.
+              </p>
             </div>
-            <div>
-              <label className={labelClass(lightMode)}>Valor do Serviço (R$)</label>
-              <input
-                value={finalPrice}
-                onChange={(e) => setFinalPrice(e.target.value)}
-                className={inputClass(lightMode)}
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass(lightMode)}>Forma de Pagamento</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className={inputClass(lightMode)}
+                >
+                  <option value="PIX">PIX</option>
+                  <option value="CASH">Dinheiro</option>
+                  <option value="CREDIT_CARD">Crédito</option>
+                  <option value="DEBIT_CARD">Débito</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass(lightMode)}>Valor do Serviço (R$)</label>
+                <input
+                  value={finalPrice}
+                  onChange={(e) => setFinalPrice(e.target.value)}
+                  className={inputClass(lightMode)}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className={`space-y-1 text-sm ${lightMode ? 'text-gray-500' : 'text-slate-400'}`}>
-            <p>Serviço: R$ {servicePrice.toFixed(2).replace('.', ',')}</p>
+            <p>
+              Serviço:{' '}
+              {alreadyPaid
+                ? `R$ ${discountedServicePrice.toFixed(2).replace('.', ',')} (já pago)`
+                : `R$ ${servicePrice.toFixed(2).replace('.', ',')}`}
+            </p>
             <p>Produtos: R$ {cartTotal.toFixed(2).replace('.', ',')}</p>
             <p className={`text-base font-bold ${lightMode ? 'text-gray-900' : 'text-emerald-400'}`}>
-              Total Geral: R$ {grandTotal.toFixed(2).replace('.', ',')}
+              {alreadyPaid
+                ? `A cobrar agora: R$ ${cartTotal.toFixed(2).replace('.', ',')}`
+                : `Total Geral: R$ ${grandTotal.toFixed(2).replace('.', ',')}`}
             </p>
           </div>
 
@@ -251,7 +277,7 @@ export default function AdminCheckoutModal({ appointment, salonId, lightMode = f
               disabled={saving}
               className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50"
             >
-              {saving ? 'Salvando...' : 'Confirmar Recebimento'}
+              {saving ? 'Salvando...' : alreadyPaid ? 'Finalizar atendimento' : 'Confirmar Recebimento'}
             </button>
           </div>
         </form>

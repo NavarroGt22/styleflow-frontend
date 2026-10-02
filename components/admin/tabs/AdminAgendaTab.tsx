@@ -121,7 +121,7 @@ function AppointmentActions({
             onClick={onCheckout}
             className="min-h-11 flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
           >
-            Finalizar & Cobrar
+            {apt.paidAt ? 'Finalizar' : 'Finalizar & Cobrar'}
           </button>
           <button
             type="button"
