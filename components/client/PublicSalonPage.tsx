@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from '@/lib/client/toast';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, AlertCircle, Check, CheckCircle, Gift } from 'lucide-react';
+import { Clock, AlertCircle, Check, CheckCircle, CreditCard, Gift, QrCode, Store } from 'lucide-react';
 import { secureFetch as fetch } from '@/lib/client/api';
 import { useTenantBranding, useTenantFavicon, type TenantBranding } from '@/lib/client/useTenant';
 import { PRODUCT_NAME, PRODUCT_NAME_UPPER } from '@/lib/brand';
@@ -15,11 +15,17 @@ import { ClientSalonError, ClientSalonLoading, clientBrandStyles } from '@/compo
 import { ClientTopBar } from '@/components/client/ClientTopBar';
 import ClientProfileSheet from '@/components/client/ClientProfileSheet';
 import { BookingHero } from '@/components/client/booking/BookingHero';
+import {
+  BookingPaymentPending,
+  type PendingPaymentInfo,
+} from '@/components/client/booking/BookingPaymentPending';
 import { DynamicQueueSection } from '@/components/client/queue/DynamicQueueSection';
 import type { QueueSession } from '@/components/client/queue/types';
 import { readClientSession, setSalonCache } from '@/lib/client/salon-cache';
 import { useConfirm } from '@/components/admin/ui/useConfirm';
 import { hoursForWeekday, resolveDayHoursFromSalon } from '@/lib/day-hours';
+
+type ClientPaymentMode = 'STORE' | 'PIX' | 'CARD';
 
 const generateTimeSlots = (
   professional: any,
@@ -153,10 +159,13 @@ export default function PublicSalonPage() {
   const [busySlots, setBusySlots] = useState<any[]>([]);
   const [loadingBookingData, setLoadingBookingData] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
 
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<any>(null);
+  const [paymentMode, setPaymentMode] = useState<ClientPaymentMode | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<PendingPaymentInfo | null>(null);
   const [couponCode, setCouponCode] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<{
@@ -437,19 +446,59 @@ export default function PublicSalonPage() {
     } else {
       setBusySlots([]);
     }
-  }, [data?.salon?.id, selectedProfessional?.id, selectedDate]);
+  }, [data?.salon?.id, selectedProfessional?.id, selectedDate, slotsRefreshKey]);
 
-  // Agendar horário
+  const quotedBookingPrice = (service: { price: number } | null | undefined) =>
+    appliedCoupon?.quotedPrice ?? service?.price ?? 0;
+
+  const clearBookingForm = () => {
+    setSelectedService(null);
+    setSelectedProfessional(null);
+    setSelectedDate('');
+    setSelectedTime('');
+    setPaymentMode(null);
+    setCouponCode('');
+    setAppliedCoupon(null);
+  };
+
+  const handlePaymentExpired = () => {
+    setPendingPayment(null);
+    setSelectedTime('');
+    setPaymentMode(null);
+    setBookingError('O tempo esgotou. Escolha o horário de novo.');
+    setSlotsRefreshKey((k) => k + 1);
+  };
+
+  const handlePaymentPaid = () => {
+    if (!pendingPayment) return;
+    setBookingSuccess({
+      appointment: { id: pendingPayment.appointmentId },
+      service: { name: pendingPayment.serviceName, price: pendingPayment.price },
+      professional: { user: { name: pendingPayment.professionalName } },
+      date: pendingPayment.date,
+      time: pendingPayment.time,
+      paidOnline: true,
+    });
+    setPendingPayment(null);
+    clearBookingForm();
+  };
+
+  // Agendar horário (loja) ou iniciar pagamento online (Pix/cartão)
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedService || !selectedProfessional || !selectedDate || !selectedTime) {
       setBookingError('Por favor, preencha todos os campos do agendamento.');
       return;
     }
+    if (!paymentMode) {
+      setBookingError('Escolha como deseja pagar: Pix, cartão ou na loja.');
+      return;
+    }
 
     setBookingLoading(true);
     setBookingError(null);
     setBookingSuccess(null);
+    setPendingPayment(null);
 
     const token = sessionStorage.getItem('client_token');
     if (!token) {
@@ -464,13 +513,15 @@ export default function PublicSalonPage() {
       ? custom.customDuration
       : selectedService.duration;
     const end = new Date(start.getTime() + duration * 60000);
+    const price = quotedBookingPrice(selectedService);
 
     const payload: Record<string, string> = {
       salonId: data.salon.id,
       professionalId: selectedProfessional.id,
       serviceId: selectedService.id,
       startTime: start.toISOString(),
-      endTime: end.toISOString()
+      endTime: end.toISOString(),
+      paymentMode,
     };
     if (appliedCoupon?.code) {
       payload.couponCode = appliedCoupon.code;
@@ -492,23 +543,64 @@ export default function PublicSalonPage() {
         throw new Error(json.error || 'Erro ao realizar o agendamento. Tente outro horário.');
       }
 
-      setBookingSuccess({
-        appointment: json.appointment,
-        service: selectedService,
-        professional: selectedProfessional,
-        date: selectedDate,
-        time: selectedTime
-      });
+      const appointment = json.appointment;
+      if (!appointment?.id) {
+        throw new Error('Agendamento criado sem identificador. Tente novamente.');
+      }
 
       if (lastProfessionalStorageKey && selectedProfessional?.id) {
         localStorage.setItem(lastProfessionalStorageKey, selectedProfessional.id);
         setLastProfessionalId(selectedProfessional.id);
       }
 
-      // Limpar formulário
-      setSelectedService(null);
-      setSelectedProfessional(null);
-      setSelectedDate('');
+      // Pagar na loja: horário marcado na hora
+      if (paymentMode === 'STORE') {
+        setBookingSuccess({
+          appointment,
+          service: { ...selectedService, price },
+          professional: selectedProfessional,
+          date: selectedDate,
+          time: selectedTime,
+          paidOnline: false,
+        });
+        clearBookingForm();
+        return;
+      }
+
+      // Pix / cartão: gera cobrança e abre tela de pagamento
+      const payRes = await fetch(apiUrl(`/appointments/${appointment.id}/pay`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ method: paymentMode }),
+      });
+      const payJson = await payRes.json();
+
+      if (!payRes.ok) {
+        if (payJson.code === 'PAYMENT_EXPIRED') {
+          setSelectedTime('');
+          setPaymentMode(null);
+          throw new Error('O tempo esgotou. Escolha o horário de novo.');
+        }
+        throw new Error(payJson.error || 'Não foi possível iniciar o pagamento.');
+      }
+
+      setPendingPayment({
+        appointmentId: appointment.id,
+        method: paymentMode,
+        qrCode: payJson.qrCode ?? null,
+        copiaECola: payJson.copiaECola,
+        paymentUrl: payJson.paymentUrl,
+        expiresAt: payJson.expiresAt || appointment.paymentExpiresAt,
+        serviceName: selectedService.name,
+        professionalName: selectedProfessional.user.name,
+        date: selectedDate,
+        time: selectedTime,
+        price,
+      });
+      // Mantém data/serviço; só remove o horário da seleção para não parecer “fantasma” se expirar
       setSelectedTime('');
     } catch (err: any) {
       console.error(err);
@@ -776,7 +868,9 @@ export default function PublicSalonPage() {
                 </div>
                 <h2 className="mb-2 text-2xl font-black text-slate-900 dark:text-white">Reserva Confirmada!</h2>
                 <p className="mb-6 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                  Seu horário foi agendado com sucesso no {PRODUCT_NAME}.
+                  {bookingSuccess.paidOnline
+                    ? 'Pagamento confirmado. Seu horário está garantido.'
+                    : `Seu horário foi agendado com sucesso. Pague na loja no dia do atendimento.`}
                 </p>
 
                 <div className="mb-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5 text-left dark:border-white/10 dark:bg-black/30">
@@ -811,6 +905,13 @@ export default function PublicSalonPage() {
                   Novo Agendamento
                 </button>
               </div>
+            ) : pendingPayment ? (
+              <BookingPaymentPending
+                pending={pendingPayment}
+                brand={brand}
+                onPaid={handlePaymentPaid}
+                onExpired={handlePaymentExpired}
+              />
             ) : (
               <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_minmax(240px,280px)]">
                 <div className="space-y-3.5">
@@ -982,9 +1083,14 @@ export default function PublicSalonPage() {
                     onSelectDate={(value) => {
                       setSelectedDate(value);
                       setSelectedTime('');
+                      setPaymentMode(null);
                     }}
                     selectedTime={selectedTime}
-                    onSelectTime={setSelectedTime}
+                    onSelectTime={(value) => {
+                      setSelectedTime(value);
+                      setPaymentMode(null);
+                      setBookingError(null);
+                    }}
                     timeSlots={timeSlots}
                     loadingSlots={loadingSlots}
                     disabled={!selectedProfessional}
@@ -1096,6 +1202,83 @@ export default function PublicSalonPage() {
                       </div>
                     </div>
 
+                    {selectedTime ? (
+                      <div className="mb-4 space-y-2 border-t border-slate-100 pt-4 dark:border-white/10">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                          Como deseja pagar?
+                        </p>
+                        <div className="grid gap-2" role="radiogroup" aria-label="Forma de pagamento">
+                          {(
+                            [
+                              {
+                                id: 'PIX' as const,
+                                label: 'Pix',
+                                hint: 'QR Code · 10 min',
+                                Icon: QrCode,
+                              },
+                              {
+                                id: 'CARD' as const,
+                                label: 'Cartão',
+                                hint: 'Crédito ou débito',
+                                Icon: CreditCard,
+                              },
+                              {
+                                id: 'STORE' as const,
+                                label: 'Pagar na loja',
+                                hint: 'Horário marcado agora',
+                                Icon: Store,
+                              },
+                            ] as const
+                          ).map(({ id, label, hint, Icon }) => {
+                            const active = paymentMode === id
+                            return (
+                              <button
+                                key={id}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                onClick={() => {
+                                  setPaymentMode(id)
+                                  setBookingError(null)
+                                }}
+                                className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                                  active
+                                    ? 'border-[var(--brand,#d5a85c)] bg-[color-mix(in_srgb,var(--brand,#d5a85c)_12%,transparent)]'
+                                    : 'border-slate-200 bg-transparent hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20'
+                                }`}
+                              >
+                                <span
+                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                                    active
+                                      ? 'text-[#111]'
+                                      : 'bg-slate-100 text-slate-600 dark:bg-black/40 dark:text-slate-300'
+                                  }`}
+                                  style={active ? { backgroundColor: brand } : undefined}
+                                >
+                                  <Icon size={18} />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-sm font-bold text-slate-900 dark:text-white">
+                                    {label}
+                                  </span>
+                                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                                    {hint}
+                                  </span>
+                                </span>
+                                <span
+                                  className={`h-4 w-4 shrink-0 rounded-full border-2 ${
+                                    active
+                                      ? 'border-[var(--brand,#d5a85c)] bg-[var(--brand,#d5a85c)]'
+                                      : 'border-slate-300 dark:border-white/25'
+                                  }`}
+                                />
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
                     <button
                       onClick={handleSchedule}
                       disabled={
@@ -1104,7 +1287,8 @@ export default function PublicSalonPage() {
                         !selectedService ||
                         !selectedProfessional ||
                         !selectedDate ||
-                        !selectedTime
+                        !selectedTime ||
+                        !paymentMode
                       }
                       className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-none py-3.5 px-6 text-sm font-black uppercase tracking-wider text-[#111] shadow-lg transition-all duration-300 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
                       style={{ backgroundColor: brand }}
@@ -1112,10 +1296,20 @@ export default function PublicSalonPage() {
                       {bookingLoading ? (
                         <>
                           <div className="w-5 h-5 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
-                          <span>Confirmando...</span>
+                          <span>
+                            {paymentMode === 'STORE' ? 'Confirmando...' : 'Gerando pagamento...'}
+                          </span>
                         </>
                       ) : (
-                        <span>Confirmar Agendamento</span>
+                        <span>
+                          {paymentMode === 'PIX'
+                            ? 'Pagar com Pix'
+                            : paymentMode === 'CARD'
+                              ? 'Pagar com cartão'
+                              : paymentMode === 'STORE'
+                                ? 'Confirmar horário'
+                                : 'Escolha a forma de pagamento'}
+                        </span>
                       )}
                     </button>
                   </div>
