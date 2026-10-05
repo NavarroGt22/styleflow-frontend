@@ -22,10 +22,26 @@ import {
 import { DynamicQueueSection } from '@/components/client/queue/DynamicQueueSection';
 import type { QueueSession } from '@/components/client/queue/types';
 import { readClientSession, setSalonCache } from '@/lib/client/salon-cache';
+import {
+  clearPendingPaymentStorage,
+  readPendingPaymentStorage,
+  writePendingPaymentStorage,
+} from '@/lib/client/pending-payment-storage';
 import { useConfirm } from '@/components/admin/ui/useConfirm';
 import { hoursForWeekday, resolveDayHoursFromSalon } from '@/lib/day-hours';
 
 type ClientPaymentMode = 'STORE' | 'PIX' | 'CARD';
+
+function localDateTimeParts(iso: string): { date: string; time: string } {
+  const d = new Date(iso)
+  const date = [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-')
+  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return { date, time }
+}
 
 const generateTimeSlots = (
   professional: any,
@@ -166,6 +182,14 @@ export default function PublicSalonPage() {
   const [bookingSuccess, setBookingSuccess] = useState<any>(null);
   const [paymentMode, setPaymentMode] = useState<ClientPaymentMode | null>(null);
   const [pendingPayment, setPendingPayment] = useState<PendingPaymentInfo | null>(null);
+  /** AWAITING no servidor enquanto o usuário está no formulário (botão Concluir transação). */
+  const [resumeHint, setResumeHint] = useState<{
+    appointmentId: string;
+    method: 'PIX' | 'CARD';
+    expiresAt: string;
+  } | null>(null);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const pendingRestoreSalonRef = useRef<string | null>(null);
   const [couponCode, setCouponCode] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<{
@@ -451,6 +475,20 @@ export default function PublicSalonPage() {
   const quotedBookingPrice = (service: { price: number } | null | undefined) =>
     appliedCoupon?.quotedPrice ?? service?.price ?? 0;
 
+  const salonIdForPay = data?.salon?.id as string | undefined;
+
+  const applyPendingPayment = (info: PendingPaymentInfo) => {
+    setPendingPayment(info);
+    setResumeHint(null);
+    if (salonIdForPay) writePendingPaymentStorage(salonIdForPay, info);
+  };
+
+  const dropPendingPayment = () => {
+    setPendingPayment(null);
+    setResumeHint(null);
+    if (salonIdForPay) clearPendingPaymentStorage(salonIdForPay);
+  };
+
   const clearBookingForm = () => {
     setSelectedService(null);
     setSelectedProfessional(null);
@@ -461,8 +499,285 @@ export default function PublicSalonPage() {
     setAppliedCoupon(null);
   };
 
+  /** Reabre tela de pagamento a partir de um AWAITING (storage ou API). */
+  const openPendingFromAppointment = async (opts: {
+    appointmentId: string;
+    method: 'PIX' | 'CARD';
+    expiresAt?: string | null;
+    serviceName?: string;
+    professionalName?: string;
+    date?: string;
+    time?: string;
+    price?: number;
+    qrCode?: string | null;
+    copiaECola?: string;
+    paymentUrl?: string;
+  }): Promise<boolean> => {
+    const token = sessionStorage.getItem('client_token');
+    if (!token) return false;
+
+    let qrCode = opts.qrCode ?? null;
+    let copiaECola = opts.copiaECola;
+    let paymentUrl = opts.paymentUrl;
+    let expiresAt = opts.expiresAt || '';
+
+    const needsPayPayload =
+      (opts.method === 'PIX' && !(qrCode || copiaECola)) ||
+      (opts.method === 'CARD' && !paymentUrl);
+
+    if (needsPayPayload || !expiresAt) {
+      const payRes = await fetch(apiUrl(`/appointments/${opts.appointmentId}/pay`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ method: opts.method }),
+      });
+      const payJson = await payRes.json().catch(() => ({}));
+      if (!payRes.ok) {
+        if (payJson.code === 'PAYMENT_EXPIRED' || payRes.status === 410) {
+          if (salonIdForPay) clearPendingPaymentStorage(salonIdForPay);
+          setResumeHint(null);
+          return false;
+        }
+        throw new Error(payJson.error || 'Não foi possível reabrir o pagamento.');
+      }
+      qrCode = payJson.qrCode ?? qrCode;
+      copiaECola = payJson.copiaECola ?? copiaECola;
+      paymentUrl = payJson.paymentUrl ?? paymentUrl;
+      expiresAt = payJson.expiresAt || expiresAt;
+    }
+
+    if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) {
+      if (salonIdForPay) clearPendingPaymentStorage(salonIdForPay);
+      setResumeHint(null);
+      return false;
+    }
+
+    applyPendingPayment({
+      appointmentId: opts.appointmentId,
+      method: opts.method,
+      qrCode,
+      copiaECola,
+      paymentUrl,
+      expiresAt,
+      serviceName: opts.serviceName || 'Serviço',
+      professionalName: opts.professionalName || 'Profissional',
+      date: opts.date || '',
+      time: opts.time || '',
+      price: Number(opts.price ?? 0),
+    });
+    return true;
+  };
+
+  // F5 / retorno: restaura AWAITING (storage + API) ou deixa “Concluir transação”
+  useEffect(() => {
+    const salonId = data?.salon?.id as string | undefined;
+    if (!currentUser || !salonId || !sessionStorage.getItem('client_token')) return;
+    if (pendingRestoreSalonRef.current === salonId) return;
+    pendingRestoreSalonRef.current = salonId;
+
+    let cancelled = false;
+    (async () => {
+      const token = sessionStorage.getItem('client_token') || '';
+      const hintFromPending = (p: any, mode: 'PIX' | 'CARD') => {
+        const expRaw = p.paymentExpiresAt;
+        const expiresAt =
+          typeof expRaw === 'string' ? expRaw : expRaw ? new Date(expRaw).toISOString() : '';
+        if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) return;
+        setResumeHint({ appointmentId: p.id, method: mode, expiresAt });
+      };
+
+      try {
+        const cached = readPendingPaymentStorage(salonId);
+        if (cached) {
+          const stRes = await fetch(
+            apiUrl(`/appointments/${cached.appointmentId}/payment-status`),
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (stRes.ok) {
+            const st = await stRes.json();
+            const status = String(st.paymentStatus || '').toUpperCase();
+            const exp = st.paymentExpiresAt || cached.expiresAt;
+            if (status === 'PAID') {
+              clearPendingPaymentStorage(salonId);
+            } else if (
+              status === 'AWAITING' &&
+              exp &&
+              new Date(exp).getTime() > Date.now()
+            ) {
+              if (cancelled) return;
+              const ok = await openPendingFromAppointment({
+                ...cached,
+                expiresAt: exp,
+              });
+              if (!ok && !cancelled) {
+                setResumeHint({
+                  appointmentId: cached.appointmentId,
+                  method: cached.method,
+                  expiresAt: exp,
+                });
+              }
+              return;
+            } else {
+              clearPendingPaymentStorage(salonId);
+            }
+          } else {
+            clearPendingPaymentStorage(salonId);
+          }
+        }
+
+        const res = await fetch(
+          apiUrl(`/appointments/me/pending-payment?salonId=${encodeURIComponent(salonId)}`),
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        const p = json.pending;
+        if (!p?.id) return;
+
+        const mode = String(p.paymentMode || '').toUpperCase();
+        if (mode !== 'PIX' && mode !== 'CARD') return;
+        const exp = p.paymentExpiresAt;
+        if (!exp || new Date(exp).getTime() <= Date.now()) return;
+
+        const { date, time } = p.startTime
+          ? localDateTimeParts(p.startTime)
+          : { date: '', time: '' };
+        const expiresAt = typeof exp === 'string' ? exp : new Date(exp).toISOString();
+
+        if (cancelled) return;
+        const ok = await openPendingFromAppointment({
+          appointmentId: p.id,
+          method: mode,
+          expiresAt,
+          serviceName: p.service?.name,
+          professionalName: p.professional?.name,
+          date,
+          time,
+          price: p.amount ?? p.quotedPrice ?? p.service?.price ?? 0,
+        });
+        if (!ok && !cancelled) hintFromPending(p, mode);
+      } catch {
+        /* ignore restore errors */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per salon+login
+  }, [currentUser, data?.salon?.id]);
+
+  // Se o usuário está no formulário e ainda há AWAITING, oferece concluir
+  useEffect(() => {
+    if (pendingPayment || !salonIdForPay || !currentUser) return;
+    if (resumeHint) return;
+    const token = sessionStorage.getItem('client_token');
+    if (!token) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const cached = readPendingPaymentStorage(salonIdForPay);
+        if (
+          cached &&
+          new Date(cached.expiresAt).getTime() > Date.now()
+        ) {
+          if (!cancelled) {
+            setResumeHint({
+              appointmentId: cached.appointmentId,
+              method: cached.method,
+              expiresAt: cached.expiresAt,
+            });
+          }
+          return;
+        }
+        const res = await fetch(
+          apiUrl(`/appointments/me/pending-payment?salonId=${encodeURIComponent(salonIdForPay)}`),
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        const p = json.pending;
+        if (!p?.id) return;
+        const mode = String(p.paymentMode || '').toUpperCase();
+        if (mode !== 'PIX' && mode !== 'CARD') return;
+        const exp = p.paymentExpiresAt;
+        const expiresAt = typeof exp === 'string' ? exp : exp ? new Date(exp).toISOString() : '';
+        if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) return;
+        if (!cancelled) {
+          setResumeHint({ appointmentId: p.id, method: mode, expiresAt });
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingPayment, salonIdForPay, currentUser, resumeHint]);
+
+  const handleConcludeTransaction = async () => {
+    if (!salonIdForPay || resumeLoading) return;
+    setResumeLoading(true);
+    setBookingError(null);
+    try {
+      const token = sessionStorage.getItem('client_token');
+      if (!token) throw new Error('Entre na conta para concluir o pagamento.');
+
+      const cached = readPendingPaymentStorage(salonIdForPay);
+      const res = await fetch(
+        apiUrl(`/appointments/me/pending-payment?salonId=${encodeURIComponent(salonIdForPay)}`),
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Não foi possível buscar o pagamento pendente.');
+
+      const p = json.pending;
+      if (!p?.id) {
+        clearPendingPaymentStorage(salonIdForPay);
+        setResumeHint(null);
+        throw new Error('Não há pagamento pendente. Escolha o horário de novo.');
+      }
+
+      const mode = String(p.paymentMode || cached?.method || '').toUpperCase();
+      if (mode !== 'PIX' && mode !== 'CARD') {
+        throw new Error('Forma de pagamento pendente inválida.');
+      }
+      const { date, time } = p.startTime
+        ? localDateTimeParts(p.startTime)
+        : { date: cached?.date || '', time: cached?.time || '' };
+
+      const ok = await openPendingFromAppointment({
+        appointmentId: p.id,
+        method: mode,
+        expiresAt:
+          (typeof p.paymentExpiresAt === 'string'
+            ? p.paymentExpiresAt
+            : p.paymentExpiresAt
+              ? new Date(p.paymentExpiresAt).toISOString()
+              : null) || cached?.expiresAt,
+        serviceName: p.service?.name || cached?.serviceName,
+        professionalName: p.professional?.name || cached?.professionalName,
+        date,
+        time,
+        price: p.amount ?? p.quotedPrice ?? p.service?.price ?? cached?.price ?? 0,
+        qrCode: cached?.appointmentId === p.id ? cached.qrCode : null,
+        copiaECola: cached?.appointmentId === p.id ? cached.copiaECola : undefined,
+        paymentUrl: cached?.appointmentId === p.id ? cached.paymentUrl : undefined,
+      });
+      if (!ok) throw new Error('O tempo do pagamento esgotou. Escolha o horário de novo.');
+    } catch (err) {
+      setBookingError(err instanceof Error ? err.message : 'Erro ao reabrir o pagamento.');
+    } finally {
+      setResumeLoading(false);
+    }
+  };
+
   const handlePaymentExpired = () => {
-    setPendingPayment(null);
+    dropPendingPayment();
     setBookingSuccess(null);
     setSelectedTime('');
     setPaymentMode(null);
@@ -473,7 +788,7 @@ export default function PublicSalonPage() {
   /** Cancela hold e volta às 3 opções (mantém serviço/pro/data/horário). */
   const handlePaymentChangeMethod = () => {
     const snap = pendingPayment;
-    setPendingPayment(null);
+    dropPendingPayment();
     setBookingSuccess(null);
     setPaymentMode(null);
     setBookingError(null);
@@ -484,7 +799,7 @@ export default function PublicSalonPage() {
 
   /** Cancela hold e volta ao início do fluxo de agendamento. */
   const handlePaymentAbort = () => {
-    setPendingPayment(null);
+    dropPendingPayment();
     setBookingSuccess(null);
     setBookingError(null);
     clearBookingForm();
@@ -502,7 +817,7 @@ export default function PublicSalonPage() {
       time: paid.time,
       paidOnline: true,
     });
-    setPendingPayment(null);
+    dropPendingPayment();
     clearBookingForm();
   };
 
@@ -521,7 +836,7 @@ export default function PublicSalonPage() {
     setBookingLoading(true);
     setBookingError(null);
     setBookingSuccess(null);
-    setPendingPayment(null);
+    dropPendingPayment();
 
     const token = sessionStorage.getItem('client_token');
     if (!token) {
@@ -624,7 +939,7 @@ export default function PublicSalonPage() {
         );
       }
 
-      setPendingPayment({
+      applyPendingPayment({
         appointmentId: appointment.id,
         method: paymentMode,
         qrCode: payJson.qrCode ?? null,
@@ -1146,8 +1461,8 @@ export default function PublicSalonPage() {
 
                 </div>
 
-                <aside className="order-2 lg:order-none" id="booking-resumo">
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 lg:sticky lg:top-[4.5rem] lg:z-30 dark:border-white/10 dark:bg-[#1a1816]">
+                <aside className="order-2 min-w-0 lg:order-none" id="booking-resumo">
+                  <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 lg:sticky lg:top-[4.5rem] lg:z-30 dark:border-white/10 dark:bg-[#1a1816]">
                     <h3 className="mb-4 border-b border-slate-100 pb-3 text-[10px] font-bold uppercase tracking-widest client-accent-text dark:border-white/10">
                       RESUMO DA RESERVA
                     </h3>
@@ -1183,7 +1498,7 @@ export default function PublicSalonPage() {
                       </div>
                       <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-white/10">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cupom</span>
-                        <div className="flex gap-2">
+                        <div className="flex min-w-0 items-stretch gap-2">
                           <input
                             value={couponCode}
                             onChange={(e) => {
@@ -1191,7 +1506,7 @@ export default function PublicSalonPage() {
                               setAppliedCoupon(null)
                             }}
                             placeholder="Código"
-                            className="h-10 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-[var(--brand,#d5a85c)] dark:border-white/10 dark:bg-[#0b0d0e] dark:text-white"
+                            className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-[var(--brand,#d5a85c)] dark:border-white/10 dark:bg-[#0b0d0e] dark:text-white"
                           />
                           <button
                             type="button"
@@ -1228,7 +1543,7 @@ export default function PublicSalonPage() {
                                 setCouponLoading(false)
                               }
                             }}
-                            className="rounded-lg border border-slate-200 px-3 text-xs font-bold uppercase tracking-wide text-[var(--brand,#d5a85c)] disabled:opacity-40 dark:border-white/15"
+                            className="h-10 shrink-0 whitespace-nowrap rounded-lg border border-slate-200 px-3 text-xs font-bold uppercase tracking-wide text-[var(--brand,#d5a85c)] disabled:opacity-40 dark:border-white/15"
                           >
                             {couponLoading ? '...' : 'Aplicar'}
                           </button>
@@ -1257,6 +1572,25 @@ export default function PublicSalonPage() {
                         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
                           Como deseja pagar?
                         </p>
+
+                        {resumeHint ? (
+                          <button
+                            type="button"
+                            disabled={resumeLoading}
+                            onClick={handleConcludeTransaction}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--brand,#d5a85c)] bg-[color-mix(in_srgb,var(--brand,#d5a85c)_14%,transparent)] px-3 py-3 text-sm font-bold text-slate-900 transition active:scale-[0.98] disabled:opacity-50 dark:text-white"
+                          >
+                            {resumeLoading ? (
+                              <>
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                Reabrindo…
+                              </>
+                            ) : (
+                              'Concluir transação'
+                            )}
+                          </button>
+                        ) : null}
+
                         {!selectedTime ? (
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             Escolha o horário acima para liberar Pix, cartão ou pagar na loja.

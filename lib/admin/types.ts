@@ -113,6 +113,10 @@ export type FinancialSummary = {
   scope: FinancialScope
   services: {
     gross: number
+    /** Soma das taxas Mercado Pago (PIX/cartão online). Loja = 0. */
+    gatewayFees?: number
+    /** Bruto − taxas gateway (antes da comissão do barbeiro). */
+    netAfterGateway?: number
     net: number
     commission: number
     commissionRate: number | null
@@ -146,6 +150,7 @@ export type FinancialServiceRow = {
   category: string | null
   count: number
   gross: number
+  gatewayFees?: number
   professionalId?: string | null
   professionalName?: string | null
 }
@@ -169,6 +174,10 @@ export type FinancialDashboard = {
     amount: number
     isExpense: boolean
     createdAt: string
+    paymentMethod?: string
+    gatewayFeeAmount?: number
+    netAmount?: number | null
+    gatewayFeeLabel?: string | null
     appointment?: {
       service?: { name?: string }
       professional?: { user?: { name?: string } }

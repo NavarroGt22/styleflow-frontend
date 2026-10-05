@@ -53,6 +53,32 @@ function money(value: number) {
   return `R$ ${value.toFixed(2).replace('.', ',')}`
 }
 
+function paymentMethodLabel(method?: string | null) {
+  switch (String(method || '').toUpperCase()) {
+    case 'PIX':
+      return 'PIX'
+    case 'CREDIT_CARD':
+      return 'Cartão crédito'
+    case 'DEBIT_CARD':
+      return 'Cartão débito'
+    case 'CASH':
+      return 'Dinheiro'
+    default:
+      return method || '—'
+  }
+}
+
+function recordNetAmount(record: { amount: number; netAmount?: number | null }) {
+  return record.netAmount != null && Number.isFinite(record.netAmount)
+    ? Number(record.netAmount)
+    : Number(record.amount) || 0
+}
+
+function recordGatewayFee(record: { gatewayFeeAmount?: number | null }) {
+  const fee = Number(record.gatewayFeeAmount)
+  return Number.isFinite(fee) && fee > 0 ? fee : 0
+}
+
 function toYmd(date: Date) {
   // Sempre pelo calendário de São Paulo — toISOString() (UTC) desloca o dia à noite.
   return new Intl.DateTimeFormat('en-CA', {
@@ -278,13 +304,21 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
       doc.text(`Emitido em ${new Date().toLocaleString('pt-BR')}`, 14, 30)
       doc.setTextColor(0)
 
+      const gatewayFees = Number(summary.services.gatewayFees) || 0
+      const netAfterGateway =
+        summary.services.netAfterGateway != null
+          ? Number(summary.services.netAfterGateway)
+          : summary.services.gross - gatewayFees
+
       autoTable(doc, {
         startY: 38,
         head: [['Resumo', 'Valor']],
         body: [
           ['Valor bruto (serviços)', money(summary.services.gross)],
-          ['Comissões', money(summary.services.commission)],
-          ['Líquido', money(summary.services.net)],
+          ['Taxas gateway (MP)', money(gatewayFees)],
+          ['Líquido após gateway', money(netAfterGateway)],
+          ['Comissões / líquido barbeiro', money(summary.services.commission)],
+          ['Líquido salão (após comissão)', money(summary.services.net)],
           ['Atendimentos', String(summary.services.appointments)],
           ['N/P — produtos do estoque', money(summary.products.revenue)],
           ['Despesas', money(summary.expenses)],
@@ -313,14 +347,24 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
       }
 
       if (servicesReport?.services.length) {
+        const showMpFee = servicesReport.services.some((row) => (Number(row.gatewayFees) || 0) > 0)
         autoTable(doc, {
-          head: [['Serviço', 'Categoria', 'Qtd.', 'Bruto']],
-          body: servicesReport.services.map((row) => [
-            row.name,
-            row.category || 'Sem categoria',
-            String(row.count),
-            money(row.gross),
-          ]),
+          head: [
+            showMpFee
+              ? ['Serviço', 'Categoria', 'Qtd.', 'Bruto', 'Taxa MP']
+              : ['Serviço', 'Categoria', 'Qtd.', 'Bruto'],
+          ],
+          body: servicesReport.services.map((row) => {
+            const base = [
+              row.name,
+              row.category || 'Sem categoria',
+              String(row.count),
+              money(row.gross),
+            ]
+            if (!showMpFee) return base
+            const fee = Number(row.gatewayFees) || 0
+            return [...base, fee > 0 ? money(fee) : '—']
+          }),
         })
       }
 
@@ -900,45 +944,77 @@ function CashRegisterPanel({
 
   function downloadCsv() {
     if (!data) return
+
+    const toRow = (
+      tipo: string,
+      record: (typeof data.recentRecords)[number],
+      descricao: string,
+      profissional: string
+    ) => {
+      const fee = record.isExpense ? 0 : recordGatewayFee(record)
+      const liquido = record.isExpense ? Number(record.amount) || 0 : recordNetAmount(record)
+      return [
+        tipo,
+        descricao,
+        profissional,
+        paymentMethodLabel(record.paymentMethod),
+        String(record.amount),
+        String(fee),
+        String(liquido),
+        new Date(record.createdAt).toLocaleString('pt-BR'),
+      ]
+    }
+
     const cutRows = data.recentRecords
       .filter((record) => !record.isExpense && record.appointment)
-      .map((record) => [
-        'Corte',
-        record.appointment?.service?.name || 'Serviço',
-        record.appointment?.professional?.user?.name || '',
-        String(record.amount),
-        new Date(record.createdAt).toLocaleString('pt-BR'),
-      ])
+      .map((record) =>
+        toRow(
+          'Corte',
+          record,
+          record.appointment?.service?.name || 'Serviço',
+          record.appointment?.professional?.user?.name || ''
+        )
+      )
     const productRows = data.recentRecords
       .filter((record) => !record.isExpense && record.productSale)
-      .map((record) => [
-        'Produto',
-        record.productSale?.product?.name || 'Produto',
-        record.productSale?.professional?.user?.name || '',
-        String(record.amount),
-        new Date(record.createdAt).toLocaleString('pt-BR'),
-      ])
+      .map((record) =>
+        toRow(
+          'Produto',
+          record,
+          record.productSale?.product?.name || 'Produto',
+          record.productSale?.professional?.user?.name || ''
+        )
+      )
     const otherRows = data.recentRecords
       .filter((record) => record.isExpense || (!record.appointment && !record.productSale))
-      .map((record) => [
-        record.isExpense ? 'Saída' : 'Entrada',
-        record.appointment?.service?.name || record.productSale?.product?.name || 'Movimentação',
-        '',
-        String(record.amount),
-        new Date(record.createdAt).toLocaleString('pt-BR'),
-      ])
+      .map((record) =>
+        toRow(
+          record.isExpense ? 'Saída' : 'Entrada',
+          record,
+          record.appointment?.service?.name ||
+            record.productSale?.product?.name ||
+            'Movimentação',
+          ''
+        )
+      )
+
+    const income = data.recentRecords.filter((r) => !r.isExpense)
+    const gatewayFeesTotal = income.reduce((sum, r) => sum + recordGatewayFee(r), 0)
+    const netAfterGatewayTotal = income.reduce((sum, r) => sum + recordNetAmount(r), 0)
 
     const rows = [
-      ['Tipo', 'Descrição', 'Profissional', 'Valor', 'Data'],
+      ['Tipo', 'Descrição', 'Profissional', 'Forma', 'Bruto', 'Taxa gateway', 'Líquido', 'Data'],
       ...cutRows,
       ...productRows,
       ...otherRows,
       [],
-      ['Resumo', '', '', '', ''],
-      ['Faturamento Total', '', '', String(data.totalRevenue), ''],
-      ['Comissões', '', '', String(data.totalCommissions), ''],
-      ['Lucro Líquido', '', '', String(data.netProfit), ''],
-      ['Cortes concluídos (caixa aberto)', '', '', String(data.completedCuts ?? 0), ''],
+      ['Resumo', '', '', '', '', '', '', ''],
+      ['Faturamento bruto', '', '', '', String(data.totalRevenue), '', '', ''],
+      ['Taxas Mercado Pago', '', '', '', '', String(gatewayFeesTotal), '', ''],
+      ['Líquido após gateway', '', '', '', '', '', String(netAfterGatewayTotal), ''],
+      ['Comissões', '', '', '', '', '', String(data.totalCommissions), ''],
+      ['Lucro', '', '', '', '', '', String(data.netProfit), ''],
+      ['Cortes concluídos (caixa aberto)', '', '', '', '', '', String(data.completedCuts ?? 0), ''],
     ]
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
@@ -1102,6 +1178,8 @@ function CashRegisterPanel({
                       record.appointment?.professional?.user?.name ||
                       record.productSale?.professional?.user?.name ||
                       null
+                    const fee = !record.isExpense ? recordGatewayFee(record) : 0
+                    const liquido = !record.isExpense ? recordNetAmount(record) : Number(record.amount) || 0
                     return (
                     <div
                       key={record.id}
@@ -1114,6 +1192,11 @@ function CashRegisterPanel({
                         {barberName ? (
                           <span className={`block text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                             {barberName}
+                          </span>
+                        ) : null}
+                        {fee > 0 ? (
+                          <span className={`block text-[10px] ${lightMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                            Taxa MP {money(fee)} · Líquido {money(liquido)}
                           </span>
                         ) : null}
                       </span>
