@@ -34,11 +34,34 @@ function appointmentServicePrice(apt: Appointment) {
   return apt.quotedPrice ?? apt.service?.price ?? null
 }
 
-function StatusBadge({ status }: { status: string }) {
+function paymentMethodLabel(apt: Appointment): string | null {
+  const fromFr = apt.financialRecord?.paymentMethod
+  const mode = apt.paymentMode
+  const raw = fromFr || mode
+  if (!raw || raw === 'STORE' || raw === 'NONE' || raw === 'CASH') return raw === 'CASH' ? 'Dinheiro' : null
+  if (raw === 'PIX') return 'PIX'
+  if (raw === 'CARD' || raw === 'CREDIT_CARD') return 'Cartão'
+  if (raw === 'DEBIT_CARD') return 'Débito'
+  return String(raw)
+}
+
+function isClientPaid(apt: Appointment) {
+  return Boolean(apt.paidAt) || apt.paymentStatus === 'PAID'
+}
+
+function StatusBadge({ apt }: { apt: Appointment }) {
+  const status = apt.status
   if (status === 'COMPLETED') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-400">
         <CheckCircle2 className="size-3" /> Concluído
+      </span>
+    )
+  }
+  if (isClientPaid(apt) && (status === 'PENDING' || status === 'CONFIRMED')) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-400">
+        <CheckCircle2 className="size-3" /> Cliente pagou
       </span>
     )
   }
@@ -66,10 +89,12 @@ function StatusBadge({ status }: { status: string }) {
   return null
 }
 
-function PaidBadge() {
+function PaymentMethodBadge({ apt }: { apt: Appointment }) {
+  const label = paymentMethodLabel(apt)
+  if (!label || !isClientPaid(apt)) return null
   return (
-    <span className="inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-400">
-      Pago
+    <span className="inline-flex items-center rounded-full border border-indigo-500/40 bg-indigo-500/15 px-2.5 py-1 text-xs font-bold text-indigo-300">
+      {label}
     </span>
   )
 }
@@ -82,6 +107,7 @@ function AppointmentActions({
   onCheckout,
   onUnblock,
   onMarkPaid,
+  onNoShow,
 }: {
   apt: Appointment
   paying: boolean
@@ -90,9 +116,46 @@ function AppointmentActions({
   onCheckout: () => void
   onUnblock: () => void
   onMarkPaid: () => void
+  onNoShow: () => void
 }) {
   const requestCancel = onCancel
-  const canMarkPaid = (apt.status === 'PENDING' || apt.status === 'CONFIRMED') && !apt.paidAt
+  const paid = isClientPaid(apt)
+  const canMarkPaid =
+    !paid &&
+    (apt.status === 'PENDING' || apt.status === 'CONFIRMED') &&
+    (apt.paymentMode === 'STORE' || !apt.paymentMode || apt.paymentStatus === 'NONE')
+
+  // Pago online/loja: permanece na agenda; barbeiro marca presença ou falta
+  if (paid && (apt.status === 'PENDING' || apt.status === 'CONFIRMED')) {
+    return (
+      <div className="flex flex-wrap gap-2">
+        {apt.status === 'PENDING' ? (
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="min-h-11 flex-1 rounded-xl border border-blue-500/40 px-3 py-2.5 text-sm font-bold text-blue-400 transition hover:bg-blue-500/10 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
+          >
+            Cliente veio
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onCheckout}
+            className="min-h-11 flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
+          >
+            Finalizar
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onNoShow}
+          className="min-h-11 flex-1 rounded-xl border border-red-500/40 px-3 py-2.5 text-sm font-bold text-red-400 transition hover:bg-red-500/10 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
+        >
+          Cliente não veio
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -121,7 +184,7 @@ function AppointmentActions({
             onClick={onCheckout}
             className="min-h-11 flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
           >
-            {apt.paidAt ? 'Finalizar' : 'Finalizar & Cobrar'}
+            Finalizar & Cobrar
           </button>
           <button
             type="button"
@@ -197,6 +260,16 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
       cancelLabel: 'Voltar',
     })
     if (ok) handleStatus(apt.id, 'CANCELED_BY_SALON')
+  }
+
+  async function requestNoShow(apt: Appointment) {
+    const ok = await confirm({
+      message: `Confirma que ${apt.customer?.user?.name || 'o cliente'} não veio? O horário vai para cancelados (falta).`,
+      confirmLabel: 'Cliente não veio',
+      cancelLabel: 'Voltar',
+      danger: true,
+    })
+    if (ok) handleStatus(apt.id, 'NO_SHOW')
   }
 
   async function requestUnblock(apt: Appointment) {
@@ -493,8 +566,8 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                       <p className={`text-xs font-medium ${muted}`}>{dateLabel}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <StatusBadge status={apt.status} />
-                      {apt.paidAt ? <PaidBadge /> : null}
+                      <StatusBadge apt={apt} />
+                      <PaymentMethodBadge apt={apt} />
                     </div>
                   </div>
 
@@ -553,6 +626,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                     onCheckout={() => setCheckoutApt(apt)}
                     onUnblock={() => requestUnblock(apt)}
                     onMarkPaid={() => void handleMarkPaid(apt)}
+                    onNoShow={() => void requestNoShow(apt)}
                   />
                 </article>
               )
@@ -639,8 +713,8 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                       </td>
                       <td className="p-4">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <StatusBadge status={apt.status} />
-                          {apt.paidAt ? <PaidBadge /> : null}
+                          <StatusBadge apt={apt} />
+                          <PaymentMethodBadge apt={apt} />
                         </div>
                       </td>
                       <td className="p-4">
@@ -653,6 +727,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                             onCheckout={() => setCheckoutApt(apt)}
                             onUnblock={() => requestUnblock(apt)}
                             onMarkPaid={() => void handleMarkPaid(apt)}
+                            onNoShow={() => void requestNoShow(apt)}
                           />
                         </div>
                       </td>

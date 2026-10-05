@@ -81,6 +81,9 @@ export type Appointment = {
   professional?: { user?: { name?: string } }
   /** Preenchido quando o PIX do serviço já foi registrado. null = ainda não pago. */
   paidAt?: string | null
+  paymentMode?: 'STORE' | 'PIX' | 'CARD' | string | null
+  paymentStatus?: 'NONE' | 'AWAITING' | 'PAID' | 'EXPIRED' | string | null
+  financialRecord?: { paymentMethod?: string | null } | null
 }
 
 export type CanceledAppointmentsResult = {
