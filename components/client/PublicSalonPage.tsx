@@ -914,7 +914,7 @@ export default function PublicSalonPage() {
               />
             ) : (
               <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_minmax(240px,280px)]">
-                <div className="space-y-3.5">
+                <div className="order-1 space-y-3.5 lg:order-none">
 
                   {loyalty ? (
                     <div className="rounded-xl border border-amber-500/40 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
@@ -1090,6 +1090,15 @@ export default function PublicSalonPage() {
                       setSelectedTime(value);
                       setPaymentMode(null);
                       setBookingError(null);
+                      // No mobile o resumo fica abaixo do calendário — leva até o pagamento
+                      if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+                        window.setTimeout(() => {
+                          document.getElementById('booking-payment-options')?.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center',
+                          })
+                        }, 80)
+                      }
                     }}
                     timeSlots={timeSlots}
                     loadingSlots={loadingSlots}
@@ -1098,7 +1107,7 @@ export default function PublicSalonPage() {
 
                 </div>
 
-                <aside>
+                <aside className="order-2 lg:order-none" id="booking-resumo">
                   <div className="rounded-xl border border-slate-200 bg-white p-4 lg:sticky lg:top-[4.5rem] lg:z-30 dark:border-white/10 dark:bg-[#1a1816]">
                     <h3 className="mb-4 border-b border-slate-100 pb-3 text-[10px] font-bold uppercase tracking-widest client-accent-text dark:border-white/10">
                       RESUMO DA RESERVA
@@ -1196,18 +1205,29 @@ export default function PublicSalonPage() {
                         <span className="block text-right text-xl font-bold client-accent-text">
                           R${' '}
                           {displayService
-                            ? (appliedCoupon?.quotedPrice ?? displayService.price).toFixed(2)
+                            ? Number(appliedCoupon?.quotedPrice ?? displayService.price ?? 0).toFixed(2)
                             : '0,00'}
                         </span>
                       </div>
-                    </div>
 
-                    {selectedTime ? (
-                      <div className="mb-4 space-y-2 border-t border-slate-100 pt-4 dark:border-white/10">
+                      {/* Pagamento logo abaixo do Total — sempre no resumo (mobile e desktop) */}
+                      <div
+                        id="booking-payment-options"
+                        className="space-y-2 border-t border-slate-100 pt-3 dark:border-white/10"
+                      >
                         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
                           Como deseja pagar?
                         </p>
-                        <div className="grid gap-2" role="radiogroup" aria-label="Forma de pagamento">
+                        {!selectedTime ? (
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Escolha o horário acima para liberar Pix, cartão ou pagar na loja.
+                          </p>
+                        ) : null}
+                        <div
+                          className={`grid gap-2 ${!selectedTime ? 'pointer-events-none opacity-45' : ''}`}
+                          role="radiogroup"
+                          aria-label="Forma de pagamento"
+                        >
                           {(
                             [
                               {
@@ -1237,6 +1257,7 @@ export default function PublicSalonPage() {
                                 type="button"
                                 role="radio"
                                 aria-checked={active}
+                                disabled={!selectedTime}
                                 onClick={() => {
                                   setPaymentMode(id)
                                   setBookingError(null)
@@ -1277,7 +1298,7 @@ export default function PublicSalonPage() {
                           })}
                         </div>
                       </div>
-                    ) : null}
+                    </div>
 
                     <button
                       onClick={handleSchedule}

@@ -42,11 +42,32 @@ function isPassthroughPath(pathname: string): boolean {
   )
 }
 
+/** Cache curto host → slug (edge/runtime). Evita bater na API a cada request. */
+const slugCache = new Map<string, { slug: string | null; expires: number }>()
+const SLUG_CACHE_TTL_MS = 60_000
+
+function cachedSlug(host: string): string | null | undefined {
+  const hit = slugCache.get(host)
+  if (!hit) return undefined
+  if (Date.now() > hit.expires) {
+    slugCache.delete(host)
+    return undefined
+  }
+  return hit.slug
+}
+
+function putSlugCache(host: string, slug: string | null) {
+  slugCache.set(host, { slug, expires: Date.now() + SLUG_CACHE_TTL_MS })
+}
+
 async function resolveSalonSlug(host: string, pathSlug?: string | null): Promise<string | null> {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')
   if (!apiBase) return pathSlug || null
 
   async function firstSalonOfHost(): Promise<string | null> {
+    const cached = cachedSlug(host)
+    if (cached !== undefined) return cached
+
     try {
       const queueRes = await fetch(`${apiBase}/api/v1/queue/public`, {
         headers: {
@@ -57,11 +78,14 @@ async function resolveSalonSlug(host: string, pathSlug?: string | null): Promise
       })
       if (queueRes.ok) {
         const data = (await queueRes.json()) as { salon?: { slug?: string } }
-        if (data?.salon?.slug) return data.salon.slug
+        const slug = data?.salon?.slug || null
+        putSlugCache(host, slug)
+        return slug
       }
     } catch {
       /* ignore */
     }
+    putSlugCache(host, null)
     return null
   }
 
@@ -77,7 +101,10 @@ async function resolveSalonSlug(host: string, pathSlug?: string | null): Promise
       })
       if (res.ok) {
         const data = (await res.json()) as { salon?: { slug?: string } }
-        if (data?.salon?.slug) return data.salon.slug
+        if (data?.salon?.slug) {
+          putSlugCache(host, data.salon.slug)
+          return data.salon.slug
+        }
       }
       // Slug de outro tenant / inexistente neste host → salão correto do domínio (se a API responder).
       if (res.status === 404 || res.status === 403 || res.status === 400) {
@@ -90,6 +117,20 @@ async function resolveSalonSlug(host: string, pathSlug?: string | null): Promise
   }
 
   return firstSalonOfHost()
+}
+
+/** Rewrite interno (URL do browser fica limpa: app.barbearia.com/). */
+function rewriteTo(req: NextRequest, pathname: string) {
+  const url = req.nextUrl.clone()
+  url.pathname = pathname
+  return NextResponse.rewrite(url)
+}
+
+function redirectTo(req: NextRequest, pathname: string) {
+  const url = req.nextUrl.clone()
+  url.pathname = pathname
+  url.search = ''
+  return NextResponse.redirect(url)
 }
 
 export async function middleware(req: NextRequest) {
@@ -119,24 +160,17 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(appUrl)
     }
 
-    const loginUrl = req.nextUrl.clone()
-    loginUrl.pathname = '/login'
-    loginUrl.search = ''
-    return NextResponse.redirect(loginUrl)
+    return redirectTo(req, '/login')
   }
 
   // admin.<barbearia> → painel (/admin/:slug), nunca /app e NUNCA /platform.
-  // O Super Admin só existe no host da plataforma; aqui qualquer /platform vira login.
   if (isAdminCustomHost(host)) {
     if (pathname.startsWith('/login')) {
       return NextResponse.next()
     }
 
     if (pathname.startsWith('/platform')) {
-      const loginUrl = req.nextUrl.clone()
-      loginUrl.pathname = '/login'
-      loginUrl.search = ''
-      return NextResponse.redirect(loginUrl)
+      return redirectTo(req, '/login')
     }
 
     const adminMatch = pathname.match(/^\/admin\/([^/]+)/)
@@ -144,63 +178,73 @@ export async function middleware(req: NextRequest) {
     const hostSalonSlug = await resolveSalonSlug(host, pathSlug)
 
     if (adminMatch) {
-      // Só redireciona quando a API confirmou outro slug válido neste host.
-      // Se a API falhou (null com pathSlug preservado ou igual), deixa passar — AuthGuard decide.
       if (hostSalonSlug && hostSalonSlug !== adminMatch[1]) {
-        const adminUrl = req.nextUrl.clone()
-        adminUrl.pathname = `/admin/${hostSalonSlug}`
-        adminUrl.search = ''
-        return NextResponse.redirect(adminUrl)
+        return redirectTo(req, `/admin/${hostSalonSlug}`)
       }
       return NextResponse.next()
     }
 
     if (pathname.startsWith('/admin')) {
       const fallbackSlug = await resolveSalonSlug(host, null)
-      if (!fallbackSlug) {
-        const loginUrl = req.nextUrl.clone()
-        loginUrl.pathname = '/login'
-        loginUrl.search = ''
-        return NextResponse.redirect(loginUrl)
-      }
-      const adminUrl = req.nextUrl.clone()
-      adminUrl.pathname = `/admin/${fallbackSlug}`
-      adminUrl.search = ''
-      return NextResponse.redirect(adminUrl)
+      if (!fallbackSlug) return redirectTo(req, '/login')
+      return redirectTo(req, `/admin/${fallbackSlug}`)
     }
 
     const appMatch = pathname.match(/^\/app\/([^/]+)/)
     const slug = await resolveSalonSlug(host, appMatch?.[1] ?? null)
 
-    if (!slug) {
-      const loginUrl = req.nextUrl.clone()
-      loginUrl.pathname = '/login'
-      loginUrl.search = ''
-      return NextResponse.redirect(loginUrl)
-    }
+    if (!slug) return redirectTo(req, '/login')
 
-    // / ou /app/... → /admin/:slug (AuthGuard manda para login se necessário)
+    // / ou /app/... → /admin/:slug
     if (pathname === '/' || pathname.startsWith('/app')) {
-      const adminUrl = req.nextUrl.clone()
-      adminUrl.pathname = `/admin/${slug}`
-      adminUrl.search = ''
-      return NextResponse.redirect(adminUrl)
+      return redirectTo(req, `/admin/${slug}`)
     }
 
-    // Qualquer outra rota no host admin → painel do salão
-    const adminUrl = req.nextUrl.clone()
-    adminUrl.pathname = `/admin/${slug}`
-    adminUrl.search = ''
-    return NextResponse.redirect(adminUrl)
+    return redirectTo(req, `/admin/${slug}`)
   }
 
-  // app.* → vitrine do cliente
-  if (isClientAppCustomHost(host) && pathname === '/') {
-    const slug = await resolveSalonSlug(host)
-    if (slug) {
-      const appUrl = req.nextUrl.clone()
-      appUrl.pathname = `/app/${slug}`
-      return NextResponse.redirect(appUrl)
+  // app.<barbearia> → abre a vitrine daquela barbearia na hora (sem path longo).
+  // Browser fica em app.nomedabarbearia.com/ ; rewrite interno para /app/:slug.
+  if (isClientAppCustomHost(host)) {
+    const appMatch = pathname.match(/^\/app\/([^/]+)(\/.*)?$/)
+    const pathSlug = appMatch?.[1] ?? null
+    const rest = appMatch?.[2] || ''
+
+    // Já está em /app/:slug — só corrige slug errado; senão deixa passar (rápido).
+    if (appMatch) {
+      const cached = cachedSlug(host)
+      if (cached && cached !== pathSlug) {
+        return redirectTo(req, `/app/${cached}${rest}`)
+      }
+      if (cached === pathSlug || cached === null) {
+        return NextResponse.next()
+      }
+      // Cache miss: resolve e corrige se preciso
+      const slug = await resolveSalonSlug(host, pathSlug)
+      if (slug && slug !== pathSlug) {
+        return redirectTo(req, `/app/${slug}${rest}`)
+      }
+      return NextResponse.next()
+    }
+
+    // /login → /app/:slug/login (rewrite: URL pode continuar /login se preferir — usamos rewrite)
+    if (pathname === '/login' || pathname.startsWith('/login/')) {
+      const slug = await resolveSalonSlug(host, null)
+      if (slug) return rewriteTo(req, `/app/${slug}/login`)
+      return NextResponse.next()
+    }
+
+    // / → rewrite para /app/:slug (URL do cliente continua app.barbearia.com/)
+    if (pathname === '/' || pathname === '') {
+      const slug = await resolveSalonSlug(host, null)
+      if (slug) return rewriteTo(req, `/app/${slug}`)
+      return NextResponse.next()
+    }
+
+    // Outras rotas curtas (ex.: /agenda) → manda para a vitrine do salão deste domínio
+    if (!pathname.startsWith('/app') && !pathname.startsWith('/admin')) {
+      const slug = await resolveSalonSlug(host, null)
+      if (slug) return rewriteTo(req, `/app/${slug}`)
     }
   }
 
