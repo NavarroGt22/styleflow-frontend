@@ -470,6 +470,27 @@ export default function PublicSalonPage() {
     setSlotsRefreshKey((k) => k + 1);
   };
 
+  /** Cancela hold e volta às 3 opções (mantém serviço/pro/data/horário). */
+  const handlePaymentChangeMethod = () => {
+    const snap = pendingPayment;
+    setPendingPayment(null);
+    setBookingSuccess(null);
+    setPaymentMode(null);
+    setBookingError(null);
+    if (snap?.time) setSelectedTime(snap.time);
+    if (snap?.date) setSelectedDate(snap.date);
+    setSlotsRefreshKey((k) => k + 1);
+  };
+
+  /** Cancela hold e volta ao início do fluxo de agendamento. */
+  const handlePaymentAbort = () => {
+    setPendingPayment(null);
+    setBookingSuccess(null);
+    setBookingError(null);
+    clearBookingForm();
+    setSlotsRefreshKey((k) => k + 1);
+  };
+
   const handlePaymentPaid = (info?: PendingPaymentInfo | null) => {
     const paid = info || pendingPayment;
     if (!paid) return;
@@ -927,6 +948,8 @@ export default function PublicSalonPage() {
                 brand={brand}
                 onPaid={handlePaymentPaid}
                 onExpired={handlePaymentExpired}
+                onChangeMethod={handlePaymentChangeMethod}
+                onAbort={handlePaymentAbort}
               />
             ) : (
               <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_minmax(240px,280px)]">

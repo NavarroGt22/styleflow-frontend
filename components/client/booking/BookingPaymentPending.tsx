@@ -24,6 +24,10 @@ type Props = {
   brand: string
   onPaid: (info: PendingPaymentInfo) => void
   onExpired: () => void
+  /** Cancelou o hold e quer escolher Pix / cartão / loja de novo */
+  onChangeMethod: () => void
+  /** Cancelou o hold e volta ao início do agendamento */
+  onAbort: () => void
 }
 
 function formatCountdown(ms: number) {
@@ -34,30 +38,106 @@ function formatCountdown(ms: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export function BookingPaymentPending({ pending, brand, onPaid, onExpired }: Props) {
+export function BookingPaymentPending({
+  pending,
+  brand,
+  onPaid,
+  onExpired,
+  onChangeMethod,
+  onAbort,
+}: Props) {
   const [remainingMs, setRemainingMs] = useState(() =>
     Math.max(0, new Date(pending.expiresAt).getTime() - Date.now())
   )
   const [copied, setCopied] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [expired, setExpired] = useState(false)
+  const [actionLoading, setActionLoading] = useState<'change' | 'abort' | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const expiredFired = useRef(false)
   const paidFired = useRef(false)
+  const actionBusyRef = useRef(false)
   const pendingRef = useRef(pending)
   pendingRef.current = pending
 
   const markPaid = useCallback(() => {
-    if (paidFired.current || expiredFired.current) return
+    if (paidFired.current || expiredFired.current || actionBusyRef.current) return
     paidFired.current = true
     setConfirmed(true)
     onPaid(pendingRef.current)
   }, [onPaid])
 
   const markExpired = useCallback(() => {
-    if (expiredFired.current || paidFired.current) return
+    if (expiredFired.current || paidFired.current || actionBusyRef.current) return
     expiredFired.current = true
     setExpired(true)
   }, [])
+
+  const cancelPendingPayment = useCallback(async (): Promise<boolean> => {
+    const token = sessionStorage.getItem('client_token')
+    if (!token) {
+      setActionError('Sua sessão expirou. Entre de novo para continuar.')
+      return false
+    }
+    try {
+      const res = await fetch(
+        apiUrl(`/appointments/${pending.appointmentId}/cancel-pending-payment`),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        if (json.code === 'NOT_AWAITING' || res.status === 400) {
+          setActionError(
+            json.error ||
+              'Este pagamento já foi concluído ou não pode mais ser cancelado. Atualize a página.'
+          )
+          return false
+        }
+        setActionError(json.error || 'Não foi possível cancelar o pagamento. Tente de novo.')
+        return false
+      }
+      return true
+    } catch {
+      setActionError('Falha de conexão ao cancelar. Verifique a internet e tente de novo.')
+      return false
+    }
+  }, [pending.appointmentId])
+
+  const handleChangeMethod = async () => {
+    if (actionBusyRef.current || confirmed || expired) return
+    setActionError(null)
+    actionBusyRef.current = true
+    setActionLoading('change')
+    const ok = await cancelPendingPayment()
+    if (!ok) {
+      actionBusyRef.current = false
+      setActionLoading(null)
+      return
+    }
+    expiredFired.current = true
+    onChangeMethod()
+  }
+
+  const handleAbort = async () => {
+    if (actionBusyRef.current || confirmed || expired) return
+    setActionError(null)
+    actionBusyRef.current = true
+    setActionLoading('abort')
+    const ok = await cancelPendingPayment()
+    if (!ok) {
+      actionBusyRef.current = false
+      setActionLoading(null)
+      return
+    }
+    expiredFired.current = true
+    onAbort()
+  }
 
   useEffect(() => {
     if (confirmed || expired) return
@@ -301,8 +381,9 @@ export function BookingPaymentPending({ pending, brand, onPaid, onExpired }: Pro
                 </p>
                 <button
                   type="button"
+                  disabled={Boolean(actionLoading)}
                   onClick={copyPix}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-[#111] transition active:scale-[0.98]"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-[#111] transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
                   style={{ backgroundColor: brand }}
                 >
                   {copied ? <Check size={16} /> : <Copy size={16} />}
@@ -322,10 +403,16 @@ export function BookingPaymentPending({ pending, brand, onPaid, onExpired }: Pro
             </p>
             {pending.paymentUrl ? (
               <a
-                href={pending.paymentUrl}
+                href={actionLoading ? undefined : pending.paymentUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-black uppercase tracking-wide text-[#111] transition active:scale-[0.98]"
+                aria-disabled={Boolean(actionLoading)}
+                onClick={(e) => {
+                  if (actionLoading) e.preventDefault()
+                }}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-black uppercase tracking-wide text-[#111] transition active:scale-[0.98] ${
+                  actionLoading ? 'pointer-events-none opacity-50' : ''
+                }`}
                 style={{ backgroundColor: brand }}
               >
                 Abrir pagamento
@@ -342,6 +429,45 @@ export function BookingPaymentPending({ pending, brand, onPaid, onExpired }: Pro
         <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: brand }} />
           Aguardando confirmação do pagamento…
+        </div>
+
+        {actionError ? (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-left text-xs font-medium leading-relaxed text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+            {actionError}
+          </div>
+        ) : null}
+
+        <div className="mt-5 space-y-2 border-t border-slate-100 pt-4 dark:border-white/10">
+          <button
+            type="button"
+            disabled={Boolean(actionLoading)}
+            onClick={handleChangeMethod}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-transparent py-3 text-sm font-bold text-slate-800 transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 dark:border-white/15 dark:text-slate-100"
+          >
+            {actionLoading === 'change' ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Liberando…
+              </>
+            ) : (
+              'Trocar forma de pagamento'
+            )}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(actionLoading)}
+            onClick={handleAbort}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-transparent py-3 text-sm font-bold text-red-600 transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 dark:text-red-400"
+          >
+            {actionLoading === 'abort' ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cancelando…
+              </>
+            ) : (
+              'Cancelar agendamento'
+            )}
+          </button>
         </div>
       </div>
     </div>
