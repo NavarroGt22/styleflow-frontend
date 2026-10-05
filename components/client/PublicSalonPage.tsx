@@ -463,20 +463,22 @@ export default function PublicSalonPage() {
 
   const handlePaymentExpired = () => {
     setPendingPayment(null);
+    setBookingSuccess(null);
     setSelectedTime('');
     setPaymentMode(null);
-    setBookingError('O tempo esgotou. Escolha o horário de novo.');
+    setBookingError(null);
     setSlotsRefreshKey((k) => k + 1);
   };
 
-  const handlePaymentPaid = () => {
-    if (!pendingPayment) return;
+  const handlePaymentPaid = (info?: PendingPaymentInfo | null) => {
+    const paid = info || pendingPayment;
+    if (!paid) return;
     setBookingSuccess({
-      appointment: { id: pendingPayment.appointmentId },
-      service: { name: pendingPayment.serviceName, price: pendingPayment.price },
-      professional: { user: { name: pendingPayment.professionalName } },
-      date: pendingPayment.date,
-      time: pendingPayment.time,
+      appointment: { id: paid.appointmentId },
+      service: { name: paid.serviceName, price: paid.price },
+      professional: { user: { name: paid.professionalName } },
+      date: paid.date,
+      time: paid.time,
       paidOnline: true,
     });
     setPendingPayment(null);
@@ -576,7 +578,12 @@ export default function PublicSalonPage() {
         },
         body: JSON.stringify({ method: paymentMode }),
       });
-      const payJson = await payRes.json();
+      let payJson: any = {};
+      try {
+        payJson = await payRes.json();
+      } catch {
+        payJson = {};
+      }
 
       if (!payRes.ok) {
         if (payJson.code === 'PAYMENT_EXPIRED') {
@@ -584,7 +591,16 @@ export default function PublicSalonPage() {
           setPaymentMode(null);
           throw new Error('O tempo esgotou. Escolha o horário de novo.');
         }
-        throw new Error(payJson.error || 'Não foi possível iniciar o pagamento.');
+        if (payJson.code === 'GATEWAY_UNAVAILABLE') {
+          throw new Error(
+            'Pagamento online indisponível neste salão (gateway/token). Fale com a barbearia.'
+          );
+        }
+        throw new Error(
+          payJson.error ||
+            payJson.detail ||
+            `Não foi possível iniciar o pagamento (${payRes.status}).`
+        );
       }
 
       setPendingPayment({
@@ -869,8 +885,8 @@ export default function PublicSalonPage() {
                 <h2 className="mb-2 text-2xl font-black text-slate-900 dark:text-white">Reserva Confirmada!</h2>
                 <p className="mb-6 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
                   {bookingSuccess.paidOnline
-                    ? 'Pagamento confirmado. Seu horário está garantido.'
-                    : `Seu horário foi agendado com sucesso. Pague na loja no dia do atendimento.`}
+                    ? 'Pagamento confirmado. Seu horário foi marcado com sucesso.'
+                    : 'Seu horário foi agendado com sucesso. Pague na loja no dia do atendimento.'}
                 </p>
 
                 <div className="mb-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5 text-left dark:border-white/10 dark:bg-black/30">
@@ -1233,7 +1249,7 @@ export default function PublicSalonPage() {
                               {
                                 id: 'PIX' as const,
                                 label: 'Pix',
-                                hint: 'QR Code · 10 min',
+                                hint: 'QR Code · 30 min',
                                 Icon: QrCode,
                               },
                               {
