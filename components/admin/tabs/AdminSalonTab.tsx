@@ -9,7 +9,6 @@ import {
   Palette,
   Store,
   Users,
-  Wallet,
 } from 'lucide-react'
 import InstagramIcon from '@/components/icons/InstagramIcon'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
@@ -23,8 +22,7 @@ import {
   sectionClass,
 } from '../ui/AdminUi'
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
-import { fetchSalon, normalizeInstagram, revealSalonPixKey, updateSalon } from '@/lib/admin/api'
-import { getSessionUser } from '@/lib/auth'
+import { fetchSalon, normalizeInstagram, updateSalon } from '@/lib/admin/api'
 import { resolveAdminLink, resolveClientLink } from '@/lib/admin/platform-urls'
 import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
 import WeekdayHoursEditor, {
@@ -41,10 +39,7 @@ import {
   weekdayInSaoPaulo,
 } from '@/lib/day-hours'
 
-type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila' | 'pix'
-type PixProvider = 'MANUAL' | 'XGATE' | 'MERCADO_PAGO'
-
-const PIX_UNAVAILABLE = 'Chave PIX indisponível no servidor, tente mais tarde'
+type SubTab = 'general' | 'temas' | 'expediente' | 'comissao' | 'fila'
 
 const subTabs: { id: SubTab; label: string; shortLabel: string; icon: typeof Store }[] = [
   { id: 'general', label: 'Dados Gerais', shortLabel: 'Dados', icon: Store },
@@ -52,18 +47,10 @@ const subTabs: { id: SubTab; label: string; shortLabel: string; icon: typeof Sto
   { id: 'expediente', label: 'Funcionamento', shortLabel: 'Horário', icon: Clock3 },
   { id: 'comissao', label: 'Comissões', shortLabel: 'Comissão', icon: DollarSign },
   { id: 'fila', label: 'Fila & Agendamento', shortLabel: 'Fila', icon: Users },
-  { id: 'pix', label: 'PIX', shortLabel: 'PIX', icon: Wallet },
 ]
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, '')
-}
-
-function pixRequestMessage(err: unknown, fallback: string) {
-  const status =
-    err && typeof err === 'object' && 'status' in err ? Number((err as { status?: number }).status) : 0
-  if (status === 503) return PIX_UNAVAILABLE
-  return err instanceof Error ? err.message : fallback
 }
 
 function checkboxClass(lightMode: boolean) {
@@ -98,13 +85,6 @@ export default function AdminSalonTab({
   const [success, setSuccess] = useState('')
   const [cep, setCep] = useState('')
   const [geoBusy, setGeoBusy] = useState(false)
-  const [pixMasked, setPixMasked] = useState<string | null>(null)
-  const [pixCity, setPixCity] = useState('')
-  const [pixEmailDraft, setPixEmailDraft] = useState('')
-  const [pixEmailTouched, setPixEmailTouched] = useState(false)
-  const [pixRevealed, setPixRevealed] = useState<string | null>(null)
-  const [pixRevealing, setPixRevealing] = useState(false)
-  const [pixProvider, setPixProvider] = useState<PixProvider>('MANUAL')
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -173,18 +153,6 @@ export default function AdminSalonTab({
       queueAllowSkip: Boolean(data.queueAllowSkip),
       loyaltyResetMode: data.loyaltyResetMode === 'MONTHLY' ? 'MONTHLY' : 'LIFETIME',
     })
-    if ('pixKeyEmailMasked' in data || 'pixMerchantCity' in data) {
-      setPixMasked(data.pixKeyEmailMasked ?? null)
-      setPixCity(data.pixMerchantCity ?? '')
-      setPixEmailDraft('')
-      setPixEmailTouched(false)
-      setPixRevealed(null)
-    }
-    if (data.pixChargeProvider === 'XGATE' || data.pixChargeProvider === 'MERCADO_PAGO') {
-      setPixProvider(data.pixChargeProvider)
-    } else if ('pixChargeProvider' in data) {
-      setPixProvider('MANUAL')
-    }
   }
 
   async function load() {
@@ -292,52 +260,8 @@ export default function AdminSalonTab({
     setSuccess('Geofence desativado (sem ponto). Salve para aplicar — join sem GPS.')
   }
 
-  const sessionUser = getSessionUser()
-  const canEditPix =
-    sessionUser?.role === 'OWNER' && (!salon?.ownerId || salon.ownerId === sessionUser.id)
-
-  async function revealPix() {
-    if (!salonId || !canEditPix) return
-    setPixRevealing(true)
-    setError('')
-    try {
-      const data = await revealSalonPixKey(salonId)
-      setPixRevealed(data.pixKeyEmail ?? '')
-    } catch (err) {
-      setError(pixRequestMessage(err, 'Não foi possível revelar a chave PIX.'))
-    } finally {
-      setPixRevealing(false)
-    }
-  }
-
-  async function savePix() {
-    if (!salonId || !canEditPix) return
-    setSaving(true)
-    setError('')
-    setSuccess('')
-    try {
-      const payload: Record<string, unknown> = {
-        pixMerchantCity: pixCity.trim(),
-      }
-      if (pixEmailTouched) {
-        payload.pixKeyEmail = pixEmailDraft.trim()
-      }
-      const updated = await updateSalon(salonId, payload)
-      applySalonData(updated)
-      setSuccess('Dados do PIX salvos.')
-    } catch (err) {
-      setError(pixRequestMessage(err, 'Erro ao salvar o PIX.'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (subTab === 'pix') {
-      await savePix()
-      return
-    }
     if (!salonId) return
     setSaving(true)
     setError('')
@@ -418,89 +342,119 @@ export default function AdminSalonTab({
       {error ? <AdminError message={error} /> : null}
       {success ? <p className="text-sm font-semibold text-emerald-600">{success}</p> : null}
 
+      {/* Abas sempre no topo — grade tocável no mobile, faixa no desktop */}
+      <div
+        className={`mb-3 grid grid-cols-3 gap-1.5 rounded-xl border p-2 sm:mb-4 sm:flex sm:gap-2 sm:overflow-x-auto sm:overscroll-x-contain sm:p-2.5 sm:scrollbar-none ${
+          lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
+        }`}
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        {subTabs.map(({ id, label, shortLabel, icon: Icon }) => {
+            const active = subTab === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSubTab(id)}
+                className={`inline-flex min-h-11 w-full items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold transition sm:min-h-0 sm:w-auto sm:shrink-0 sm:gap-2 sm:rounded-xl sm:px-3.5 sm:py-2.5 sm:text-sm ${
+                  active
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
+                    : lightMode
+                      ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      : 'bg-[#142035] text-slate-400 hover:text-white'
+                }`}
+              >
+                <Icon className="size-3.5 shrink-0 sm:size-4" />
+                <span className="truncate sm:hidden">{shortLabel}</span>
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            )
+          })}
+      </div>
+
       <div className={`grid gap-3 sm:gap-4 ${subTab === 'expediente' ? 'lg:grid-cols-[280px_1fr]' : ''}`}>
         {subTab === 'expediente' ? (
-          <aside className={sectionClass(lightMode)}>
-            <div className="mb-3 flex items-center gap-2.5 sm:mb-4 sm:gap-3">
-              <span className="grid size-9 place-items-center rounded-xl bg-slate-800 text-slate-200 sm:size-10">
-                <Store className="size-4 sm:size-5" />
-              </span>
-              <div>
-                <p className={`text-sm font-bold sm:text-base ${lightMode ? 'text-slate-900' : 'text-white'}`}>{form.name || 'Salão'}</p>
-                <p className="text-xs text-slate-500">@{form.slug || 'slug'}</p>
-              </div>
-            </div>
-            <div className="space-y-2.5 text-sm sm:space-y-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">WhatsApp Comercial</p>
-                <p className={lightMode ? 'text-slate-700' : 'text-slate-300'}>{form.phone || 'Não cadastrado'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Endereço</p>
-                <p className={lightMode ? 'text-slate-700' : 'text-slate-300'}>{form.address || 'Não cadastrado'}</p>
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Expediente de hoje
+          <>
+            {/* Mobile: resumo compacto do expediente de hoje */}
+            <div
+              className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 lg:hidden ${
+                lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
+              }`}
+            >
+              <div className="min-w-0">
+                <p className={`truncate text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+                  {form.name || 'Salão'}
                 </p>
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-600 px-3 py-1 text-xs font-semibold text-slate-200"
-                  style={{ borderColor: `${form.primaryColor}55`, color: form.primaryColor }}
-                >
-                  <Clock3 className="size-3.5" />
-                  {(() => {
-                    const todayHours = hoursForWeekday(form.dayHours, weekdayInSaoPaulo())
-                    return todayHours
-                      ? `${todayHours.open} às ${todayHours.close}`
-                      : 'Fechado hoje'
-                  })()}
-                </span>
+                <p className="text-[11px] text-slate-500">Expediente de hoje</p>
               </div>
-            </div>
-            {whatsappLink ? (
-              <a
-                href={whatsappLink}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 sm:mt-5 sm:py-2.5"
+              <span
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                style={{ borderColor: `${form.primaryColor}55`, color: form.primaryColor }}
               >
-                <MessageCircle className="size-4" />
-                Testar Link do WhatsApp
-              </a>
-            ) : null}
-          </aside>
+                <Clock3 className="size-3.5" />
+                {(() => {
+                  const todayHours = hoursForWeekday(form.dayHours, weekdayInSaoPaulo())
+                  return todayHours
+                    ? `${todayHours.open}–${todayHours.close}`
+                    : 'Fechado'
+                })()}
+              </span>
+            </div>
+
+            {/* Desktop: card lateral completo */}
+            <aside className={`hidden lg:block ${sectionClass(lightMode)}`}>
+              <div className="mb-3 flex items-center gap-2.5 sm:mb-4 sm:gap-3">
+                <span className="grid size-9 place-items-center rounded-xl bg-slate-800 text-slate-200 sm:size-10">
+                  <Store className="size-4 sm:size-5" />
+                </span>
+                <div>
+                  <p className={`text-sm font-bold sm:text-base ${lightMode ? 'text-slate-900' : 'text-white'}`}>{form.name || 'Salão'}</p>
+                  <p className="text-xs text-slate-500">@{form.slug || 'slug'}</p>
+                </div>
+              </div>
+              <div className="space-y-2.5 text-sm sm:space-y-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">WhatsApp Comercial</p>
+                  <p className={lightMode ? 'text-slate-700' : 'text-slate-300'}>{form.phone || 'Não cadastrado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Endereço</p>
+                  <p className={lightMode ? 'text-slate-700' : 'text-slate-300'}>{form.address || 'Não cadastrado'}</p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Expediente de hoje
+                  </p>
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-600 px-3 py-1 text-xs font-semibold text-slate-200"
+                    style={{ borderColor: `${form.primaryColor}55`, color: form.primaryColor }}
+                  >
+                    <Clock3 className="size-3.5" />
+                    {(() => {
+                      const todayHours = hoursForWeekday(form.dayHours, weekdayInSaoPaulo())
+                      return todayHours
+                        ? `${todayHours.open} às ${todayHours.close}`
+                        : 'Fechado hoje'
+                    })()}
+                  </span>
+                </div>
+              </div>
+              {whatsappLink ? (
+                <a
+                  href={whatsappLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 sm:mt-5 sm:py-2.5"
+                >
+                  <MessageCircle className="size-4" />
+                  Testar Link do WhatsApp
+                </a>
+              ) : null}
+            </aside>
+          </>
         ) : null}
 
         <form onSubmit={handleSubmit} className={sectionClass(lightMode)}>
-          <div
-            className="mb-3 flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none sm:mb-5 sm:gap-2 sm:pb-2 [-webkit-overflow-scrolling:touch]"
-            style={{ WebkitOverflowScrolling: 'touch' }}
-          >
-            {subTabs
-              .filter((tab) => tab.id !== 'pix' || canEditPix)
-              .map(({ id, label, shortLabel, icon: Icon }) => {
-              const active = subTab === id
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setSubTab(id)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition sm:gap-2 sm:rounded-xl sm:px-3.5 sm:py-2.5 sm:text-sm ${
-                    active
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                      : lightMode
-                        ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        : 'bg-[#142035] text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Icon className="size-3.5 sm:size-4" />
-                  <span className="sm:hidden">{shortLabel}</span>
-                  <span className="hidden sm:inline">{label}</span>
-                </button>
-              )
-            })}
-          </div>
-
           {subTab === 'general' ? (
             <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
               <div>
@@ -626,6 +580,7 @@ export default function AdminSalonTab({
             <WeekdayHoursEditor
               lightMode={lightMode}
               brandColor={form.primaryColor || '#d5a85c'}
+              embedded
               dayHours={form.dayHours}
               onChangeDayHours={(next) => {
                 const range = legacyRangeFromDayHours(next)
@@ -803,107 +758,9 @@ export default function AdminSalonTab({
             </div>
           ) : null}
 
-          {subTab === 'pix' && canEditPix ? (
-            <div
-              className={`space-y-4 rounded-2xl border p-5 sm:p-6 ${
-                lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
-              }`}
-            >
-              <div>
-                <h4 className={`text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
-                  Chave PIX do salão
-                </h4>
-                <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                  E-mail e cidade usados na mensagem de PIX para o cliente. A chave fica cifrada no servidor.
-                </p>
-              </div>
-
-              <div>
-                <p className={labelClass(lightMode)}>E-mail PIX atual</p>
-                <p className={`mt-1 break-all text-sm font-medium ${lightMode ? 'text-slate-800' : 'text-slate-100'}`}>
-                  {pixRevealed !== null
-                    ? pixRevealed || 'Nenhuma chave cadastrada'
-                    : pixMasked || 'Nenhuma chave cadastrada'}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void revealPix()}
-                  disabled={pixRevealing}
-                  className="mt-2 text-xs font-semibold text-indigo-400 underline disabled:opacity-60"
-                >
-                  {pixRevealing ? 'Revelando…' : 'Revelar'}
-                </button>
-              </div>
-
-              <div>
-                <label className={labelClass(lightMode)}>Novo e-mail PIX</label>
-                <input
-                  type="email"
-                  autoComplete="off"
-                  value={pixEmailDraft}
-                  placeholder="Somente se for trocar o e-mail"
-                  onChange={(e) => {
-                    setPixEmailDraft(e.target.value)
-                    setPixEmailTouched(true)
-                  }}
-                  className={inputClass(lightMode)}
-                />
-                <button
-                  type="button"
-                  className="mt-2 text-xs font-semibold text-rose-400 underline"
-                  onClick={() => {
-                    setPixEmailDraft('')
-                    setPixEmailTouched(true)
-                  }}
-                >
-                  Apagar e-mail ao salvar
-                </button>
-              </div>
-
-              <div>
-                <label className={labelClass(lightMode)}>Cidade do recebedor</label>
-                <input
-                  value={pixCity}
-                  maxLength={15}
-                  autoComplete="off"
-                  placeholder="Até 15 caracteres"
-                  onChange={(e) => setPixCity(e.target.value.slice(0, 15))}
-                  className={inputClass(lightMode)}
-                />
-              </div>
-
-              {(() => {
-                const hasEmail = pixEmailTouched ? pixEmailDraft.trim().length > 0 : Boolean(pixMasked)
-                const hasCity = pixCity.trim().length > 0
-                if (hasEmail && hasCity) return null
-                return (
-                  <p className="text-xs font-medium text-amber-400">
-                    Sem e-mail e cidade, a mensagem de PIX não será enviada ao cliente.
-                  </p>
-                )
-              })()}
-
-              <div>
-                <p className={labelClass(lightMode)}>Provedor</p>
-                <p className={`mt-1 text-sm font-medium ${lightMode ? 'text-slate-800' : 'text-slate-100'}`}>
-                  {pixProvider === 'XGATE'
-                    ? 'XGate'
-                    : pixProvider === 'MERCADO_PAGO'
-                      ? 'Mercado Pago'
-                      : 'Manual (QR gerado pelo sistema)'}
-                </p>
-                {pixProvider !== 'MANUAL' ? (
-                  <p className="mt-2 text-xs font-medium text-amber-400">
-                    A cobrança automática por este provedor ainda não está ligada. A mensagem de PIX fica suspensa até a integração.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
           <div className="mt-4 flex justify-end sm:mt-6">
             <AdminButton type="submit" disabled={saving}>
-              {saving ? 'Salvando...' : subTab === 'pix' ? 'Salvar PIX' : 'Salvar Configurações'}
+              {saving ? 'Salvando...' : 'Salvar Configurações'}
             </AdminButton>
           </div>
         </form>

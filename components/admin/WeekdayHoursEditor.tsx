@@ -33,6 +33,8 @@ type WeekdayHoursEditorProps = {
   onChangeBookingCalendarMode: (value: 'WEEK' | 'TODAY') => void
   /** A mensagem de folga é do salão: não aparece na tela do funcionário. */
   showClosedDayMessage?: boolean
+  /** Dentro de outro card (ex.: aba Horário no mobile) — sem borda/fundo duplicados. */
+  embedded?: boolean
   title?: string
   description?: string
 }
@@ -51,6 +53,7 @@ export default function WeekdayHoursEditor({
   bookingCalendarMode,
   onChangeBookingCalendarMode,
   showClosedDayMessage = true,
+  embedded = false,
   title = 'Configure o horário de funcionamento',
   description = 'Cada dia pode ter início e fim próprios. Dias desligados mostram a mensagem de folga para o cliente.',
 }: WeekdayHoursEditorProps) {
@@ -79,9 +82,13 @@ export default function WeekdayHoursEditor({
 
   return (
     <div
-      className={`space-y-5 rounded-2xl border p-5 sm:p-6 ${
-        lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
-      }`}
+      className={
+        embedded
+          ? 'space-y-4 sm:space-y-5'
+          : `space-y-4 rounded-2xl border p-3 sm:space-y-5 sm:p-6 ${
+              lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
+            }`
+      }
     >
       <div>
         <h4 className={`flex items-center gap-2 text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
@@ -107,7 +114,7 @@ export default function WeekdayHoursEditor({
           return (
             <div
               key={day.value}
-              className={`rounded-xl border px-3 py-3 sm:px-4 ${
+              className={`rounded-xl border px-2.5 py-2.5 sm:px-4 sm:py-3 ${
                 lightMode
                   ? active
                     ? 'border-slate-200 bg-slate-50/80'
@@ -117,13 +124,16 @@ export default function WeekdayHoursEditor({
                     : 'border-slate-700/80 bg-[#121c2c] opacity-70'
               }`}
             >
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-2 flex items-center justify-between gap-2 sm:mb-3 sm:gap-3">
                 <p
-                  className={`text-xs font-bold uppercase tracking-wide ${
+                  className={`min-w-0 truncate text-[11px] font-bold uppercase tracking-wide sm:text-xs ${
                     lightMode ? 'text-slate-800' : 'text-slate-100'
                   }`}
                 >
-                  {day.label}
+                  <span className="sm:hidden">
+                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][day.value]}
+                  </span>
+                  <span className="hidden sm:inline">{day.label}</span>
                 </p>
                 <button
                   type="button"
@@ -131,14 +141,14 @@ export default function WeekdayHoursEditor({
                   aria-checked={active}
                   aria-label={active ? `${day.label} atendendo` : `${day.label} fechado`}
                   onClick={() => toggleDay(day.value)}
-                  className="inline-flex items-center gap-2"
+                  className="inline-flex min-h-9 shrink-0 items-center gap-1.5 sm:gap-2"
                 >
                   <span
                     className={`text-[10px] font-bold uppercase tracking-wide ${
                       active ? 'text-emerald-400' : lightMode ? 'text-slate-400' : 'text-slate-500'
                     }`}
                   >
-                    {active ? 'Atendendo' : 'Fechado'}
+                    {active ? 'Aberto' : 'Fechado'}
                   </span>
                   <span
                     className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
@@ -154,8 +164,8 @@ export default function WeekdayHoursEditor({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="min-w-0">
                   <label className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                     Início
                   </label>
@@ -164,10 +174,10 @@ export default function WeekdayHoursEditor({
                     value={slot.open}
                     disabled={!active}
                     onChange={(e) => updateDay(day.value, 'open', e.target.value)}
-                    className={inputClass(lightMode)}
+                    className={`${inputClass(lightMode)} w-full min-w-0`}
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                     Fim
                   </label>
@@ -176,7 +186,7 @@ export default function WeekdayHoursEditor({
                     value={slot.close}
                     disabled={!active}
                     onChange={(e) => updateDay(day.value, 'close', e.target.value)}
-                    className={inputClass(lightMode)}
+                    className={`${inputClass(lightMode)} w-full min-w-0`}
                   />
                 </div>
               </div>

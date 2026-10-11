@@ -1,7 +1,7 @@
 'use client'
 
 import { CheckCircle2, Clock, Lock, Plus, Scissors, User } from 'lucide-react'
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import AdminCheckoutModal from '../AdminCheckoutModal'
 import QueuePermanentQrCard from '../QueuePermanentQrCard'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminModal, inputClass, labelClass } from '../ui/AdminUi'
@@ -12,7 +12,6 @@ import {
   fetchAppointments,
   fetchProfessionals,
   fetchSalon,
-  markAppointmentPaid,
   updateAppointmentStatus,
 } from '@/lib/admin/api'
 import { resolveClientLink } from '@/lib/admin/platform-urls'
@@ -101,29 +100,21 @@ function PaymentMethodBadge({ apt }: { apt: Appointment }) {
 
 function AppointmentActions({
   apt,
-  paying,
   onConfirm,
   onCancel,
   onCheckout,
   onUnblock,
-  onMarkPaid,
   onNoShow,
 }: {
   apt: Appointment
-  paying: boolean
   onConfirm: () => void
   onCancel: () => void
   onCheckout: () => void
   onUnblock: () => void
-  onMarkPaid: () => void
   onNoShow: () => void
 }) {
   const requestCancel = onCancel
   const paid = isClientPaid(apt)
-  const canMarkPaid =
-    !paid &&
-    (apt.status === 'PENDING' || apt.status === 'CONFIRMED') &&
-    (apt.paymentMode === 'STORE' || !apt.paymentMode || apt.paymentStatus === 'NONE')
 
   // Pago online/loja: permanece na agenda; barbeiro marca presença ou falta
   if (paid && (apt.status === 'PENDING' || apt.status === 'CONFIRMED')) {
@@ -195,16 +186,6 @@ function AppointmentActions({
           </button>
         </>
       )}
-      {canMarkPaid ? (
-        <button
-          type="button"
-          disabled={paying}
-          onClick={onMarkPaid}
-          className="min-h-11 flex-1 rounded-xl border border-emerald-500/40 px-3 py-2.5 text-sm font-bold text-emerald-400 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
-        >
-          {paying ? 'Registrando...' : 'Cliente já pagou'}
-        </button>
-      ) : null}
       {apt.status === 'BLOCKED' && (
         <button
           type="button"
@@ -224,8 +205,6 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   const [error, setError] = useState('')
   const [filter, setFilter] = useState<'PENDING' | 'COMPLETED'>('PENDING')
   const [checkoutApt, setCheckoutApt] = useState<Appointment | null>(null)
-  const [payingId, setPayingId] = useState<string | null>(null)
-  const payingLock = useRef<string | null>(null)
   const [salon, setSalon] = useState<SalonSettings | null>(null)
   const { confirm, confirmDialog } = useConfirm(lightMode)
 
@@ -405,51 +384,6 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
     }
   }
 
-  async function handleMarkPaid(apt: Appointment) {
-    if (payingLock.current) return
-    payingLock.current = apt.id
-    setError('')
-    try {
-      const ok = await confirm({
-        title: 'Pagamento PIX',
-        message: 'Você confirma que o cliente pagou este serviço via PIX?',
-        confirmLabel: 'Sim, já pagou',
-        cancelLabel: 'Cancelar',
-        danger: false,
-      })
-      if (!ok) return
-      setPayingId(apt.id)
-      const result = await markAppointmentPaid(apt.id)
-      setItems((current) =>
-        current.map((item) =>
-          item.id === apt.id ? { ...item, paidAt: result.paidAt, status: item.status } : item,
-        ),
-      )
-    } catch (err) {
-      const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: string }).code || '') : ''
-      if (code === 'ALREADY_PAID') {
-        setItems((current) =>
-          current.map((item) =>
-            item.id === apt.id ? { ...item, paidAt: item.paidAt || new Date().toISOString() } : item,
-          ),
-        )
-        return
-      }
-      if (code === 'NO_SERVICE') {
-        setError('Este horário não tem serviço para registrar o pagamento.')
-        return
-      }
-      if (code === 'INVALID_STATUS') {
-        setError('Só dá para marcar o pagamento de um horário pendente ou confirmado.')
-        return
-      }
-      setError(err instanceof Error ? err.message : 'Não foi possível registrar o pagamento.')
-    } finally {
-      payingLock.current = null
-      setPayingId(null)
-    }
-  }
-
   function handleCheckoutSuccess(appointmentId: string) {
     setItems((current) =>
       current.map((apt) => (apt.id === appointmentId ? { ...apt, status: 'COMPLETED' } : apt)),
@@ -620,12 +554,10 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
 
                   <AppointmentActions
                     apt={apt}
-                    paying={payingId === apt.id}
                     onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
                     onCancel={() => requestCancel(apt)}
                     onCheckout={() => setCheckoutApt(apt)}
                     onUnblock={() => requestUnblock(apt)}
-                    onMarkPaid={() => void handleMarkPaid(apt)}
                     onNoShow={() => void requestNoShow(apt)}
                   />
                 </article>
@@ -721,12 +653,10 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                         <div className="flex justify-end">
                           <AppointmentActions
                             apt={apt}
-                            paying={payingId === apt.id}
                             onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
                             onCancel={() => requestCancel(apt)}
                             onCheckout={() => setCheckoutApt(apt)}
                             onUnblock={() => requestUnblock(apt)}
-                            onMarkPaid={() => void handleMarkPaid(apt)}
                             onNoShow={() => void requestNoShow(apt)}
                           />
                         </div>

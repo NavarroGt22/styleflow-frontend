@@ -77,7 +77,7 @@ const DEFAULT_PIX_CHARGE_TEMPLATE =
   'PIX copia e cola:\n{copia_e_cola}'
 
 const DEFAULT_PAYMENT_CONFIRMED_TEMPLATE =
-  'Olá {cliente}! Recebemos seu pagamento de R$ {valor} referente a {servico} na {estabelecimento}, dia {data} às {horario}. Obrigado!'
+  '{cliente} seu pagamento foi concluído ✅ te esperamos {data} {servico} {horario}.'
 
 const PIX_PREVIEW_KEY = 'exemplo@email.com'
 const PIX_PREVIEW_COPY = '00020126...EXEMPLO'
@@ -375,7 +375,7 @@ export default function AdminMarketingTab({
   const [remindEnabled, setRemindEnabled] = useState(false)
   const [remindMinutes, setRemindMinutes] = useState('10')
   const [autoBookingEnabled, setAutoBookingEnabled] = useState(true)
-  const [autoPixChargeEnabled, setAutoPixChargeEnabled] = useState(true)
+  const [autoPixChargeEnabled, setAutoPixChargeEnabled] = useState(false)
   const [autoPaymentConfirmedEnabled, setAutoPaymentConfirmedEnabled] = useState(true)
   const [autoCancelSalonEnabled, setAutoCancelSalonEnabled] = useState(true)
   const [autoCancelClientEnabled, setAutoCancelClientEnabled] = useState(true)
@@ -454,7 +454,7 @@ export default function AdminMarketingTab({
       setRemindEnabled(Boolean(data.queueNotifyClient))
       setRemindMinutes(String(data.appointmentRemindMinutes ?? 10))
       setAutoBookingEnabled(data.autoMsgBookingEnabled !== false)
-      setAutoPixChargeEnabled(data.autoMsgPixChargeEnabled !== false)
+      setAutoPixChargeEnabled(data.autoMsgPixChargeEnabled === true)
       setAutoPaymentConfirmedEnabled(data.autoMsgPaymentConfirmedEnabled !== false)
       setAutoCancelSalonEnabled(data.autoMsgCancelSalonEnabled !== false)
       setAutoCancelClientEnabled(data.autoMsgCancelClientEnabled !== false)
@@ -1151,8 +1151,8 @@ export default function AdminMarketingTab({
             label="Cobrança PIX (automática)"
             hint={
               <>
-                Texto da cobrança. A prévia usa dados fictícios. A chave PIX de verdade fica em Salão → PIX e não
-                aparece aqui.
+                Desligada por padrão: o cliente paga no app (Mercado Pago). Se ligar, envia QR/chave PIX pelo
+                WhatsApp (chave manual legada no servidor).
               </>
             }
             value={pixChargeTemplate}
@@ -1176,17 +1176,15 @@ export default function AdminMarketingTab({
           <AutoTemplateField
             lightMode={lightMode}
             label="Pagamento confirmado (recibo automático)"
-            hint={<>Enviada quando o pagamento do serviço é confirmado.</>}
+            hint={<>Enviada quando o cliente paga pelo app (Mercado Pago) ou o pagamento é confirmado.</>}
             value={paymentConfirmedTemplate}
             onChange={setPaymentConfirmedTemplate}
             defaultValue={DEFAULT_PAYMENT_CONFIRMED_TEMPLATE}
             tokens={
               [
                 ['{cliente}', 'Nome'],
-                ['{servico}', 'Serviço'],
-                ['{valor}', 'Valor'],
-                ['{estabelecimento}', 'Salão'],
                 ['{data}', 'Data'],
+                ['{servico}', 'Serviço'],
                 ['{horario}', 'Horário'],
               ] as const
             }
