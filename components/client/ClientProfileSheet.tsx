@@ -134,16 +134,21 @@ export default function ClientProfileSheet({
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault()
     if (!canEditProfile) return
-    setSaving(true)
     setError('')
     setSuccess('')
+    const phoneDigits = onlyDigits(editPhone)
+    if (phoneDigits.length !== 11 || phoneDigits[2] !== '9') {
+      setError('Informe um celular com 11 dígitos, no formato (71) 9xxxx-xxxx.')
+      return
+    }
+    setSaving(true)
     try {
       const res = await fetch(apiUrl('/auth/client/profile'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editName.trim(),
-          phone: onlyDigits(editPhone),
+          phone: phoneDigits,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -433,7 +438,10 @@ export default function ClientProfileSheet({
                     value={editPhone}
                     onChange={(e) => setEditPhone(formatPhoneInput(e.target.value))}
                     required
-                    placeholder="(71) 99999-9999"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={15}
+                    placeholder="(71) 98765-4321"
                     className={`h-11 w-full rounded-xl border px-3 text-sm outline-none ${
                       isDark
                         ? 'border-white/10 bg-black/30 text-white'

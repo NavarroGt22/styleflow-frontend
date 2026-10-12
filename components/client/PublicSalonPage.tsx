@@ -306,17 +306,33 @@ export default function PublicSalonPage() {
     }
   };
 
+  const fetchPublicQueueRef = useRef(fetchPublicQueue);
+  fetchPublicQueueRef.current = fetchPublicQueue;
+
   useEffect(() => {
     fetchPublicQueue();
   }, [salonSlug]);
 
+  // Polling: mais rápido enquanto espera a fila abrir (barbeiro ativou e cliente já está na página)
   useEffect(() => {
-    if (!data?.salon?.queueMode) return;
+    if (!data?.salon?.id) return;
+    const waitingForQueue =
+      Boolean(data?.salon?.queueMode) && !(Array.isArray(data?.queues) && data.queues.length > 0);
+    const ms = waitingForQueue ? 5000 : data?.salon?.queueMode ? 12000 : 20000;
     const interval = window.setInterval(() => {
-      fetchPublicQueue();
-    }, 30000);
+      void fetchPublicQueueRef.current();
+    }, ms);
     return () => window.clearInterval(interval);
-  }, [data?.salon?.queueMode, salonSlug]);
+  }, [data?.salon?.id, data?.salon?.queueMode, data?.queues?.length, salonSlug]);
+
+  // Voltou para a aba: atualiza na hora (evita “preciso dar F5”)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void fetchPublicQueueRef.current();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   useEffect(() => {
     const tenant = data?.tenant as TenantBranding | undefined;
@@ -1059,28 +1075,73 @@ export default function PublicSalonPage() {
     }
   };
 
-  // WebSocket para atualizações em tempo real
+  // WebSocket com reconnect — fila abre no admin e o cliente vê sem F5
   useEffect(() => {
+    const salonId = data?.salon?.id;
+    if (!salonId) return;
 
-    if (data?.salon?.id) {
-      const ws = new WebSocket(wsUrl(`/ws/queue?salonId=${data.salon.id}`));
-      
-      ws.onmessage = (event) => {
+    let closed = false;
+    let ws: WebSocket | null = null;
+    let retryTimer: number | undefined;
+    let retry = 0;
+
+    const connect = () => {
+      if (closed) return;
+      const token =
+        typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('client_token') : null;
+      const params = new URLSearchParams({ salonId });
+      if (token) params.set('token', token);
+      const socket = new WebSocket(wsUrl(`/ws/queue?${params.toString()}`));
+      ws = socket;
+
+      socket.onopen = () => {
+        retry = 0;
+        void fetchPublicQueueRef.current();
+      };
+
+      socket.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           const type = msg.type || msg.event;
-          if (type === 'QUEUE_UPDATED' || type === 'SESSION_OPENED') {
-            fetchPublicQueue();
+          if (
+            type === 'QUEUE_UPDATED' ||
+            type === 'SESSION_OPENED' ||
+            type === 'SESSION_CLOSED'
+          ) {
+            void fetchPublicQueueRef.current();
           }
         } catch (err) {
-          console.error("Erro ao processar mensagem WS:", err);
+          console.error('Erro ao processar mensagem WS:', err);
         }
       };
 
-      return () => {
-        ws.close();
+      socket.onclose = () => {
+        if (closed) return;
+        const delay = Math.min(1000 * 2 ** retry, 15000);
+        retry += 1;
+        retryTimer = window.setTimeout(connect, delay);
       };
-    }
+
+      socket.onerror = () => {
+        try {
+          socket.close();
+        } catch {
+          /* ignore */
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
+    };
   }, [data?.salon?.id]);
 
   if (loading) {

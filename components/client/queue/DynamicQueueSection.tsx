@@ -78,6 +78,9 @@ export function DynamicQueueSection({
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Os barbeiros ainda não iniciaram os atendimentos por fila hoje.
           </p>
+          <p className="mt-3 text-xs font-medium text-slate-400 dark:text-slate-500">
+            Esta tela atualiza sozinha — não precisa recarregar a página.
+          </p>
         </div>
       ) : (
         <>

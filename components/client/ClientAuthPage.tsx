@@ -91,12 +91,24 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
     e.preventDefault()
     setError('')
     setSuccess('')
-    setLoading(true)
 
     const isLogin = mode === 'login'
+    const phoneDigits = phone.replace(/\D/g, '')
+    if (!isLogin) {
+      if (phoneDigits.length !== 11 || phoneDigits[2] !== '9') {
+        setError('Informe um celular com 11 dígitos, no formato (71) 9xxxx-xxxx.')
+        return
+      }
+    } else if (phoneDigits.length < 10 || phoneDigits.length > 11) {
+      setError('Informe um telefone válido com DDD.')
+      return
+    }
+
+    setLoading(true)
+
     const endpoint = isLogin ? '/auth/client/login' : '/auth/client/register'
     const payload: Record<string, unknown> = {
-      phone: phone.replace(/\D/g, ''),
+      phone: phoneDigits,
       ...(tenant?.id ? { tenantId: tenant.id } : {}),
       ...(salonSlug ? { salonSlug } : {}),
     }
@@ -232,19 +244,19 @@ export default function ClientAuthPage({ mode }: ClientAuthProps) {
                 id="auth-phone"
                 required
                 type="tel"
-                inputMode="tel"
+                inputMode="numeric"
                 maxLength={15}
                 value={phone}
                 onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-                placeholder="(11) 99999-9999"
+                placeholder="(71) 98765-4321"
                 autoComplete="tel"
                 className="h-12 w-full border border-white/10 bg-[#0b0d0e]/80 px-4 text-sm text-[#f5f5f4] outline-none transition-colors placeholder:text-[#a1a1aa]/50 focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]"
               />
-              {isLogin ? (
-                <p className="mt-2 text-[11px] text-[#a1a1aa]">
-                  Use o mesmo número que cadastrou na barbearia.
-                </p>
-              ) : null}
+              <p className="mt-2 text-[11px] text-[#a1a1aa]">
+                {isLogin
+                  ? 'Use o mesmo número que cadastrou na barbearia.'
+                  : 'Celular com DDD — 11 dígitos, no formato (71) 9xxxx-xxxx.'}
+              </p>
             </div>
 
             <button
