@@ -44,6 +44,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
     commissionRate: '30',
     workStart: '09:00',
     workEnd: '18:00',
+    prepMinutes: '0',
     password: '',
   })
 
@@ -78,6 +79,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
       commissionRate: '30',
       workStart: '09:00',
       workEnd: '18:00',
+      prepMinutes: '0',
       password: '',
     })
     setModal('create')
@@ -93,6 +95,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
       commissionRate: String(member.commissionRate ?? 0),
       workStart: member.workStart || '09:00',
       workEnd: member.workEnd || '18:00',
+      prepMinutes: String(member.prepMinutes ?? 0),
       password: '',
     })
     setModal('edit')
@@ -117,6 +120,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
           commissionRate: Number(form.commissionRate),
           workStart: form.workStart,
           workEnd: form.workEnd,
+          prepMinutes: Number(form.prepMinutes) || 0,
           password: form.password,
         })
       } else if (editing) {
@@ -126,6 +130,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
           commissionRate: Number(form.commissionRate),
           workStart: form.workStart,
           workEnd: form.workEnd,
+          prepMinutes: Number(form.prepMinutes) || 0,
           password: form.password || undefined,
         })
       }
@@ -331,6 +336,20 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
                   className={inputClass(lightMode)}
                 />
               </div>
+            </div>
+            <div>
+              <label className={labelClass(lightMode)}>Tempo de preparação após o atendimento</label>
+              <input
+                type="number"
+                min="0"
+                max="240"
+                value={form.prepMinutes}
+                onChange={(e) => setForm({ ...form, prepMinutes: e.target.value })}
+                className={inputClass(lightMode)}
+              />
+              <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Minutos extras depois do serviço. Zero não acrescenta bloqueio.
+              </p>
             </div>
             <div>
               <label className={labelClass(lightMode)}>

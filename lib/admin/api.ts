@@ -278,6 +278,7 @@ export async function createProfessional(payload: {
   commissionRate: number
   workStart?: string
   workEnd?: string
+  prepMinutes?: number
   password?: string
 }): Promise<void> {
   const response = await authFetch('/professionals', {
@@ -299,6 +300,7 @@ export async function updateProfessional(
     commissionRate?: number
     workStart?: string
     workEnd?: string
+    prepMinutes?: number
     password?: string
   },
 ): Promise<void> {

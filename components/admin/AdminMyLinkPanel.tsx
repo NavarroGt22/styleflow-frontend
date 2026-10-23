@@ -141,6 +141,7 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
     bookingExtraText: '',
     bookingShareMessage: '',
     bookingPrimaryColor: '',
+    bookingSlotIntervalMinutes: 30,
   })
 
   const applySalon = useCallback((data: SalonSettings) => {
@@ -157,6 +158,7 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
       bookingExtraText: data.bookingExtraText || '',
       bookingShareMessage: data.bookingShareMessage || '',
       bookingPrimaryColor: data.bookingPrimaryColor || data.tenant?.primaryColor || '#d5a85c',
+      bookingSlotIntervalMinutes: data.bookingSlotIntervalMinutes ?? 30,
     })
   }, [])
 
@@ -283,6 +285,7 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
         bookingExtraText: form.bookingExtraText.trim() || null,
         bookingShareMessage: form.bookingShareMessage.trim() || null,
         bookingPrimaryColor: form.bookingPrimaryColor || null,
+        bookingSlotIntervalMinutes: form.bookingSlotIntervalMinutes,
       }
       if (slug && slug !== salon?.slug) payload.slug = slug
 
@@ -572,6 +575,27 @@ export default function AdminMyLinkPanel({ salonId, salonSlug, lightMode = false
                     </strong>{' '}
                     configure um tempo mínimo para agendar, ou seja, o tempo mínimo necessário entre seu cliente
                     agendar e o início do atendimento.
+                  </p>
+                </div>
+
+                <div>
+                  <span className={groupLabel}>Intervalo entre opções de horário</span>
+                  <select
+                    value={form.bookingSlotIntervalMinutes}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, bookingSlotIntervalMinutes: Number(e.target.value) }))
+                    }
+                    className={selectClass}
+                  >
+                    {[5, 10, 15, 20, 25, 30, 60].map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes} minutos
+                      </option>
+                    ))}
+                  </select>
+                  <p className={`mt-1.5 text-xs leading-relaxed ${mutedText}`}>
+                    Define os horários de início exibidos ao cliente. A disponibilidade considera a duração
+                    completa do atendimento.
                   </p>
                 </div>
 

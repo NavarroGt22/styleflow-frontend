@@ -100,6 +100,8 @@ export type Professional = {
   commissionRate: number
   workStart: string
   workEnd: string
+  /** Minutos extras depois do atendimento. 0 = sem preparação. */
+  prepMinutes?: number
   queueMode?: boolean
   isActive?: boolean
   user?: { id?: string; name?: string; email?: string; phone?: string | null; role?: string }
@@ -245,6 +247,8 @@ export type SalonSettings = {
   bookingShareMessage?: string | null
   /** Cor só da página pública de agendamento; vazio usa a cor da marca do tenant. */
   bookingPrimaryColor?: string | null
+  /** Minutos entre as opções de início. A duração do serviço é outra coisa. */
+  bookingSlotIntervalMinutes?: number
   instagramUrl?: string | null
   queueMode?: boolean
   queueAutoAdvance?: boolean

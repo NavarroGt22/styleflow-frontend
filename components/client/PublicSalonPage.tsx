@@ -28,9 +28,10 @@ import {
   writePendingPaymentStorage,
 } from '@/lib/client/pending-payment-storage';
 import { useConfirm } from '@/components/admin/ui/useConfirm';
-import { hoursForWeekday, resolveDayHoursFromSalon } from '@/lib/day-hours';
 
 type ClientPaymentMode = 'STORE' | 'PIX' | 'CARD';
+
+type OfferSlot = { time: string; available: boolean; startTime?: string; endTime?: string };
 
 function localDateTimeParts(iso: string): { date: string; time: string } {
   const d = new Date(iso)
@@ -42,69 +43,6 @@ function localDateTimeParts(iso: string): { date: string; time: string } {
   const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   return { date, time }
 }
-
-const generateTimeSlots = (
-  professional: any,
-  selectedDate: string,
-  serviceDuration: number,
-  busySlotsList: any[],
-  minAdvanceMinutes = 0,
-  salonDayHours?: { open: string; close: string } | null
-) => {
-  if (!professional) return [];
-  if (salonDayHours === null) return [];
-  const slots = [];
-  const [startHour, startMin] = (professional.workStart || salonDayHours?.open || '09:00')
-    .split(':')
-    .map(Number);
-  const [endHour, endMin] = (professional.workEnd || salonDayHours?.close || '18:00')
-    .split(':')
-    .map(Number);
-
-  let workStart = new Date(
-    `${selectedDate}T${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00`
-  );
-  let workEnd = new Date(
-    `${selectedDate}T${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00`
-  );
-
-  if (salonDayHours) {
-    const salonStart = new Date(`${selectedDate}T${salonDayHours.open}:00`);
-    const salonEnd = new Date(`${selectedDate}T${salonDayHours.close}:00`);
-    if (salonStart > workStart) workStart = salonStart;
-    if (salonEnd < workEnd) workEnd = salonEnd;
-  }
-
-  let current = new Date(workStart);
-
-  while (current.getTime() + serviceDuration * 60000 <= workEnd.getTime()) {
-    const slotStart = new Date(current);
-    const slotEnd = new Date(slotStart.getTime() + serviceDuration * 60000);
-
-    // Verifica se bate com algum horário ocupado
-    const isBusy = busySlotsList.some((busy) => {
-      const busyStart = new Date(busy.startTime);
-      const busyEnd = new Date(busy.endTime);
-      return slotStart < busyEnd && slotEnd > busyStart;
-    });
-
-    const now = new Date();
-    // Antecedência mínima configurada no "Meu link" (0 = pode agendar em cima da hora)
-    const earliest = now.getTime() + minAdvanceMinutes * 60000;
-    const isPast = slotStart.getTime() < earliest;
-
-    slots.push({
-      time: slotStart.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      available: !isBusy && !isPast,
-      start: slotStart,
-      end: slotEnd,
-    });
-
-    current.setMinutes(current.getMinutes() + 30);
-  }
-
-  return slots;
-};
 
 const isCustomDomain = isCustomDomainHost();
 
@@ -172,7 +110,7 @@ export default function PublicSalonPage() {
     return services.filter((s: any) => s.isActive !== false)
   })()
 
-  const [busySlots, setBusySlots] = useState<any[]>([]);
+  const [timeSlots, setTimeSlots] = useState<OfferSlot[]>([]);
   const [loadingBookingData, setLoadingBookingData] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
@@ -464,29 +402,38 @@ export default function PublicSalonPage() {
   }, [professionals, data?.salon?.id, currentUser, lastProfessionalStorageKey]);
 
 
-  // Carregar slots ocupados
+  // Horários calculados no backend (duração + preparação + grade)
   useEffect(() => {
-    if (data?.salon?.id && selectedProfessional && selectedDate) {
-      const fetchBusySlots = async () => {
-        setLoadingSlots(true);
-        try {
-          const res = await fetch(apiUrl(`/appointments/busy-slots?salonId=${data.salon.id}&professionalId=${selectedProfessional.id}&date=${selectedDate}`));
-          if (res.ok) {
-            const json = await res.json();
-            setBusySlots(json);
-          }
-        } catch (err) {
-          console.error("Erro ao buscar horários ocupados:", err);
-        } finally {
-          setLoadingSlots(false);
-        }
-      };
-      
-      fetchBusySlots();
-    } else {
-      setBusySlots([]);
+    if (!data?.salon?.id || !selectedProfessional || !selectedDate || !selectedService?.id) {
+      setTimeSlots([]);
+      return;
     }
-  }, [data?.salon?.id, selectedProfessional?.id, selectedDate, slotsRefreshKey]);
+    let cancelled = false;
+    const load = async () => {
+      setLoadingSlots(true);
+      try {
+        const params = new URLSearchParams({
+          salonId: data.salon.id,
+          professionalId: selectedProfessional.id,
+          date: selectedDate,
+          serviceId: selectedService.id,
+        });
+        const res = await fetch(apiUrl(`/appointments/availability?${params.toString()}`));
+        if (!res.ok) throw new Error('availability');
+        const json = await res.json();
+        if (!cancelled) setTimeSlots(Array.isArray(json.slots) ? json.slots : []);
+      } catch (err) {
+        console.error('Erro ao buscar horários:', err);
+        if (!cancelled) setTimeSlots([]);
+      } finally {
+        if (!cancelled) setLoadingSlots(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.salon?.id, selectedProfessional?.id, selectedDate, selectedService?.id, slotsRefreshKey]);
 
   const quotedBookingPrice = (service: { price: number } | null | undefined) =>
     appliedCoupon?.quotedPrice ?? service?.price ?? 0;
@@ -861,12 +808,18 @@ export default function PublicSalonPage() {
       return;
     }
 
-    const start = new Date(`${selectedDate}T${selectedTime}:00`);
+    const chosen = timeSlots.find((slot) => slot.time === selectedTime && slot.available);
+    const start = chosen?.startTime
+      ? new Date(chosen.startTime)
+      : new Date(`${selectedDate}T${selectedTime}:00`);
     const custom = selectedProfessional?.services?.find((ps: any) => ps.serviceId === selectedService.id);
     const duration = (custom && custom.customDuration !== null && custom.customDuration !== undefined)
       ? custom.customDuration
       : selectedService.duration;
-    const end = new Date(start.getTime() + duration * 60000);
+    const prep = Number(selectedProfessional?.prepMinutes) || 0;
+    const end = chosen?.endTime
+      ? new Date(chosen.endTime)
+      : new Date(start.getTime() + (duration + prep) * 60000);
     const price = quotedBookingPrice(selectedService);
 
     const payload: Record<string, string> = {
@@ -1194,23 +1147,6 @@ export default function PublicSalonPage() {
       // Sem vitrine interna: visitante vai direto para login/cadastro
       return <GuestLoginRedirect loginPath={loginPath} />
     }
-
-    const dayHoursMap = resolveDayHoursFromSalon(data?.salon || {});
-    const selectedWeekday = selectedDate
-      ? new Date(`${selectedDate}T12:00:00`).getDay()
-      : new Date().getDay();
-    const salonDayHours = selectedDate
-      ? hoursForWeekday(dayHoursMap, selectedWeekday)
-      : null;
-
-    const timeSlots = generateTimeSlots(
-      selectedProfessional,
-      selectedDate,
-      displayService?.duration || 30,
-      busySlots,
-      Number(data?.salon?.bookingMinAdvanceMinutes) || 0,
-      salonDayHours
-    );
 
     const brand = primaryColor || '#d5a85c';
 

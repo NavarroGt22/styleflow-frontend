@@ -22,12 +22,13 @@ import {
   sectionClass,
 } from '../ui/AdminUi'
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
-import { fetchSalon, normalizeInstagram, updateSalon } from '@/lib/admin/api'
+import { fetchProfessionals, fetchSalon, normalizeInstagram, updateProfessional, updateSalon } from '@/lib/admin/api'
 import { resolveAdminLink, resolveClientLink } from '@/lib/admin/platform-urls'
 import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
 import WeekdayHoursEditor, {
   DEFAULT_CLOSED_DAY_MESSAGE,
   DEFAULT_OPEN_WEEKDAYS,
+  type PrepTimeDraft,
 } from '../WeekdayHoursEditor'
 import {
   type DayHoursMap,
@@ -115,7 +116,9 @@ export default function AdminSalonTab({
     queueAllowClientView: true,
     queueAllowSkip: false,
     loyaltyResetMode: 'LIFETIME' as 'LIFETIME' | 'MONTHLY',
+    bookingSlotIntervalMinutes: 30,
   })
+  const [prepDrafts, setPrepDrafts] = useState<PrepTimeDraft[]>([])
 
   function applySalonData(data: SalonSettings) {
     setSalon(data)
@@ -152,6 +155,9 @@ export default function AdminSalonTab({
       queueAllowClientView: data.queueAllowClientView !== false,
       queueAllowSkip: Boolean(data.queueAllowSkip),
       loyaltyResetMode: data.loyaltyResetMode === 'MONTHLY' ? 'MONTHLY' : 'LIFETIME',
+      bookingSlotIntervalMinutes: [5, 10, 15, 20, 25, 30, 60].includes(Number(data.bookingSlotIntervalMinutes))
+        ? Number(data.bookingSlotIntervalMinutes)
+        : 30,
     })
   }
 
@@ -164,7 +170,18 @@ export default function AdminSalonTab({
     setLoading(true)
     setError('')
     try {
-      applySalonData(await fetchSalon(salonId))
+      const [salonData, professionals] = await Promise.all([
+        fetchSalon(salonId),
+        fetchProfessionals(salonId).catch(() => []),
+      ])
+      applySalonData(salonData)
+      setPrepDrafts(
+        professionals.map((professional) => ({
+          id: professional.id,
+          name: professional.user?.name || 'Profissional',
+          prepMinutes: String(professional.prepMinutes ?? 0),
+        })),
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar salão.')
     } finally {
@@ -310,7 +327,14 @@ export default function AdminSalonTab({
         heroImageUrl: form.heroImageUrl || null,
         faviconUrl: form.faviconUrl || null,
         loyaltyResetMode: form.loyaltyResetMode,
+        bookingSlotIntervalMinutes: form.bookingSlotIntervalMinutes,
       })
+      await Promise.all(
+        prepDrafts.map((professional) => {
+          const minutes = Math.min(240, Math.max(0, Math.floor(Number(professional.prepMinutes) || 0)))
+          return updateProfessional(professional.id, { prepMinutes: minutes })
+        }),
+      )
       applySalonData(updated)
       setSuccess('Configurações salvas com sucesso.')
     } catch (err) {
@@ -596,6 +620,18 @@ export default function AdminSalonTab({
               onChangeClosedDayMessage={(value) => setForm({ ...form, closedDayMessage: value })}
               bookingCalendarMode={form.bookingCalendarMode}
               onChangeBookingCalendarMode={(value) => setForm({ ...form, bookingCalendarMode: value })}
+              slotIntervalMinutes={form.bookingSlotIntervalMinutes}
+              onChangeSlotIntervalMinutes={(minutes) =>
+                setForm((current) => ({ ...current, bookingSlotIntervalMinutes: minutes }))
+              }
+              prepDrafts={prepDrafts}
+              onChangePrepMinutes={(id, minutes) =>
+                setPrepDrafts((current) =>
+                  current.map((professional) =>
+                    professional.id === id ? { ...professional, prepMinutes: minutes } : professional,
+                  ),
+                )
+              }
             />
           ) : null}
 

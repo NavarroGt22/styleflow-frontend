@@ -22,6 +22,14 @@ export const DEFAULT_OPEN_WEEKDAYS = [1, 2, 3, 4, 5, 6]
 export const DEFAULT_CLOSED_DAY_MESSAGE =
   'Neste dia o barbeiro está de folga. Escolha outro dia para o corte.'
 
+const SLOT_INTERVALS = [5, 10, 15, 20, 25, 30, 60] as const
+
+export type PrepTimeDraft = {
+  id: string
+  name: string
+  prepMinutes: string
+}
+
 type WeekdayHoursEditorProps = {
   lightMode?: boolean
   brandColor?: string
@@ -31,6 +39,12 @@ type WeekdayHoursEditorProps = {
   onChangeClosedDayMessage?: (value: string) => void
   bookingCalendarMode: 'WEEK' | 'TODAY'
   onChangeBookingCalendarMode: (value: 'WEEK' | 'TODAY') => void
+  /** Grade de início do salão. Ausente na tela do profissional. */
+  slotIntervalMinutes?: number
+  onChangeSlotIntervalMinutes?: (minutes: number) => void
+  /** Preparação de cada barbeiro. Ausente na tela do profissional. */
+  prepDrafts?: PrepTimeDraft[]
+  onChangePrepMinutes?: (id: string, minutes: string) => void
   /** A mensagem de folga é do salão: não aparece na tela do funcionário. */
   showClosedDayMessage?: boolean
   /** Dentro de outro card (ex.: aba Horário no mobile) — sem borda/fundo duplicados. */
@@ -56,6 +70,10 @@ export default function WeekdayHoursEditor({
   embedded = false,
   title = 'Configure o horário de funcionamento',
   description = 'Cada dia pode ter início e fim próprios. Dias desligados mostram a mensagem de folga para o cliente.',
+  slotIntervalMinutes,
+  onChangeSlotIntervalMinutes,
+  prepDrafts,
+  onChangePrepMinutes,
 }: WeekdayHoursEditorProps) {
   function toggleDay(day: number) {
     const key = String(day)
@@ -104,6 +122,69 @@ export default function WeekdayHoursEditor({
           ) : null}
         </p>
       </div>
+
+      {onChangeSlotIntervalMinutes || onChangePrepMinutes ? (
+        <div
+          className={`space-y-4 rounded-xl border p-3 sm:p-4 ${
+            lightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-600 bg-[#162033]'
+          }`}
+        >
+          {onChangeSlotIntervalMinutes ? (
+            <div>
+              <label className={labelClass(lightMode)}>Intervalo entre opções de horário</label>
+              <select
+                value={SLOT_INTERVALS.includes(slotIntervalMinutes as (typeof SLOT_INTERVALS)[number]) ? slotIntervalMinutes : 30}
+                onChange={(e) => onChangeSlotIntervalMinutes(Number(e.target.value))}
+                className={inputClass(lightMode)}
+              >
+                {SLOT_INTERVALS.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {minutes} minutos
+                  </option>
+                ))}
+              </select>
+              <p className={`mt-1.5 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Define os horários de início exibidos ao cliente. A disponibilidade considera a duração completa do atendimento.
+              </p>
+            </div>
+          ) : null}
+
+          {onChangePrepMinutes ? (
+            <div className="space-y-3">
+              <div>
+                <p className={labelClass(lightMode)}>Tempo de preparação após o atendimento</p>
+                <p className={`mt-1 text-xs leading-relaxed ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Minutos extras depois do serviço, por barbeiro. Zero não acrescenta bloqueio.
+                </p>
+              </div>
+              {prepDrafts && prepDrafts.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {prepDrafts.map((professional) => (
+                    <div key={professional.id}>
+                      <label className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {professional.name}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="240"
+                        inputMode="numeric"
+                        value={professional.prepMinutes}
+                        onChange={(e) => onChangePrepMinutes(professional.id, e.target.value)}
+                        className={inputClass(lightMode)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Cadastre um profissional em Equipe para definir a preparação.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         {WEEKDAYS.map((day) => {
