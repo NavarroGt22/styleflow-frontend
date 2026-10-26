@@ -321,6 +321,10 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
           ['Líquido salão (após comissão)', money(summary.services.net)],
           ['Atendimentos', String(summary.services.appointments)],
           ['N/P — produtos do estoque', money(summary.products.revenue)],
+          ['Assinaturas — bruto', money(summary.subscriptions?.gross || 0)],
+          ['Assinaturas — taxas gateway', money(summary.subscriptions?.gatewayFees || 0)],
+          ['Lucro das assinaturas', money(summary.subscriptions?.net || 0)],
+          ['Pagamentos de assinatura', String(summary.subscriptions?.count || 0)],
           ['Despesas', money(summary.expenses)],
         ],
       })
@@ -374,6 +378,34 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
     } finally {
       setGeneratingPdf(false)
     }
+  }
+
+  function downloadFaturamentoCsv() {
+    if (!summary) return
+    const rows = [
+      ['Item', 'Valor'],
+      ['Período', periodLabel(summary.period.from, summary.period.to)],
+      ['Escopo', scopeLabel],
+      ['Serviços — bruto', String(summary.services.gross)],
+      ['Serviços — taxas gateway', String(summary.services.gatewayFees || 0)],
+      ['Serviços — líquido após gateway', String(summary.services.netAfterGateway ?? summary.services.gross)],
+      ['Serviços — líquido do salão', String(summary.services.net)],
+      ['Atendimentos', String(summary.services.appointments)],
+      ['Assinaturas — bruto', String(summary.subscriptions?.gross || 0)],
+      ['Assinaturas — taxas gateway', String(summary.subscriptions?.gatewayFees || 0)],
+      ['Lucro das assinaturas', String(summary.subscriptions?.net || 0)],
+      ['Pagamentos de assinatura', String(summary.subscriptions?.count || 0)],
+      ['Produtos', String(summary.products.revenue)],
+      ['Despesas', String(summary.expenses)],
+    ]
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `faturamento-${summary.period.from}-a-${summary.period.to}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   const title = lightMode ? 'text-slate-900' : 'text-white'
@@ -541,6 +573,21 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
                   </div>
                 </div>
 
+                {!scopedProfessionalId ? (
+                  <div className={`mt-3 rounded-xl border px-3 py-3 ${lightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-600 bg-[#142035]'}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${muted}`}>Assinaturas</p>
+                    <p className={`mt-1 text-2xl font-black ${title}`}>{money(summary.subscriptions?.net || 0)}</p>
+                    <p className={`mt-1 text-xs ${muted}`}>
+                      Lucro no período, depois da taxa do Mercado Pago. Bruto {money(summary.subscriptions?.gross || 0)}
+                      {(summary.subscriptions?.gatewayFees || 0) > 0
+                        ? ` · taxas ${money(summary.subscriptions?.gatewayFees || 0)}`
+                        : ''}
+                      {' · '}
+                      {summary.subscriptions?.count || 0} pagamento{(summary.subscriptions?.count || 0) === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                ) : null}
+
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -561,6 +608,15 @@ export default function AdminFinancialTab({ salonId, lightMode = false }: AdminT
                   >
                     <FileText className="size-3.5" />
                     {generatingPdf ? 'Gerando...' : 'Gerar PDF'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadFaturamentoCsv}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-wide ${
+                      lightMode ? 'border-slate-200 text-slate-600' : 'border-slate-600 text-slate-300'
+                    }`}
+                  >
+                    Gerar CSV
                   </button>
                 </div>
               </div>
@@ -985,13 +1041,23 @@ function CashRegisterPanel({
           record.productSale?.professional?.user?.name || ''
         )
       )
+    const isSubscription = (record: (typeof data.recentRecords)[number]) =>
+      !record.isExpense &&
+      !record.appointment &&
+      !record.productSale &&
+      String(record.description || '').startsWith('Assinatura')
+
+    const subscriptionRows = data.recentRecords.filter(isSubscription).map((record) =>
+      toRow('Assinatura', record, record.description || 'Assinatura', '')
+    )
     const otherRows = data.recentRecords
-      .filter((record) => record.isExpense || (!record.appointment && !record.productSale))
+      .filter((record) => (record.isExpense || (!record.appointment && !record.productSale)) && !isSubscription(record))
       .map((record) =>
         toRow(
           record.isExpense ? 'Saída' : 'Entrada',
           record,
-          record.appointment?.service?.name ||
+          record.description ||
+            record.appointment?.service?.name ||
             record.productSale?.product?.name ||
             'Movimentação',
           ''
@@ -999,6 +1065,8 @@ function CashRegisterPanel({
       )
 
     const income = data.recentRecords.filter((r) => !r.isExpense)
+    const subscriptionGross = data.recentRecords.filter(isSubscription).reduce((sum, record) => sum + (Number(record.amount) || 0), 0)
+    const subscriptionNet = data.recentRecords.filter(isSubscription).reduce((sum, record) => sum + recordNetAmount(record), 0)
     const gatewayFeesTotal = income.reduce((sum, r) => sum + recordGatewayFee(r), 0)
     const netAfterGatewayTotal = income.reduce((sum, r) => sum + recordNetAmount(r), 0)
 
@@ -1006,10 +1074,13 @@ function CashRegisterPanel({
       ['Tipo', 'Descrição', 'Profissional', 'Forma', 'Bruto', 'Taxa gateway', 'Líquido', 'Data'],
       ...cutRows,
       ...productRows,
+      ...subscriptionRows,
       ...otherRows,
       [],
       ['Resumo', '', '', '', '', '', '', ''],
       ['Faturamento bruto', '', '', '', String(data.totalRevenue), '', '', ''],
+      ['Assinaturas — bruto', '', '', '', String(subscriptionGross), '', '', ''],
+      ['Lucro das assinaturas', '', '', '', '', '', String(subscriptionNet), ''],
       ['Taxas Mercado Pago', '', '', '', '', String(gatewayFeesTotal), '', ''],
       ['Líquido após gateway', '', '', '', '', '', String(netAfterGatewayTotal), ''],
       ['Comissões', '', '', '', '', '', String(data.totalCommissions), ''],

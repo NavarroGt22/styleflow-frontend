@@ -50,6 +50,20 @@ function isClientPaid(apt: Appointment) {
 
 function StatusBadge({ apt }: { apt: Appointment }) {
   const status = apt.status
+  if (apt.coveredBySubscription && status === 'COMPLETED') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-400">
+        <CheckCircle2 className="size-3" /> Concluído · assinatura
+      </span>
+    )
+  }
+  if (apt.coveredBySubscription && (status === 'PENDING' || status === 'CONFIRMED')) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-400">
+        <CheckCircle2 className="size-3" /> Pago por assinatura
+      </span>
+    )
+  }
   if (status === 'COMPLETED') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-400">

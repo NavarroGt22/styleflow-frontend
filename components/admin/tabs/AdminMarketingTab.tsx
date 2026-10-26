@@ -79,6 +79,9 @@ const DEFAULT_PIX_CHARGE_TEMPLATE =
 const DEFAULT_PAYMENT_CONFIRMED_TEMPLATE =
   '{cliente} seu pagamento foi concluído ✅ te esperamos {data} {servico} {horario}.'
 
+const DEFAULT_WINBACK_TEMPLATE =
+  'Opa {cliente}, faz {dias} dias que você não vem na {estabelecimento}. Venha marcar um horário: {link}'
+
 const PIX_PREVIEW_KEY = 'exemplo@email.com'
 const PIX_PREVIEW_COPY = '00020126...EXEMPLO'
 const PIX_PREVIEW_AMOUNT = '25,00'
@@ -89,13 +92,20 @@ const SYSTEM_TEMPLATE_OPTIONS = [
   { id: 'system-cancel-salon', label: 'Cancelamento pelo estabelecimento (automático)' },
   { id: 'system-cancel-client', label: 'Cancelamento pelo cliente (automático)' },
   { id: 'system-reschedule', label: 'Remarcação de horário (automático)' },
+  { id: 'system-winback', label: 'Recuperação de cliente (automático)' },
 ] as const
+
+function parseWinbackDays(value: string) {
+  const parsed = Math.round(Number(value))
+  if (!Number.isFinite(parsed)) return 30
+  return Math.min(365, Math.max(1, parsed))
+}
 
 function isSystemTemplate(id: string) {
   return SYSTEM_TEMPLATE_OPTIONS.some((option) => option.id === id)
 }
 
-function formatBookingPreview(template: string, estabelecimento: string, link = '') {
+function formatBookingPreview(template: string, estabelecimento: string, link = '', dias = '4') {
   return template
     .replace(/{cliente}|{nome_cliente}/g, 'João')
     .replace(/{barbeiro}|{profissional}/g, 'Joel')
@@ -104,6 +114,7 @@ function formatBookingPreview(template: string, estabelecimento: string, link = 
     .replace(/{horario_anterior}|{hora_anterior}/g, '22:00')
     .replace(/{data}|{data_agendamento}/g, '19/09/2026')
     .replace(/{horario}|{hora_agendamento}|{tempo}/g, '19:30')
+    .replace(/{dias}/g, dias)
     .replace(/{valor}/g, PIX_PREVIEW_AMOUNT)
     .replace(/{chave_pix}/g, PIX_PREVIEW_KEY)
     .replace(/{copia_e_cola}/g, PIX_PREVIEW_COPY)
@@ -170,6 +181,7 @@ function AutoTemplateField({
   tokens,
   previewName,
   previewLink,
+  previewDays,
   lightMode,
   enabled,
   onEnabledChange,
@@ -182,6 +194,7 @@ function AutoTemplateField({
   tokens: ReadonlyArray<readonly [string, string]>
   previewName: string
   previewLink?: string
+  previewDays?: string
   lightMode: boolean
   enabled: boolean
   onEnabledChange: (next: boolean) => void
@@ -229,7 +242,7 @@ function AutoTemplateField({
         </button>
       </div>
       <p className={`mt-2 whitespace-pre-line text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-        Prévia: {formatBookingPreview(value || defaultValue, previewName, previewLink)}
+        Prévia: {formatBookingPreview(value || defaultValue, previewName, previewLink, previewDays)}
       </p>
     </div>
   )
@@ -386,6 +399,9 @@ export default function AdminMarketingTab({
   const [cancelSalonTemplate, setCancelSalonTemplate] = useState(DEFAULT_CANCEL_SALON_TEMPLATE)
   const [cancelClientTemplate, setCancelClientTemplate] = useState(DEFAULT_CANCEL_CLIENT_TEMPLATE)
   const [rescheduleTemplate, setRescheduleTemplate] = useState(DEFAULT_RESCHEDULE_TEMPLATE)
+  const [winbackTemplate, setWinbackTemplate] = useState(DEFAULT_WINBACK_TEMPLATE)
+  const [winbackEnabled, setWinbackEnabled] = useState(false)
+  const [winbackDays, setWinbackDays] = useState('30')
   const [pixChargeTemplate, setPixChargeTemplate] = useState(DEFAULT_PIX_CHARGE_TEMPLATE)
   const [paymentConfirmedTemplate, setPaymentConfirmedTemplate] = useState(DEFAULT_PAYMENT_CONFIRMED_TEMPLATE)
   const [gatewayUrl, setGatewayUrl] = useState('')
@@ -468,6 +484,9 @@ export default function AdminMarketingTab({
       setCancelSalonTemplate(data.whatsappCancelSalonTemplate?.trim() || DEFAULT_CANCEL_SALON_TEMPLATE)
       setCancelClientTemplate(data.whatsappCancelClientTemplate?.trim() || DEFAULT_CANCEL_CLIENT_TEMPLATE)
       setRescheduleTemplate(data.whatsappRescheduleTemplate?.trim() || DEFAULT_RESCHEDULE_TEMPLATE)
+      setWinbackTemplate(data.whatsappWinbackTemplate?.trim() || DEFAULT_WINBACK_TEMPLATE)
+      setWinbackEnabled(data.whatsappWinbackEnabled === true)
+      setWinbackDays(String(data.whatsappWinbackDays ?? 30))
       setPixChargeTemplate(data.whatsappPixChargeTemplate?.trim() || DEFAULT_PIX_CHARGE_TEMPLATE)
       setPaymentConfirmedTemplate(
         data.whatsappPaymentConfirmedTemplate?.trim() || DEFAULT_PAYMENT_CONFIRMED_TEMPLATE,
@@ -502,6 +521,7 @@ export default function AdminMarketingTab({
       'system-cancel-salon': cancelSalonTemplate,
       'system-cancel-client': cancelClientTemplate,
       'system-reschedule': rescheduleTemplate,
+      'system-winback': winbackTemplate,
     }
     const systemBody = systemBodies[selectedTemplateId]
     if (systemBody !== undefined) {
@@ -520,6 +540,7 @@ export default function AdminMarketingTab({
     cancelSalonTemplate,
     cancelClientTemplate,
     rescheduleTemplate,
+    winbackTemplate,
   ])
 
   useEffect(() => {
@@ -614,6 +635,9 @@ export default function AdminMarketingTab({
         whatsappCancelSalonTemplate: cancelSalonTemplate.trim() || null,
         whatsappCancelClientTemplate: cancelClientTemplate.trim() || null,
         whatsappRescheduleTemplate: rescheduleTemplate.trim() || null,
+        whatsappWinbackTemplate: winbackTemplate.trim() || null,
+        whatsappWinbackEnabled: winbackEnabled,
+        whatsappWinbackDays: parseWinbackDays(winbackDays),
         whatsappPixChargeTemplate: pixChargeTemplate.trim() || null,
         whatsappPaymentConfirmedTemplate: paymentConfirmedTemplate.trim() || null,
         whatsappGatewayUrl: gatewayUrl.trim() || null,
@@ -623,6 +647,34 @@ export default function AdminMarketingTab({
       setSuccess(crmPanel === 'webhook' ? 'Configurações do webhook salvas.' : 'Configurações de Marketing salvas.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao salvar.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveWinbackSettings() {
+    if (!salonId) return
+    const days = parseWinbackDays(winbackDays)
+    const text =
+      (composeMode === 'template' && selectedTemplateId === 'system-winback'
+        ? manualMessage.trim()
+        : winbackTemplate.trim()) || DEFAULT_WINBACK_TEMPLATE
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const updated = await updateSalon(salonId, {
+        whatsappWinbackEnabled: winbackEnabled,
+        whatsappWinbackDays: days,
+        whatsappWinbackTemplate: text,
+      })
+      setSalon(updated)
+      setWinbackDays(String(updated.whatsappWinbackDays ?? days))
+      setWinbackTemplate(updated.whatsappWinbackTemplate?.trim() || text)
+      setWinbackEnabled(updated.whatsappWinbackEnabled === true)
+      setSuccess('Recuperação de cliente salva.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar a recuperação.')
     } finally {
       setSaving(false)
     }
@@ -1244,6 +1296,68 @@ export default function AdminMarketingTab({
           ) : null}
         </div>
 
+        <div className="mt-4 sm:col-span-2">
+          <AutoTemplateField
+            lightMode={lightMode}
+            label="Recuperação de cliente (automática)"
+            hint={
+              <>
+                Para quem já cortou e não voltou. Com <strong>{parseWinbackDays(winbackDays)} dias</strong>, a
+                mensagem sai quando faz esse tempo desde o último corte e leva o link da página. Quem já tem
+                horário marcado não recebe.
+              </>
+            }
+            value={winbackTemplate}
+            onChange={setWinbackTemplate}
+            defaultValue={DEFAULT_WINBACK_TEMPLATE}
+            tokens={
+              [
+                ['{cliente}', 'Nome'],
+                ['{dias}', 'Dias sem cortar'],
+                ['{estabelecimento}', 'Salão'],
+                ['{link}', 'Link da página'],
+              ] as const
+            }
+            previewName={salon?.name || 'Barbearia'}
+            previewLink={publicUrl || 'https://app.suabarbearia.com'}
+            previewDays={String(parseWinbackDays(winbackDays))}
+            enabled={winbackEnabled}
+            onEnabledChange={setWinbackEnabled}
+          />
+          <div className="mt-3 max-w-xs">
+            <label className={labelClass(lightMode)}>Dias após o último corte</label>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={winbackDays}
+              onChange={(e) => setWinbackDays(e.target.value)}
+              className={inputClass(lightMode)}
+            />
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {[4, 7, 15, 30, 60].map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setWinbackDays(String(days))}
+                  className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40 ${
+                    parseWinbackDays(winbackDays) === days
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                      : lightMode
+                        ? 'border-slate-200 text-slate-600'
+                        : 'border-slate-600 text-slate-300'
+                  }`}
+                >
+                  {days} dias
+                </button>
+              ))}
+            </div>
+            <p className={`mt-2 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              Ex.: 4 dias manda “faz 4 dias que você não vem” e o link para agendar.
+            </p>
+          </div>
+        </div>
+
         <div
           className={`mt-4 rounded-xl border p-3 ${
             lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-[#0f1a2a]'
@@ -1382,6 +1496,70 @@ export default function AdminMarketingTab({
                 ))}
               </select>
             </div>
+            {selectedTemplateId === 'system-winback' ? (
+              <div
+                className={`space-y-3 rounded-xl border p-3 ${
+                  lightMode ? 'border-emerald-200 bg-emerald-50' : 'border-emerald-900/40 bg-emerald-950/20'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className={`text-sm font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+                    Dias após o último corte
+                  </p>
+                  <AutoMsgSwitch
+                    checked={winbackEnabled}
+                    onChange={setWinbackEnabled}
+                    label="Recuperação de cliente"
+                    lightMode={lightMode}
+                  />
+                </div>
+                <p className={`text-xs leading-relaxed ${lightMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                  Escolha quantos dias sem cortar disparam a mensagem. Com 4, quem cortou há 4 dias recebe um
+                  convite com o link da página. Quem já marcou outro horário não recebe.
+                </p>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={winbackDays}
+                  onChange={(e) => setWinbackDays(e.target.value)}
+                  className={inputClass(lightMode)}
+                  aria-label="Dias após o último corte"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {[4, 7, 15, 30, 60].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setWinbackDays(String(days))}
+                      className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+                        parseWinbackDays(winbackDays) === days
+                          ? lightMode
+                            ? 'border-emerald-500 bg-emerald-100 text-emerald-800'
+                            : 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
+                          : lightMode
+                            ? 'border-slate-200 text-slate-600'
+                            : 'border-slate-600 text-slate-300'
+                      }`}
+                    >
+                      {days} dias
+                    </button>
+                  ))}
+                </div>
+                <p className={`text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Prévia:{' '}
+                  {formatBookingPreview(
+                    winbackTemplate || DEFAULT_WINBACK_TEMPLATE,
+                    salon?.name || 'Barbearia',
+                    publicUrl || 'https://app.suabarbearia.com',
+                    String(parseWinbackDays(winbackDays)),
+                  )}
+                </p>
+                <AdminButton type="button" disabled={saving} onClick={() => void saveWinbackSettings()}>
+                  {saving ? 'Salvando…' : 'Salvar recuperação'}
+                </AdminButton>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={() => setManagingTemplates((v) => !v)}
@@ -1402,7 +1580,8 @@ export default function AdminMarketingTab({
               >
                 <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                   Salve mensagens para promoção, retorno etc. Os textos automáticos (lembrete, confirmação,
-                  cancelamentos e remarcação) editam-se na aba Webhook.
+                  cancelamentos, remarcação e recuperação) editam-se na aba Webhook. O prazo da recuperação
+                  aparece ao selecionar esse template.
                 </p>
                 <input
                   value={templateDraftName}

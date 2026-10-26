@@ -1,7 +1,8 @@
 'use client'
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Gift, Pencil, Phone, Search, Ticket, Trash2, Users } from 'lucide-react'
+import { Gift, Pencil, Phone, Repeat, Search, Ticket, Trash2, Users } from 'lucide-react'
+import { authFetch } from '@/lib/api'
 import {
   AdminButton,
   AdminEmpty,
@@ -43,6 +44,9 @@ import {
 } from '@/lib/admin/api'
 
 type ClientsSubTab = 'lista' | 'grupos' | 'cupons'
+
+type EnrollPlan = { id: string; name: string; price: number; availability: string }
+type EnrollSub = { customerId: string; status: string; name: string }
 
 function initials(name: string) {
   return name
@@ -118,6 +122,15 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [savingCustomer, setSavingCustomer] = useState(false)
+  const [enrollCustomerId, setEnrollCustomerId] = useState<string | null>(null)
+  const [enrollPlans, setEnrollPlans] = useState<EnrollPlan[]>([])
+  const [enrollSubs, setEnrollSubs] = useState<EnrollSub[]>([])
+  const [enrollPlanId, setEnrollPlanId] = useState('')
+  const [enrollBusy, setEnrollBusy] = useState(false)
+  const [enrollError, setEnrollError] = useState('')
+  const [enrollNote, setEnrollNote] = useState('')
+  const [cashAmount, setCashAmount] = useState('')
+  const [cutMonth, setCutMonth] = useState('')
   const [clientsPage, setClientsPage] = useState(1)
   const CLIENTS_PER_PAGE = 10
 
@@ -137,9 +150,10 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
 
   async function load(
     search = query,
-    filters: { groupId?: string; professionalId?: string } = {
+    filters: { groupId?: string; professionalId?: string; month?: string } = {
       groupId: groupFilter,
       professionalId: barberFilter,
+      month: cutMonth,
     },
   ) {
     if (!salonId) {
@@ -188,8 +202,9 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
     setQuery('')
     setGroupFilter('')
     setBarberFilter('')
+    setCutMonth('')
     setClientsPage(1)
-    await load('', { groupId: '', professionalId: '' })
+    await load('', { groupId: '', professionalId: '', month: '' })
   }
 
   async function applyFilter(next: { groupId?: string; professionalId?: string }) {
@@ -198,7 +213,7 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
     setGroupFilter(groupId)
     setBarberFilter(professionalId)
     setClientsPage(1)
-    await load(query, { groupId, professionalId })
+    await load(query, { groupId, professionalId, month: cutMonth })
   }
 
   async function handleCreateGroup(event: FormEvent) {
@@ -341,10 +356,133 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
   }
 
   function startEditCustomer(customer: { id: string; name: string; phone?: string | null }) {
+    setEnrollCustomerId(null)
     setEditingCustomerId(customer.id)
     setEditName(customer.name)
     setEditPhone(customer.phone || '')
     setError('')
+  }
+
+  async function openEnroll(customerId: string) {
+    setEditingCustomerId(null)
+    setEnrollCustomerId(customerId)
+    setEnrollError('')
+    setEnrollNote('')
+    if (!salonId) return
+    setEnrollBusy(true)
+    try {
+      const response = await authFetch(`/subscriptions/salon/${salonId}/manage`)
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível carregar os planos.')
+      const available = ((payload.plans || []) as EnrollPlan[]).filter((plan) => plan.availability === 'AVAILABLE')
+      setEnrollPlans(available)
+      setEnrollSubs(payload.subscribers || [])
+      setEnrollPlanId(available[0]?.id || '')
+      setCashAmount(available[0] ? String(Number(available[0].price)) : '')
+    } catch (err) {
+      setEnrollError(err instanceof Error ? err.message : 'Não foi possível carregar os planos.')
+    } finally {
+      setEnrollBusy(false)
+    }
+  }
+
+  async function payCash() {
+    if (!salonId || !enrollCustomerId || !enrollPlanId) {
+      setEnrollError('Escolha um plano.')
+      return
+    }
+    const amount = Number(String(cashAmount).replace(',', '.'))
+    if (!(amount > 0)) {
+      setEnrollError('Informe o valor recebido em dinheiro.')
+      return
+    }
+    setEnrollBusy(true)
+    setEnrollError('')
+    setEnrollNote('')
+    try {
+      const response = await authFetch(`/subscriptions/salon/${salonId}/customers/${enrollCustomerId}/subscribe`, {
+        method: 'POST',
+        body: JSON.stringify({ planId: enrollPlanId, method: 'CASH', amount }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível registrar o dinheiro.')
+      const planName = enrollPlans.find((plan) => plan.id === enrollPlanId)?.name || 'plano'
+      const received = amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      setEnrollNote(
+        payload.startsLater
+          ? `Dinheiro de ${received} registrado. O próximo ciclo começa em ${new Date(payload.cycleStartsAt).toLocaleDateString('pt-BR')}.`
+          : `Cliente na assinatura. Recebido ${received} em dinheiro.`,
+      )
+      setEnrollSubs((current) => [
+        ...current.filter((row) => row.customerId !== enrollCustomerId),
+        { customerId: enrollCustomerId, status: 'ACTIVE', name: planName },
+      ])
+    } catch (err) {
+      setEnrollError(err instanceof Error ? err.message : 'Não foi possível registrar o dinheiro.')
+    } finally {
+      setEnrollBusy(false)
+    }
+  }
+
+  function enrollBox() {
+    const current = enrollSubs.find(
+      (row) => row.customerId === enrollCustomerId && (row.status === 'ACTIVE' || row.status === 'PENDING_PAYMENT'),
+    )
+    return (
+      <div className={`grid gap-2 rounded-xl border p-3 ${lightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-600 bg-[#142035]'}`}>
+        <p className={`text-sm font-semibold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Colocar na assinatura</p>
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          O valor em dinheiro entra na hora e o cliente passa a usar a assinatura.
+        </p>
+        {current ? (
+          <p className="text-xs text-amber-400">
+            Já consta {current.name} ({current.status === 'ACTIVE' ? 'ativa' : 'aguardando pagamento'}).
+          </p>
+        ) : null}
+        {enrollPlans.length === 0 && !enrollBusy ? (
+          <p className="text-xs text-slate-400">Nenhum plano disponível. Ative um em Assinaturas.</p>
+        ) : (
+          <select
+            value={enrollPlanId}
+            onChange={(event) => {
+              const nextId = event.target.value
+              setEnrollPlanId(nextId)
+              const plan = enrollPlans.find((item) => item.id === nextId)
+              if (plan) setCashAmount(String(Number(plan.price)))
+            }}
+            className={inputClass(lightMode)}
+          >
+            {enrollPlans.map((plan) => (
+              <option key={plan.id} value={plan.id}>
+                {plan.name} · R$ {Number(plan.price).toFixed(2)}
+              </option>
+            ))}
+          </select>
+        )}
+        <div>
+          <label className={labelClass(lightMode)}>Valor em dinheiro</label>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={cashAmount}
+            onChange={(event) => setCashAmount(event.target.value)}
+            placeholder="0,00"
+            className={inputClass(lightMode)}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <AdminButton type="button" variant="warning" disabled={enrollBusy || !enrollPlanId} onClick={payCash}>
+            Pago em dinheiro
+          </AdminButton>
+          <AdminButton type="button" variant="ghost" onClick={() => setEnrollCustomerId(null)}>
+            Fechar
+          </AdminButton>
+        </div>
+        {enrollError ? <p className="text-xs text-red-400">{enrollError}</p> : null}
+        {enrollNote ? <p className="text-xs text-emerald-400">{enrollNote}</p> : null}
+      </div>
+    )
   }
 
   async function saveCustomerEdit() {
@@ -404,9 +542,9 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
           <div>
             <h3 className={`text-lg font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Lista de Clientes</h3>
             <p className={`mt-1 text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              Cortes no período atual (
-              {data.loyaltyResetMode === 'MONTHLY' ? 'mensal' : 'infinito'}
-              ) · busque por nome ou telefone
+              {cutMonth
+                ? `Quem cortou em ${new Date(`${cutMonth}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+                : `Cortes no período atual (${data.loyaltyResetMode === 'MONTHLY' ? 'mensal' : 'infinito'}) · busque por nome ou telefone`}
             </p>
           </div>
 
@@ -416,11 +554,31 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
               label="Total de Clientes"
               value={String(data.summary.totalCustomers)}
             />
-            <AdminStat
-              lightMode={lightMode}
-              label="Cortes no Período"
-              value={String(data.summary.totalCutsInPeriod)}
-            />
+            <div className={`rounded-2xl border p-4 shadow-sm ${lightMode ? 'border-slate-200 bg-white' : 'border-slate-600 bg-[#142035]'}`}>
+              <p className={`text-xs font-semibold uppercase tracking-wide ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Cortes no período
+              </p>
+              <p className={`mt-2 text-2xl font-black ${lightMode ? 'text-slate-900' : 'text-white'}`}>
+                {data.summary.totalCutsInPeriod}
+              </p>
+              <label className={`mt-3 block text-[11px] font-semibold ${lightMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                Mês
+              </label>
+              <input
+                type="month"
+                value={cutMonth}
+                onChange={(event) => {
+                  const month = event.target.value
+                  setCutMonth(month)
+                  setClientsPage(1)
+                  void load(query, { groupId: groupFilter, professionalId: barberFilter, month })
+                }}
+                className={`${inputClass(lightMode)} mt-1`}
+              />
+              <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                {cutMonth ? 'A lista mostra só quem cortou nesse mês.' : 'Escolha um mês para ver quem cortou.'}
+              </p>
+            </div>
             <AdminStat
               lightMode={lightMode}
               tone="success"
@@ -527,7 +685,8 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-start gap-3">
+                        <div>
+                          <div className="flex items-start gap-3">
                           <div className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-300">
                             {initials(customer.name)}
                           </div>
@@ -572,7 +731,16 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                             >
                               <Pencil className="size-3" /> Editar
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => openEnroll(customer.id)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-semibold text-white"
+                            >
+                              <Repeat className="size-3" /> Assinatura
+                            </button>
                           </div>
+                          </div>
+                          {enrollCustomerId === customer.id ? <div className="mt-3">{enrollBox()}</div> : null}
                         </div>
                       )}
                     </li>
@@ -675,13 +843,23 @@ export default function AdminClientsTab({ salonId, lightMode = false }: AdminTab
                                   : '—'}
                               </td>
                               <td className="px-4 py-3">
-                                <button
-                                  type="button"
-                                  onClick={() => startEditCustomer(customer)}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-slate-700/80 px-2.5 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-600"
-                                >
-                                  <Pencil className="size-3.5" /> Editar
-                                </button>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditCustomer(customer)}
+                                    className="inline-flex items-center gap-1 rounded-lg bg-slate-700/80 px-2.5 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-600"
+                                  >
+                                    <Pencil className="size-3.5" /> Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEnroll(customer.id)}
+                                    className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                                  >
+                                    <Repeat className="size-3.5" /> Assinatura
+                                  </button>
+                                </div>
+                                {enrollCustomerId === customer.id ? <div className="mt-3 min-w-[280px]">{enrollBox()}</div> : null}
                               </td>
                             </>
                           )}

@@ -529,12 +529,13 @@ export async function restockProduct(id: string, quantity: number): Promise<Prod
 
 export async function fetchCustomers(
   salonId: string,
-  filters: { q?: string; groupId?: string; professionalId?: string } = {},
+  filters: { q?: string; groupId?: string; professionalId?: string; month?: string } = {},
 ): Promise<CustomersListResponse> {
   const params = new URLSearchParams()
   if (filters.q?.trim()) params.set('q', filters.q.trim())
   if (filters.groupId) params.set('groupId', filters.groupId)
   if (filters.professionalId) params.set('professionalId', filters.professionalId)
+  if (filters.month) params.set('month', filters.month)
   const qs = params.toString()
   const response = await authFetch(`/customers/salon/${salonId}${qs ? `?${qs}` : ''}`)
   return parseJson(response)

@@ -94,6 +94,7 @@ export default function ClientProfileSheet({
   const [activeToday, setActiveToday] = useState<AppointmentItem | null>(null)
   const [editName, setEditName] = useState(currentUser?.name || '')
   const [editPhone, setEditPhone] = useState(formatPhoneInput(currentUser?.phone || ''))
+  const [subscriptionLabel, setSubscriptionLabel] = useState('')
   const canEditProfile = !currentUser?.profileEditedOnce
 
   useEffect(() => {
@@ -103,6 +104,32 @@ export default function ClientProfileSheet({
     setError('')
     setSuccess('')
   }, [open, currentUser?.name, currentUser?.phone, currentUser?.profileEditedOnce])
+
+  useEffect(() => {
+    if (!open || !salonId) return
+    const token = sessionStorage.getItem('client_token')
+    if (!token) return
+    let cancelled = false
+    fetch(apiUrl(`/subscriptions/me?salonId=${encodeURIComponent(salonId)}`), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled || !json.subscription) {
+          if (!cancelled) setSubscriptionLabel('')
+          return
+        }
+        const cycle = (json.subscription.cycles || []).find((item: { status?: string }) => item.status === 'OPEN')
+        const end = cycle?.endsAt ? new Date(cycle.endsAt).toLocaleDateString('pt-BR') : 'sem ciclo aberto'
+        setSubscriptionLabel(`${json.subscription.snapshotName} · até ${end}${json.subscription.cancelRenewalAt ? ' · renovação cancelada' : ''}`)
+      })
+      .catch(() => {
+        if (!cancelled) setSubscriptionLabel('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, salonId])
 
   useEffect(() => {
     if (!open || !salonId) return
@@ -395,6 +422,14 @@ export default function ClientProfileSheet({
                     .filter((a) => a.id !== activeToday?.id)
                     .map((item) => card(item, { allowCancel: true }))}
                 </div>
+              </section>
+            ) : null}
+
+            {subscriptionLabel ? (
+              <section>
+                <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Minha assinatura</h3>
+                <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{subscriptionLabel}</p>
+                <p className="mt-1 text-[11px] text-slate-500">A renovação não é débito automático. Fora dos dias do plano, o corte sai no valor normal.</p>
               </section>
             ) : null}
 

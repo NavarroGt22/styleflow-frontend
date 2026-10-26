@@ -10,6 +10,7 @@ export type AdminTab =
   | 'salao'
   | 'clientes'
   | 'crm'
+  | 'assinaturas'
 
 export type Product = {
   id: string
@@ -81,6 +82,7 @@ export type Appointment = {
   professional?: { user?: { name?: string } }
   /** Preenchido quando o PIX do serviço já foi registrado. null = ainda não pago. */
   paidAt?: string | null
+  coveredBySubscription?: boolean
   paymentMode?: 'STORE' | 'PIX' | 'CARD' | string | null
   paymentStatus?: 'NONE' | 'AWAITING' | 'PAID' | 'EXPIRED' | string | null
   financialRecord?: { paymentMethod?: string | null } | null
@@ -127,6 +129,12 @@ export type FinancialSummary = {
   /** "N/P" no app: venda de produto do estoque, fora do serviço. */
   products: { revenue: number; quantity: number }
   expenses: number
+  subscriptions?: {
+    gross: number
+    gatewayFees: number
+    net: number
+    count: number
+  }
 }
 
 export type FinancialDailyPoint = {
@@ -180,6 +188,7 @@ export type FinancialDashboard = {
     gatewayFeeAmount?: number
     netAmount?: number | null
     gatewayFeeLabel?: string | null
+    description?: string | null
     appointment?: {
       service?: { name?: string }
       professional?: { user?: { name?: string } }
@@ -271,6 +280,9 @@ export type SalonSettings = {
   autoMsgCancelSalonEnabled?: boolean
   autoMsgCancelClientEnabled?: boolean
   autoMsgRescheduleEnabled?: boolean
+  whatsappWinbackTemplate?: string | null
+  whatsappWinbackEnabled?: boolean
+  whatsappWinbackDays?: number
   whatsappGatewayUrl?: string | null
   whatsappGatewayToken?: string | null
   ownerId?: string

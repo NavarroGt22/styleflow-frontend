@@ -14,6 +14,7 @@ import BookingDateTimePicker from '@/components/client/BookingDateTimePicker';
 import { ClientSalonError, ClientSalonLoading, clientBrandStyles } from '@/components/client/ClientSalonShell';
 import { ClientTopBar } from '@/components/client/ClientTopBar';
 import ClientProfileSheet from '@/components/client/ClientProfileSheet';
+import ClientPlansSheet from '@/components/client/ClientPlansSheet';
 import { BookingHero } from '@/components/client/booking/BookingHero';
 import {
   BookingPaymentPending,
@@ -90,6 +91,17 @@ export default function PublicSalonPage() {
   const [services, setServices] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [selectedService, setSelectedService] = useState<any>(null);
+  const [plansOpen, setPlansOpen] = useState(false);
+  const [subscriptionQuote, setSubscriptionQuote] = useState<{ covered?: boolean; reason?: string; subscriptionName?: string } | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
+  const [subscriptionTick, setSubscriptionTick] = useState(0);
+  const [mySubscription, setMySubscription] = useState<{
+    name: string;
+    endsAt: string | null;
+    weekdays: number[];
+    benefits: Array<{ name: string; available: number }>;
+  } | null>(null);
+  const [blockedServiceIds, setBlockedServiceIds] = useState<string[]>([]);
   const [selectedProfessional, setSelectedProfessional] = useState<any>(null);
   const [lastProfessionalId, setLastProfessionalId] = useState<string | null>(null);
   const appliedLastProfessional = useRef(false);
@@ -308,6 +320,64 @@ export default function PublicSalonPage() {
     }
   }, [data?.salon?.id, currentUser]);
 
+  useEffect(() => {
+    const token = sessionStorage.getItem('client_token');
+    if (!token || !data?.salon?.id || !currentUser) {
+      setBlockedServiceIds([]);
+      setMySubscription(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(apiUrl(`/subscriptions/me?salonId=${encodeURIComponent(data.salon.id)}`), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        const subscription = json?.subscription;
+        if (subscription?.status !== 'ACTIVE') {
+          setBlockedServiceIds([]);
+          setMySubscription(null);
+          return;
+        }
+        const ids = subscription.snapshotBlockedServiceIds;
+        setBlockedServiceIds(Array.isArray(ids) ? ids : []);
+        const cycles = Array.isArray(subscription.cycles) ? subscription.cycles : [];
+        const now = Date.now();
+        const openCycles = cycles.filter((row: { status?: string }) => row.status === 'OPEN');
+        const cycle = openCycles.find((row: { startsAt?: string; endsAt?: string }) => {
+          const start = new Date(row.startsAt || 0).getTime();
+          const end = new Date(row.endsAt || 0).getTime();
+          return start <= now && now < end;
+        }) || [...openCycles].sort(
+          (a: { startsAt?: string }, b: { startsAt?: string }) =>
+            new Date(a.startsAt || 0).getTime() - new Date(b.startsAt || 0).getTime(),
+        )[0] || cycles[0];
+        const items = Array.isArray(subscription.snapshotItems) ? subscription.snapshotItems : [];
+        setMySubscription({
+          name: subscription.snapshotName,
+          endsAt: cycle?.endsAt || null,
+          weekdays: Array.isArray(subscription.snapshotCoveredWeekdays) ? subscription.snapshotCoveredWeekdays : [],
+          benefits: items.map((item: { serviceId: string; serviceName?: string; quantity?: number }) => {
+            const benefit = cycle?.benefits?.find((row: { serviceId: string }) => row.serviceId === item.serviceId);
+            const available = benefit
+              ? Number(benefit.granted) - Number(benefit.reserved) - Number(benefit.consumed) - Number(benefit.forfeited)
+              : Number(item.quantity) || 0;
+            return { name: item.serviceName || 'Serviço', available: Math.max(0, available) };
+          }),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBlockedServiceIds([]);
+          setMySubscription(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.salon?.id, currentUser, subscriptionTick]);
+
   const bookingServicesForProfessional = useMemo(() => {
     if (!selectedProfessional) return [];
     const linked = (selectedProfessional.services || [])
@@ -319,7 +389,8 @@ export default function PublicSalonPage() {
         duration: ps.customDuration != null ? ps.customDuration : ps.service.duration,
         isActive: true,
         serviceId: ps.serviceId,
-      }));
+      }))
+      .filter((service: { id: string }) => !blockedServiceIds.includes(service.id));
     if (linked.length > 0) return linked;
 
     // Fallback: barbeiro dono sem vínculo ainda — usa catálogo público do salão.
@@ -333,10 +404,11 @@ export default function PublicSalonPage() {
           duration: s.duration,
           isActive: true,
           serviceId: s.id,
-        }));
+        }))
+        .filter((service: { id: string }) => !blockedServiceIds.includes(service.id));
     }
     return [];
-  }, [selectedProfessional, services]);
+  }, [selectedProfessional, services, blockedServiceIds]);
 
   // Cada barbeiro tem o próprio expediente e o próprio calendário no app.
   const bookingWeekdaysForProfessional = useMemo<number[]>(() => {
@@ -434,6 +506,43 @@ export default function PublicSalonPage() {
       cancelled = true;
     };
   }, [data?.salon?.id, selectedProfessional?.id, selectedDate, selectedService?.id, slotsRefreshKey]);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem('client_token');
+    if (!token || !data?.salon?.id || !selectedProfessional?.id || !selectedService?.id || !selectedDate || !selectedTime) {
+      setSubscriptionQuote(null);
+      setCoverageLoading(false);
+      return;
+    }
+    const chosen = timeSlots.find((slot) => slot.time === selectedTime && slot.available);
+    const startTime = chosen?.startTime || new Date(`${selectedDate}T${selectedTime}:00`).toISOString();
+    let cancelled = false;
+    setCoverageLoading(true);
+    const params = new URLSearchParams({
+      salonId: data.salon.id,
+      serviceId: selectedService.id,
+      professionalId: selectedProfessional.id,
+      startTime,
+    });
+    fetch(apiUrl(`/subscriptions/coverage?${params.toString()}`), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        setSubscriptionQuote(json);
+        if (json?.covered) setAppliedCoupon(null);
+      })
+      .catch(() => {
+        if (!cancelled) setSubscriptionQuote(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCoverageLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.salon?.id, selectedProfessional?.id, selectedService?.id, selectedDate, selectedTime, timeSlots]);
 
   const quotedBookingPrice = (service: { price: number } | null | undefined) =>
     appliedCoupon?.quotedPrice ?? service?.price ?? 0;
@@ -791,7 +900,8 @@ export default function PublicSalonPage() {
       setBookingError('Por favor, preencha todos os campos do agendamento.');
       return;
     }
-    if (!paymentMode) {
+    const coveredNow = Boolean(subscriptionQuote?.covered);
+    if (!coveredNow && !paymentMode) {
       setBookingError('Escolha como deseja pagar: Pix, cartão ou na loja.');
       return;
     }
@@ -822,15 +932,16 @@ export default function PublicSalonPage() {
       : new Date(start.getTime() + (duration + prep) * 60000);
     const price = quotedBookingPrice(selectedService);
 
-    const payload: Record<string, string> = {
+    const payload: Record<string, unknown> = {
       salonId: data.salon.id,
       professionalId: selectedProfessional.id,
       serviceId: selectedService.id,
       startTime: start.toISOString(),
       endTime: end.toISOString(),
-      paymentMode,
+      paymentMode: coveredNow ? 'STORE' : paymentMode,
+      useSubscription: coveredNow,
     };
-    if (appliedCoupon?.code) {
+    if (appliedCoupon?.code && !coveredNow) {
       payload.couponCode = appliedCoupon.code;
     }
 
@@ -861,15 +972,17 @@ export default function PublicSalonPage() {
       }
 
       // Pagar na loja: horário marcado na hora
-      if (paymentMode === 'STORE') {
+      if (coveredNow || paymentMode === 'STORE') {
         setBookingSuccess({
           appointment,
-          service: { ...selectedService, price },
+          service: { ...selectedService, price: coveredNow ? 0 : price },
           professional: selectedProfessional,
           date: selectedDate,
           time: selectedTime,
           paidOnline: false,
+          coveredBySubscription: coveredNow,
         });
+        if (coveredNow) setSubscriptionTick((value) => value + 1);
         clearBookingForm();
         return;
       }
@@ -1167,6 +1280,7 @@ export default function PublicSalonPage() {
             onLogout={handleLogout}
             onOpenProfile={() => setProfileOpen(true)}
             salonSlug={salonSlug}
+            subscriberName={mySubscription?.name}
           />
 
           <ClientProfileSheet
@@ -1180,6 +1294,12 @@ export default function PublicSalonPage() {
             allowClientCancel={data?.salon?.bookingAllowClientCancel !== false}
             cancelMinMinutes={Number(data?.salon?.bookingCancelMinMinutes) || 0}
             allowClientReschedule={data?.salon?.bookingAllowClientReschedule !== false}
+          />
+          <ClientPlansSheet
+            open={plansOpen}
+            onClose={() => setPlansOpen(false)}
+            salonId={data?.salon?.id}
+            isDark={isDark}
           />
 
           <BookingHero
@@ -1217,9 +1337,11 @@ export default function PublicSalonPage() {
                 </div>
                 <h2 className="mb-2 text-2xl font-black text-slate-900 dark:text-white">Reserva Confirmada!</h2>
                 <p className="mb-6 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                  {bookingSuccess.paidOnline
-                    ? 'Pagamento confirmado. Seu horário foi marcado com sucesso.'
-                    : 'Seu horário foi agendado com sucesso. Pague na loja no dia do atendimento.'}
+                  {bookingSuccess.coveredBySubscription
+                    ? 'Horário marcado na sua assinatura. Este atendimento não gera cobrança.'
+                    : bookingSuccess.paidOnline
+                      ? 'Pagamento confirmado. Seu horário foi marcado com sucesso.'
+                      : 'Seu horário foi agendado com sucesso. Pague na loja no dia do atendimento.'}
                 </p>
 
                 <div className="mb-6 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5 text-left dark:border-white/10 dark:bg-black/30">
@@ -1241,7 +1363,11 @@ export default function PublicSalonPage() {
                   </div>
                   <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-xs font-bold dark:border-white/10">
                     <span className="uppercase tracking-wider text-slate-500">Valor</span>
-                    <span className="text-sm font-black client-accent-text">R$ {bookingSuccess.service.price.toFixed(2)}</span>
+                    <span className="text-sm font-black client-accent-text">
+                      {bookingSuccess.coveredBySubscription
+                        ? 'Incluso na assinatura'
+                        : `R$ ${Number(bookingSuccess.service.price).toFixed(2)}`}
+                    </span>
                   </div>
                 </div>
 
@@ -1266,6 +1392,45 @@ export default function PublicSalonPage() {
             ) : (
               <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_minmax(240px,280px)]">
                 <div className="order-1 space-y-3.5 lg:order-none">
+
+                  {mySubscription ? (
+                    <div className="rounded-xl border border-emerald-500/40 bg-emerald-50 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/5">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <h3 className="flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-emerald-800 dark:text-emerald-200/80">
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          VOCÊ É ASSINANTE
+                        </h3>
+                        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
+                          Ativa
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{mySubscription.name}</p>
+                      <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
+                        {mySubscription.endsAt
+                          ? `Ciclo até ${new Date(mySubscription.endsAt).toLocaleDateString('pt-BR')}`
+                          : 'Assinatura ativa'}
+                        {mySubscription.weekdays.length
+                          ? ` · ${mySubscription.weekdays
+                              .map((day) => ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][day])
+                              .filter(Boolean)
+                              .join(', ')}`
+                          : ''}
+                      </p>
+                      {mySubscription.benefits.length ? (
+                        <ul className="mt-2 space-y-1">
+                          {mySubscription.benefits.map((benefit) => (
+                            <li key={benefit.name} className="text-xs text-slate-700 dark:text-slate-200">
+                              {benefit.name}: {benefit.available}{' '}
+                              {benefit.available === 1 ? 'disponível' : 'disponíveis'} neste ciclo
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <p className="mt-2 text-[11px] leading-relaxed text-emerald-800 dark:text-emerald-200">
+                        No dia e no profissional cobertos, você só confirma o horário. Sem Pix, cartão ou pagamento na loja.
+                      </p>
+                    </div>
+                  ) : null}
 
                   {loyalty ? (
                     <div className="rounded-xl border border-amber-500/40 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
@@ -1365,8 +1530,19 @@ export default function PublicSalonPage() {
 
                   {/* SELEÇÃO DE SERVIÇO (só do profissional) */}
                   <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#1a1816]">
-                    <h3 className="mb-3 flex items-center gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                      <span className="client-accent-text">2</span> SELECIONE O SERVIÇO
+                    <h3 className="mb-3 flex items-center justify-between gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                      <span><span className="client-accent-text">2</span> SELECIONE O SERVIÇO</span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          setPlansOpen(true)
+                        }}
+                        className="rounded-full bg-indigo-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white shadow-md shadow-indigo-500/40"
+                      >
+                        Assinaturas
+                      </button>
                     </h3>
                     {!selectedProfessional ? (
                       <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">
@@ -1381,7 +1557,9 @@ export default function PublicSalonPage() {
                       </div>
                     ) : bookingServicesForProfessional.length === 0 ? (
                       <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">
-                        Este profissional ainda não tem serviços cadastrados.
+                        {blockedServiceIds.length > 0
+                          ? 'Os serviços deste profissional ficam indisponíveis enquanto sua assinatura estiver ativa.'
+                          : 'Este profissional ainda não tem serviços cadastrados.'}
                       </p>
                     ) : (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1493,6 +1671,35 @@ export default function PublicSalonPage() {
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Horário</span>
                         <span className="block text-right text-base font-bold text-[var(--brand,#d5a85c)]">{selectedTime || 'Não selecionado'}</span>
                       </div>
+                      <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</span>
+                        <span className="block text-right text-xl font-bold client-accent-text">
+                          {subscriptionQuote?.covered
+                            ? 'Incluso'
+                            : `R$ ${
+                                displayService
+                                  ? Number(appliedCoupon?.quotedPrice ?? displayService.price ?? 0).toFixed(2)
+                                  : '0,00'
+                              }`}
+                        </span>
+                      </div>
+
+                      {subscriptionQuote?.covered ? (
+                        <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
+                          <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                            Incluso na assinatura{subscriptionQuote.subscriptionName ? ` ${subscriptionQuote.subscriptionName}` : ''}. Sem cobrança.
+                          </p>
+                        </div>
+                      ) : coverageLoading && mySubscription ? (
+                        <p className="border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
+                          Conferindo se este horário entra na assinatura...
+                        </p>
+                      ) : mySubscription && !selectedTime ? (
+                        <p className="border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
+                          Escolha o horário. Se o plano cobrir, você só confirma, sem cobrança.
+                        </p>
+                      ) : (
+                      <>
                       <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-white/10">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cupom</span>
                         <div className="flex min-w-0 items-stretch gap-2">
@@ -1551,24 +1758,34 @@ export default function PublicSalonPage() {
                           </p>
                         ) : null}
                       </div>
-                      <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</span>
-                        <span className="block text-right text-xl font-bold client-accent-text">
-                          R${' '}
-                          {displayService
-                            ? Number(appliedCoupon?.quotedPrice ?? displayService.price ?? 0).toFixed(2)
-                            : '0,00'}
-                        </span>
-                      </div>
 
-                      {/* Pagamento logo abaixo do Total — sempre no resumo (mobile e desktop) */}
+                      {/* Pagamento só quando o horário não entra na assinatura */}
                       <div
                         id="booking-payment-options"
                         className="space-y-2 border-t border-slate-100 pt-3 dark:border-white/10"
                       >
+                        {mySubscription && !selectedTime ? null : (
                         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
                           Como deseja pagar?
                         </p>
+                        )}
+                        {subscriptionQuote?.reason === 'WEEKDAY_NOT_COVERED' ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-300">
+                            Nesse dia o plano não cobre. O horário segue no valor normal.
+                          </p>
+                        ) : subscriptionQuote?.reason === 'NO_BALANCE' ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-300">
+                            O saldo desse serviço acabou neste ciclo. O horário segue no valor normal.
+                          </p>
+                        ) : subscriptionQuote?.reason === 'PROFESSIONAL_NOT_COVERED' ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-300">
+                            Esse profissional não atende pelo plano. O horário segue no valor normal.
+                          </p>
+                        ) : subscriptionQuote?.reason === 'OUTSIDE_CYCLE' ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-300">
+                            Este horário fica fora do ciclo pago. O valor é o normal.
+                          </p>
+                        ) : null}
 
                         {resumeHint ? (
                           <button
@@ -1590,9 +1807,12 @@ export default function PublicSalonPage() {
 
                         {!selectedTime ? (
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Escolha o horário acima para liberar Pix, cartão ou pagar na loja.
+                            {mySubscription
+                              ? 'Escolha o horário. Se o plano cobrir, você só confirma, sem cobrança.'
+                              : 'Escolha o horário acima para liberar Pix, cartão ou pagar na loja.'}
                           </p>
                         ) : null}
+                        {mySubscription && !selectedTime ? null : (
                         <div
                           className={`grid gap-2 ${!selectedTime ? 'pointer-events-none opacity-45' : ''}`}
                           role="radiogroup"
@@ -1667,19 +1887,23 @@ export default function PublicSalonPage() {
                             )
                           })}
                         </div>
+                        )}
                       </div>
+                      </>
+                      )}
                     </div>
 
                     <button
                       onClick={handleSchedule}
                       disabled={
                         bookingLoading ||
+                        coverageLoading ||
                         data?.salon?.bookingLinkEnabled === false ||
                         !selectedService ||
                         !selectedProfessional ||
                         !selectedDate ||
                         !selectedTime ||
-                        !paymentMode
+                        (!subscriptionQuote?.covered && !paymentMode)
                       }
                       className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-none py-3.5 px-6 text-sm font-black uppercase tracking-wider text-[#111] shadow-lg transition-all duration-300 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
                       style={{ backgroundColor: brand }}
@@ -1688,18 +1912,26 @@ export default function PublicSalonPage() {
                         <>
                           <div className="w-5 h-5 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
                           <span>
-                            {paymentMode === 'STORE' ? 'Confirmando...' : 'Gerando pagamento...'}
+                            {subscriptionQuote?.covered || paymentMode === 'STORE'
+                              ? 'Confirmando...'
+                              : 'Gerando pagamento...'}
                           </span>
                         </>
                       ) : (
                         <span>
-                          {paymentMode === 'PIX'
-                            ? 'Pagar com Pix'
-                            : paymentMode === 'CARD'
-                              ? 'Pagar com cartão'
-                              : paymentMode === 'STORE'
-                                ? 'Confirmar horário'
-                                : 'Escolha a forma de pagamento'}
+                          {coverageLoading && mySubscription
+                            ? 'Conferindo assinatura...'
+                            : subscriptionQuote?.covered
+                              ? 'Confirmar horário'
+                              : paymentMode === 'PIX'
+                                ? 'Pagar com Pix'
+                                : paymentMode === 'CARD'
+                                  ? 'Pagar com cartão'
+                                  : paymentMode === 'STORE'
+                                    ? 'Confirmar horário'
+                                    : mySubscription && !selectedTime
+                                      ? 'Escolha o horário'
+                                      : 'Escolha a forma de pagamento'}
                         </span>
                       )}
                     </button>
@@ -1755,6 +1987,7 @@ export default function PublicSalonPage() {
           onLogout={handleLogout}
           onOpenProfile={() => setProfileOpen(true)}
           salonSlug={salonSlug}
+          subscriberName={mySubscription?.name}
         />
 
         <ClientProfileSheet
@@ -1768,6 +2001,12 @@ export default function PublicSalonPage() {
           allowClientCancel={data?.salon?.bookingAllowClientCancel !== false}
           cancelMinMinutes={Number(data?.salon?.bookingCancelMinMinutes) || 0}
           allowClientReschedule={data?.salon?.bookingAllowClientReschedule !== false}
+        />
+        <ClientPlansSheet
+          open={plansOpen}
+          onClose={() => setPlansOpen(false)}
+          salonId={data?.salon?.id}
+          isDark={isDark}
         />
         {confirmDialog}
 

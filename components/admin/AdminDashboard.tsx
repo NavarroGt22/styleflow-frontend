@@ -16,6 +16,7 @@ import {
   Package,
   Plus,
   Scissors,
+  Repeat,
   Store,
   Sun,
   Timer,
@@ -36,6 +37,7 @@ import {
 } from '@/lib/auth'
 import { TENANT_LEVEL_LABELS, type TenantLevel } from '@/lib/admin/tenant-plans'
 import AdminServicesTab from './tabs/AdminServicesTab'
+import AdminSubscriptionsTab from './tabs/AdminSubscriptionsTab'
 import AdminAgendaTab from './tabs/AdminAgendaTab'
 import AdminCancelledTab from './tabs/AdminCancelledTab'
 import AdminFinancialTab from './tabs/AdminFinancialTab'
@@ -58,6 +60,7 @@ const DEFAULT_BRAND = '#d5a85c'
  */
 const tabs: { id: AdminTab; label: string; icon: typeof Scissors; ownerOnly?: boolean }[] = [
   { id: 'services', label: 'Meus Serviços', icon: Scissors },
+  { id: 'assinaturas', label: 'Assinaturas', icon: Repeat, ownerOnly: true },
   { id: 'agenda', label: 'Agenda', icon: CalendarDays },
   { id: 'cancelados', label: 'Cancelados', icon: CalendarX2 },
   { id: 'clientes', label: 'Clientes', icon: Contact },
@@ -499,6 +502,9 @@ export default function AdminDashboard({
             ) : (
               <>
                 {activeTab === 'services' && <AdminServicesTab salonId={resolvedSalonId} lightMode={lightMode} />}
+                {activeTab === 'assinaturas' && canRenderTab('assinaturas') && (
+                  <AdminSubscriptionsTab salonId={resolvedSalonId} lightMode={lightMode} />
+                )}
                 {activeTab === 'agenda' && <AdminAgendaTab salonId={resolvedSalonId} lightMode={lightMode} />}
                 {activeTab === 'cancelados' && (
                   <AdminCancelledTab salonId={resolvedSalonId} lightMode={lightMode} />
