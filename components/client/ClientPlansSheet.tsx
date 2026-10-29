@@ -33,19 +33,25 @@ export default function ClientPlansSheet({
   open,
   onClose,
   salonId,
+  salonName,
   isDark,
 }: {
   open: boolean
   onClose: () => void
   salonId?: string
+  salonName?: string
   isDark: boolean
 }) {
   const [plans, setPlans] = useState<Plan[]>([])
   const [mine, setMine] = useState<Mine | null>(null)
   const [note, setNote] = useState('')
   const [pix, setPix] = useState<string | null>(null)
+  const [pixQr, setPixQr] = useState<string | null>(null)
   const [cardUrl, setCardUrl] = useState<string | null>(null)
   const [chargeId, setChargeId] = useState<string | null>(null)
+  const [payingPlanId, setPayingPlanId] = useState<string | null>(null)
+  const [paidMessage, setPaidMessage] = useState('')
+  const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -54,7 +60,9 @@ export default function ClientPlansSheet({
     const token = sessionStorage.getItem('client_token')
     setError('')
     setPix(null)
+    setPixQr(null)
     setCardUrl(null)
+    setPaidMessage('')
     ;(async () => {
       const plansRes = await fetch(apiUrl(`/subscriptions/public/${salonId}/plans`))
       const plansJson = await plansRes.json()
@@ -81,7 +89,10 @@ export default function ClientPlansSheet({
     setBusy(true)
     setError('')
     setPix(null)
+    setPixQr(null)
     setCardUrl(null)
+    setPaidMessage('')
+    setPayingPlanId(planId)
     try {
       const res = await fetch(apiUrl('/subscriptions/subscribe'), {
         method: 'POST',
@@ -93,9 +104,22 @@ export default function ClientPlansSheet({
       setChargeId(json.chargeId || null)
       if (method === 'CARD' && json.paymentUrl) {
         setCardUrl(json.paymentUrl)
-        window.open(json.paymentUrl, '_blank', 'noopener,noreferrer')
       } else {
-        setPix(json.copiaECola || null)
+        const code = String(json.copiaECola || '').trim()
+        if (!code) throw new Error('O Mercado Pago não devolveu o código Pix.')
+        setPix(code)
+        const rawQr = String(json.qrCode || '').trim()
+        if (rawQr) {
+          setPixQr(rawQr.startsWith('data:') ? rawQr : `data:image/png;base64,${rawQr}`)
+        } else {
+          try {
+            const mod = await import('qrcode')
+            const toDataURL = (mod.default?.toDataURL || mod.toDataURL).bind(mod.default || mod)
+            setPixQr(await toDataURL(code, { width: 240, margin: 1, errorCorrectionLevel: 'M' }))
+          } catch {
+            setPixQr(null)
+          }
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao contratar.')
@@ -120,7 +144,14 @@ export default function ClientPlansSheet({
         setError('O Mercado Pago ainda não confirmou o pagamento.')
         return
       }
+      const plan = plans.find((item) => item.id === payingPlanId)
+      const vantagens = plan?.items?.length
+        ? plan.items.map((item) => `${item.quantity}x ${item.service?.name || 'serviço'}`).join(', ')
+        : plan?.name || 'seu plano'
+      const house = salonName?.trim() || 'barbearia'
+      setPaidMessage(`Parabéns! Você fez uma assinatura na ${house}. Suas vantagens: ${vantagens}.`)
       setPix(null)
+      setPixQr(null)
       setCardUrl(null)
       const meRes = await fetch(apiUrl(`/subscriptions/me?salonId=${encodeURIComponent(salonId)}`), {
         headers: { Authorization: `Bearer ${token}` },
@@ -163,6 +194,11 @@ export default function ClientPlansSheet({
           <button type="button" onClick={onClose} className="text-sm text-slate-400">Fechar</button>
         </div>
         <p className="mb-4 text-xs text-slate-400">{note}</p>
+        {paidMessage ? (
+          <p className="mb-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm font-semibold text-emerald-300">
+            {paidMessage}
+          </p>
+        ) : null}
         {error ? <p className="mb-3 text-sm text-red-400">{error}</p> : null}
         {mine ? (
           <section className={`mb-4 rounded-2xl border p-3 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
@@ -206,10 +242,10 @@ export default function ClientPlansSheet({
                 <p className="text-sm font-bold">R$ {Number(plan.price).toFixed(2)}</p>
               </div>
               <div className="mt-3 flex gap-2">
-                <button type="button" disabled={busy} onClick={() => subscribe(plan.id, 'PIX')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">
+                <button type="button" disabled={busy} onClick={() => subscribe(plan.id, 'PIX')} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950">
                   Pagar com Pix
                 </button>
-                <button type="button" disabled={busy} onClick={() => subscribe(plan.id, 'CARD')} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white">
+                <button type="button" disabled={busy} onClick={() => subscribe(plan.id, 'CARD')} className="rounded-xl bg-amber-400 px-3 py-2 text-xs font-black text-slate-950">
                   Pagar com cartão
                 </button>
               </div>
@@ -217,20 +253,51 @@ export default function ClientPlansSheet({
           ))}
         </div>
         {pix || cardUrl ? (
-          <div className="mt-4 rounded-2xl border border-emerald-500/40 p-3">
-            <p className="text-xs font-semibold text-emerald-400">
-              {pix
-                ? 'Pix copia e cola. A assinatura só ativa quando o Mercado Pago confirmar.'
-                : 'O cartão abre no Mercado Pago. A assinatura só ativa quando o pagamento for confirmado. Não é débito automático.'}
-            </p>
-            {pix ? <textarea readOnly value={pix} className="mt-2 h-24 w-full rounded-xl bg-black/30 p-2 text-xs" /> : null}
-            {cardUrl ? (
-              <a href={cardUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-bold text-indigo-400">
-                Abrir pagamento no cartão
-              </a>
-            ) : null}
-            <button type="button" disabled={busy} onClick={confirmPayment} className="mt-2 block rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">
-              Verificar pagamento
+          <div className={`mt-4 rounded-2xl border p-3 ${pix ? 'border-emerald-500/50 bg-emerald-950/40' : 'border-amber-400/60 bg-amber-400/15'}`}>
+            {pix ? (
+              <>
+                <p className="text-sm font-bold text-emerald-200">Pix da assinatura</p>
+                <p className="mt-1 text-xs text-emerald-100/80">
+                  Escaneie o QR ou copie o código. A assinatura só ativa quando o Mercado Pago confirmar.
+                </p>
+                {pixQr ? (
+                  <img src={pixQr} alt="QR Code do Pix" className="mx-auto mt-3 size-52 rounded-2xl bg-white p-2" />
+                ) : null}
+                <textarea readOnly value={pix} className="mt-3 h-20 w-full rounded-xl bg-black/50 p-2 text-xs text-white" />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(pix)
+                      setCopied(true)
+                      window.setTimeout(() => setCopied(false), 2000)
+                    } catch {
+                      setError('Não foi possível copiar. Selecione o código e copie.')
+                    }
+                  }}
+                  className="mt-2 rounded-xl bg-emerald-400 px-3 py-2 text-xs font-black text-slate-950"
+                >
+                  {copied ? 'Código copiado' : 'Copiar código Pix'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-bold text-amber-200">Pagamento no cartão</p>
+                <p className="mt-1 text-xs text-amber-100/80">
+                  O checkout abre no Mercado Pago. Não é débito automático. Se a página do provedor abrir em branco, a conta da barbearia precisa revisar a configuração do cartão.
+                </p>
+                <a
+                  href={cardUrl || '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-block rounded-xl bg-amber-400 px-3 py-2 text-xs font-black text-slate-950"
+                >
+                  Continuar no cartão
+                </a>
+              </>
+            )}
+            <button type="button" disabled={busy} onClick={confirmPayment} className="mt-2 block rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950">
+              Já paguei, verificar
             </button>
           </div>
         ) : null}

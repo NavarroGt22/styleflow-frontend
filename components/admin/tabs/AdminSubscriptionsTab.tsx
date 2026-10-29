@@ -45,11 +45,10 @@ const emptyForm = {
   name: '',
   description: '',
   price: '',
-  items: [{ serviceId: '', quantity: '1' }] as PlanItem[],
   professionalIds: [] as string[],
   coveredWeekdays: [1, 2, 3, 4, 5],
   blockedServiceIds: [] as string[],
-  monthlyQuantity: '4',
+  quantities: {} as Record<string, string>,
 }
 
 export default function AdminSubscriptionsTab({ salonId, lightMode = false }: AdminTabProps) {
@@ -62,6 +61,7 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
   const [services, setServices] = useState<Array<{ id: string; name: string; active: boolean }>>([])
   const [professionals, setProfessionals] = useState<Array<{ id: string; name: string }>>([])
   const [form, setForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [noShowConsumes, setNoShowConsumes] = useState(false)
   const [view, setView] = useState<'planos' | 'assinantes'>('planos')
 
@@ -116,13 +116,15 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
     }))
   }
 
-  async function handleCreate(event: FormEvent) {
+  async function handleSave(event: FormEvent) {
     event.preventDefault()
     if (!salonId) return
-    const quantity = Number(form.monthlyQuantity)
     const items = services
       .filter((service) => !form.blockedServiceIds.includes(service.id))
-      .map((service) => ({ serviceId: service.id, quantity }))
+      .map((service) => ({
+        serviceId: service.id,
+        quantity: Number(form.quantities[service.id] || '1'),
+      }))
     if (form.name.trim().length < 2) {
       setError('O nome do plano precisa ter pelo menos 2 letras.')
       return
@@ -135,12 +137,12 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
       setError('Escolha pelo menos um dia coberto.')
       return
     }
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      setError('Informe a quantidade por mês, de pelo menos 1.')
+    if (items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1)) {
+      setError('Cada serviço do plano precisa de pelo menos 1 unidade por mês.')
       return
     }
     if (items.length === 0) {
-      setError('Deixe pelo menos um serviço disponível. Os marcados ficam indisponíveis para quem assina.')
+      setError('Deixe pelo menos um serviço no plano. Os marcados como indisponíveis ficam de fora.')
       return
     }
     if (form.professionalIds.length === 0) {
@@ -151,28 +153,53 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
     setError('')
     setSuccess('')
     try {
-      const response = await authFetch(`/subscriptions/salon/${salonId}/plans`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name: form.name,
-          description: form.description,
-          price: Number(form.price),
-          coveredWeekdays: form.coveredWeekdays,
-          blockedServiceIds: form.blockedServiceIds,
-          professionalIds: form.professionalIds,
-          items,
-        }),
-      })
+      const response = await authFetch(
+        editingId
+          ? `/subscriptions/salon/${salonId}/plans/${editingId}`
+          : `/subscriptions/salon/${salonId}/plans`,
+        {
+          method: editingId ? 'PUT' : 'POST',
+          body: JSON.stringify({
+            name: form.name,
+            description: form.description,
+            price: Number(form.price),
+            coveredWeekdays: form.coveredWeekdays,
+            blockedServiceIds: form.blockedServiceIds,
+            professionalIds: form.professionalIds,
+            items,
+          }),
+        },
+      )
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Não foi possível criar o plano.')
+      if (!response.ok) throw new Error(data.error || 'Não foi possível salvar o plano.')
       setForm(emptyForm)
-      setSuccess('Plano criado. Contratos antigos não mudam quando você editar este plano depois.')
+      setEditingId(null)
+      setSuccess(editingId
+        ? 'Plano atualizado. Quem já assinou continua com as condições do contrato antigo.'
+        : 'Plano criado. Contratos antigos não mudam quando você editar este plano depois.')
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar.')
     } finally {
       setSaving(false)
     }
+  }
+
+  function startEdit(plan: Plan) {
+    const quantities: Record<string, string> = {}
+    for (const item of plan.items) quantities[item.serviceId] = String(item.quantity)
+    setEditingId(plan.id)
+    setForm({
+      name: plan.name,
+      description: plan.description || '',
+      price: String(plan.price),
+      professionalIds: plan.professionals.map((row) => row.professionalId),
+      coveredWeekdays: plan.coveredWeekdays,
+      blockedServiceIds: plan.blockedServiceIds || [],
+      quantities,
+    })
+    setError('')
+    setSuccess('')
   }
 
   async function togglePlan(plan: Plan) {
@@ -218,15 +245,15 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
 
       {view === 'planos' ? (
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-          <form onSubmit={handleCreate} className={`space-y-3 rounded-2xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'}`}>
-            <p className={labelClass(lightMode)}>Novo plano</p>
+          <form onSubmit={handleSave} className={`space-y-3 rounded-2xl border p-4 ${lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'}`}>
+            <p className={labelClass(lightMode)}>{editingId ? 'Editar plano' : 'Novo plano'}</p>
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome" className={inputClass(lightMode)} />
             <textarea
-              rows={3}
+              rows={4}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Descrição"
-              className={`min-h-24 w-full resize-y rounded-xl border px-3.5 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 ${
+              placeholder="Descrição, sem limite de tamanho"
+              className={`min-h-28 w-full resize-y rounded-xl border px-3.5 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 ${
                 lightMode
                   ? 'border-slate-200 bg-white text-slate-900 placeholder:text-slate-400'
                   : 'border-slate-600 bg-[#142035] text-white placeholder:text-slate-500'
@@ -245,41 +272,47 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
               </div>
             </div>
             <div>
-              <p className={labelClass(lightMode)}>Quantidade por mês</p>
+              <p className={labelClass(lightMode)}>Serviços e unidades por mês</p>
               <p className={`mb-2 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Vale para cada serviço que continuar disponível. Um corte não vira barba.
+                Cada serviço tem a própria quantidade. Ex.: 1 pigmentação e 2 barbas. Marque indisponível para tirar do plano. Um corte não vira barba.
               </p>
-              <input
-                required
-                type="number"
-                min="1"
-                value={form.monthlyQuantity}
-                onChange={(event) => setForm({ ...form, monthlyQuantity: event.target.value })}
-                className={inputClass(lightMode)}
-              />
-            </div>
-            <div>
-              <p className={labelClass(lightMode)}>Indisponíveis para quem assina</p>
-              <p className={`mb-2 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Marque o que o assinante não pode agendar. O que ficar desmarcado entra no plano.
-              </p>
-              <div className="space-y-1">
-                {services.map((service) => (
-                  <label key={service.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.blockedServiceIds.includes(service.id)}
-                      onChange={() => setForm((current) => ({
-                        ...current,
-                        blockedServiceIds: current.blockedServiceIds.includes(service.id)
-                          ? current.blockedServiceIds.filter((id) => id !== service.id)
-                          : [...current.blockedServiceIds, service.id],
-                      }))}
-                    />
-                    {service.name}{service.active ? '' : ' (inativo)'}
-                  </label>
-                ))}
+              <div className="space-y-2">
+                {services.map((service) => {
+                  const blocked = form.blockedServiceIds.includes(service.id)
+                  return (
+                    <div key={service.id} className="flex items-center gap-2 text-sm">
+                      <label className="flex min-w-0 flex-1 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={blocked}
+                          onChange={() => setForm((current) => ({
+                            ...current,
+                            blockedServiceIds: blocked
+                              ? current.blockedServiceIds.filter((id) => id !== service.id)
+                              : [...current.blockedServiceIds, service.id],
+                          }))}
+                        />
+                        <span className="truncate">{service.name}{service.active ? '' : ' (inativo)'}</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={blocked}
+                        value={form.quantities[service.id] ?? '1'}
+                        onChange={(event) => setForm((current) => ({
+                          ...current,
+                          quantities: { ...current.quantities, [service.id]: event.target.value },
+                        }))}
+                        aria-label={`Quantidade de ${service.name}`}
+                        className={`${inputClass(lightMode)} !w-24 shrink-0 disabled:opacity-40`}
+                      />
+                    </div>
+                  )
+                })}
               </div>
+              <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                A caixa marca o serviço como indisponível para quem assina. O número é quantas vezes ele entra no mês.
+              </p>
             </div>
             <div>
               <p className={labelClass(lightMode)}>Profissionais habilitados</p>
@@ -292,7 +325,14 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
                 ))}
               </div>
             </div>
-            <AdminButton type="submit" disabled={saving}>{saving ? 'Salvando...' : 'Criar plano'}</AdminButton>
+            <div className="flex flex-wrap gap-2">
+              <AdminButton type="submit" disabled={saving}>{saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Criar plano'}</AdminButton>
+              {editingId ? (
+                <AdminButton type="button" variant="ghost" onClick={() => { setEditingId(null); setForm(emptyForm) }}>
+                  Cancelar edição
+                </AdminButton>
+              ) : null}
+            </div>
           </form>
           <div className="space-y-3">
             {plans.length === 0 ? <p className="text-sm text-slate-400">Nenhum plano ainda.</p> : plans.map((plan) => (
@@ -302,23 +342,34 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
                     <p className={`font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{plan.name}</p>
                     <p className="text-sm text-slate-400">R$ {Number(plan.price).toFixed(2)} / mês</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => togglePlan(plan)}
-                    title={plan.availability === 'AVAILABLE' ? 'Clique para indisponibilizar novas contratações' : 'Clique para disponibilizar'}
-                    className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase transition hover:scale-105 ${
-                      plan.availability === 'AVAILABLE'
-                        ? lightMode
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                        : lightMode
-                          ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
-                          : 'border-rose-500/40 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
-                    }`}
-                  >
-                    {plan.availability === 'AVAILABLE' ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
-                    {plan.availability === 'AVAILABLE' ? 'Ativo' : 'Inativo'}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(plan)}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${
+                        lightMode ? 'border-slate-200 text-slate-700' : 'border-slate-600 text-slate-200'
+                      }`}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => togglePlan(plan)}
+                      title={plan.availability === 'AVAILABLE' ? 'Clique para indisponibilizar novas contratações' : 'Clique para disponibilizar'}
+                      className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase transition hover:scale-105 ${
+                        plan.availability === 'AVAILABLE'
+                          ? lightMode
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                          : lightMode
+                            ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                            : 'border-rose-500/40 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
+                      }`}
+                    >
+                      {plan.availability === 'AVAILABLE' ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
+                      {plan.availability === 'AVAILABLE' ? 'Ativo' : 'Inativo'}
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-2 text-xs text-slate-400">
                   {plan.items.map((item) => `${item.quantity}x ${item.service?.name || 'serviço'}`).join(' · ')}

@@ -1299,6 +1299,7 @@ export default function PublicSalonPage() {
             open={plansOpen}
             onClose={() => setPlansOpen(false)}
             salonId={data?.salon?.id}
+            salonName={data?.salon?.name}
             isDark={isDark}
           />
 
@@ -1539,9 +1540,10 @@ export default function PublicSalonPage() {
                           event.stopPropagation()
                           setPlansOpen(true)
                         }}
-                        className="rounded-full bg-indigo-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white shadow-md shadow-indigo-500/40"
+                        className="relative rounded-full bg-indigo-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white shadow-md shadow-indigo-500/40"
                       >
-                        Assinaturas
+                        <span className="absolute inset-0 animate-ping rounded-full bg-indigo-400 opacity-50" />
+                        <span className="relative">Assinaturas</span>
                       </button>
                     </h3>
                     {!selectedProfessional ? (
@@ -2006,6 +2008,7 @@ export default function PublicSalonPage() {
           open={plansOpen}
           onClose={() => setPlansOpen(false)}
           salonId={data?.salon?.id}
+          salonName={data?.salon?.name}
           isDark={isDark}
         />
         {confirmDialog}
