@@ -94,7 +94,8 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
         }
 
         setBillingLocked(
-          (user.role === 'OWNER' || user.role === 'PROFESSIONAL') && Boolean(user.tenant?.adminLocked),
+          (user.role === 'OWNER' || user.role === 'PROFESSIONAL' || user.role === 'RECEPTIONIST') &&
+            Boolean(user.tenant?.adminLocked),
         )
         setReady(true)
         return
@@ -112,7 +113,8 @@ export default function AdminAuthGuard({ salonSlug, children }: Props) {
       }
 
       const locked =
-        (user.role === 'OWNER' || user.role === 'PROFESSIONAL') && Boolean(user.tenant?.adminLocked)
+        (user.role === 'OWNER' || user.role === 'PROFESSIONAL' || user.role === 'RECEPTIONIST') &&
+          Boolean(user.tenant?.adminLocked)
       setBillingLocked(locked)
       setReady(true)
     }

@@ -56,7 +56,7 @@ const DEFAULT_BRAND = '#d5a85c'
 /**
  * ownerOnly espelha as permissões do backend (config/permissions.ts):
  * FINANCIAL_VIEW_ALL, STAFF_MANAGE, SETTINGS_EDIT, LOYALTY_MANAGE → só OWNER/SUPER_ADMIN.
- * A API já devolve 403; aqui só escondemos a UI para PROFESSIONAL.
+ * RECEPTIONIST (Atendimento): só agenda e fila (visão operacional do salão).
  */
 const tabs: { id: AdminTab; label: string; icon: typeof Scissors; ownerOnly?: boolean }[] = [
   { id: 'services', label: 'Meus Serviços', icon: Scissors },
@@ -72,6 +72,8 @@ const tabs: { id: AdminTab; label: string; icon: typeof Scissors; ownerOnly?: bo
   { id: 'crm', label: 'CRM', icon: BriefcaseBusiness, ownerOnly: true },
   { id: 'salao', label: 'Salão', icon: Store, ownerOnly: true },
 ]
+
+const RECEPTIONIST_TAB_IDS = new Set<AdminTab>(['agenda', 'fila'])
 
 function resolveBrandColor(options: {
   prop?: string
@@ -118,18 +120,28 @@ export default function AdminDashboard({
     tenantLevel === 'ENTERPRISE' ||
     Boolean(sessionUser?.tenant?.inventoryEnabled)
   const isOwner = sessionUser?.role === 'OWNER' || sessionUser?.role === 'SUPER_ADMIN'
-  const visibleTabs = tabs.filter(
-    (tab) => (tab.id !== 'estoque' || canUseInventory) && (!tab.ownerOnly || isOwner),
-  )
+  const isReceptionist = sessionUser?.role === 'RECEPTIONIST'
+  const visibleTabs = tabs.filter((tab) => {
+    if (tab.id === 'estoque' && !canUseInventory) return false
+    if (isReceptionist) return RECEPTIONIST_TAB_IDS.has(tab.id)
+    if (tab.ownerOnly && !isOwner) return false
+    return true
+  })
   const canRenderTab = (tab: AdminTab) => visibleTabs.some((t) => t.id === tab)
 
   const [resolvedSalonId, setResolvedSalonId] = useState<string | undefined>(salonId ?? salonFromSession?.id)
   const [fetchedBrandColor, setFetchedBrandColor] = useState<string | null>(null)
   const [tenantIconUrl, setTenantIconUrl] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<AdminTab>('services')
+  const [activeTab, setActiveTab] = useState<AdminTab>(isReceptionist ? 'agenda' : 'services')
   const [lightMode, setLightMode] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [myLinkOpen, setMyLinkOpen] = useState(false)
+
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(visibleTabs[0]?.id ?? 'agenda')
+    }
+  }, [activeTab, visibleTabs])
   const [salonSubTab, setSalonSubTab] = useState<
     'general' | 'temas' | 'expediente' | 'comissao' | 'fila' | undefined
   >()
@@ -275,7 +287,14 @@ export default function AdminDashboard({
             >
               <span className={`flex min-w-0 items-center gap-2 ${lightMode ? 'text-slate-600' : 'text-slate-300'}`}>
                 <span className="size-2 shrink-0 rounded-full bg-[var(--brand)] shadow-[0_0_8px_var(--brand)]" />
-                <span className="truncate">Admin: {resolvedOwner}</span>
+                <span className="truncate">
+                  {isReceptionist ? 'Atendimento' : 'Admin'}: {resolvedOwner}
+                </span>
+                {isReceptionist ? (
+                  <span className="hidden shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-800 sm:inline">
+                    Atendimento
+                  </span>
+                ) : null}
               </span>
               <button
                 type="button"
@@ -329,25 +348,29 @@ export default function AdminDashboard({
                 Meu link
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={() => handleNavigateTab('crm')}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-[#10251f] transition hover:bg-emerald-400"
-            >
-              <MessageCircle className="size-3.5" />
-              WhatsApp
-            </button>
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition ${
-                lightMode
-                  ? 'border-slate-300 text-slate-700 hover:bg-slate-50'
-                  : 'border-slate-600 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <Camera className="size-3.5" />
-              Instagram
-            </button>
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={() => handleNavigateTab('crm')}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-[#10251f] transition hover:bg-emerald-400"
+              >
+                <MessageCircle className="size-3.5" />
+                WhatsApp
+              </button>
+            ) : null}
+            {isOwner ? (
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition ${
+                  lightMode
+                    ? 'border-slate-300 text-slate-700 hover:bg-slate-50'
+                    : 'border-slate-600 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <Camera className="size-3.5" />
+                Instagram
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label="Alternar tema"
@@ -370,10 +393,18 @@ export default function AdminDashboard({
           </div>
 
           <div className="mb-4 text-center">
-            <h2 className="text-xl font-black tracking-tight">Painel Administrativo</h2>
+            <h2 className="text-xl font-black tracking-tight">
+              {isReceptionist ? 'Painel de Atendimento' : 'Painel Administrativo'}
+            </h2>
             <p className={`mt-1 text-[10px] ${lightMode ? 'text-slate-600' : 'text-slate-400'}`}>
               Bem-vindo(a),{' '}
               <strong className={lightMode ? 'text-slate-900' : 'text-white'}>{resolvedOwner}</strong>
+              {isReceptionist ? (
+                <>
+                  {' '}
+                  · <span className="font-bold text-sky-500">Atendimento</span>
+                </>
+              ) : null}
             </p>
           </div>
 
@@ -501,15 +532,21 @@ export default function AdminDashboard({
               </div>
             ) : (
               <>
-                {activeTab === 'services' && <AdminServicesTab salonId={resolvedSalonId} lightMode={lightMode} />}
+                {activeTab === 'services' && canRenderTab('services') && (
+                  <AdminServicesTab salonId={resolvedSalonId} lightMode={lightMode} />
+                )}
                 {activeTab === 'assinaturas' && canRenderTab('assinaturas') && (
                   <AdminSubscriptionsTab salonId={resolvedSalonId} lightMode={lightMode} />
                 )}
-                {activeTab === 'agenda' && <AdminAgendaTab salonId={resolvedSalonId} lightMode={lightMode} />}
-                {activeTab === 'cancelados' && (
+                {activeTab === 'agenda' && canRenderTab('agenda') && (
+                  <AdminAgendaTab salonId={resolvedSalonId} lightMode={lightMode} />
+                )}
+                {activeTab === 'cancelados' && canRenderTab('cancelados') && (
                   <AdminCancelledTab salonId={resolvedSalonId} lightMode={lightMode} />
                 )}
-                {activeTab === 'clientes' && <AdminClientsTab salonId={resolvedSalonId} lightMode={lightMode} />}
+                {activeTab === 'clientes' && canRenderTab('clientes') && (
+                  <AdminClientsTab salonId={resolvedSalonId} lightMode={lightMode} />
+                )}
                 {activeTab === 'financeiro' && canRenderTab('financeiro') && (
                   <AdminFinancialTab salonId={resolvedSalonId} lightMode={lightMode} />
                 )}
@@ -519,7 +556,7 @@ export default function AdminDashboard({
                 {activeTab === 'estoque' && canRenderTab('estoque') && (
                   <AdminStockTab salonId={resolvedSalonId} lightMode={lightMode} />
                 )}
-                {activeTab === 'fila' && (
+                {activeTab === 'fila' && canRenderTab('fila') && (
                   <AdminQueueTab
                     salonId={resolvedSalonId}
                     salonSlug={salonSlug}

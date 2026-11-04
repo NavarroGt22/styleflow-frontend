@@ -10,7 +10,7 @@ export type SessionUser = {
   id: string
   name: string
   email: string
-  role: 'OWNER' | 'PROFESSIONAL' | 'SUPER_ADMIN' | 'CUSTOMER'
+  role: 'OWNER' | 'PROFESSIONAL' | 'RECEPTIONIST' | 'SUPER_ADMIN' | 'CUSTOMER'
   salons?: SalonSession[]
   professionalProfile?: { salon?: SalonSession }
   tenant?: {
@@ -160,14 +160,17 @@ export function redirectToAdminLogin(nextPath?: string, reason?: 'session_expire
 export function userCanAccessSalon(user: SessionUser | null, salonSlug: string): boolean {
   if (!user) return false
   if (user.role === 'SUPER_ADMIN') return true
-  if (user.role === 'PROFESSIONAL') {
+  if (user.role === 'PROFESSIONAL' || user.role === 'RECEPTIONIST') {
     return user.professionalProfile?.salon?.slug === salonSlug
   }
   return Boolean(user.salons?.some((salon) => salon.slug === salonSlug))
 }
 
 export function resolveSalonForSlug(user: SessionUser, salonSlug: string) {
-  if (user.role === 'PROFESSIONAL' && user.professionalProfile?.salon?.slug === salonSlug) {
+  if (
+    (user.role === 'PROFESSIONAL' || user.role === 'RECEPTIONIST') &&
+    user.professionalProfile?.salon?.slug === salonSlug
+  ) {
     return user.professionalProfile.salon
   }
   return user.salons?.find((salon) => salon.slug === salonSlug) ?? null

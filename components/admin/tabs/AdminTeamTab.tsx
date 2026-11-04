@@ -14,7 +14,7 @@ import {
 } from '../ui/AdminUi'
 import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, Professional } from '@/lib/admin/types'
-import { createProfessional, deleteProfessional, fetchProfessionals, updateProfessional } from '@/lib/admin/api'
+import { createProfessional, deleteProfessional, fetchSalonStaff, updateProfessional } from '@/lib/admin/api'
 import { getSessionUser } from '@/lib/auth'
 
 function formatPhone(phone?: string | null) {
@@ -41,6 +41,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
     name: '',
     email: '',
     phone: '',
+    staffKind: 'BARBER' as 'BARBER' | 'RECEPTIONIST',
     commissionRate: '30',
     workStart: '09:00',
     workEnd: '18:00',
@@ -57,7 +58,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
     setLoading(true)
     setError('')
     try {
-      setTeam(await fetchProfessionals(salonId))
+      setTeam(await fetchSalonStaff(salonId))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar equipe.')
     } finally {
@@ -76,6 +77,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
       name: '',
       email: '',
       phone: '',
+      staffKind: 'BARBER',
       commissionRate: '30',
       workStart: '09:00',
       workEnd: '18:00',
@@ -88,10 +90,12 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
   function openEdit(member: Professional) {
     setEditing(member)
     setShowPassword(false)
+    const isReceptionist = member.user?.role === 'RECEPTIONIST' || member.bookable === false
     setForm({
       name: member.user?.name || '',
       email: member.user?.email || '',
       phone: member.user?.phone || '',
+      staffKind: isReceptionist ? 'RECEPTIONIST' : 'BARBER',
       commissionRate: String(member.commissionRate ?? 0),
       workStart: member.workStart || '09:00',
       workEnd: member.workEnd || '18:00',
@@ -117,7 +121,8 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
           name: form.name,
           email: form.email,
           phone: form.phone,
-          commissionRate: Number(form.commissionRate),
+          staffKind: form.staffKind,
+          commissionRate: form.staffKind === 'RECEPTIONIST' ? 0 : Number(form.commissionRate),
           workStart: form.workStart,
           workEnd: form.workEnd,
           prepMinutes: Number(form.prepMinutes) || 0,
@@ -127,10 +132,10 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
         await updateProfessional(editing.id, {
           name: form.name,
           phone: form.phone,
-          commissionRate: Number(form.commissionRate),
-          workStart: form.workStart,
-          workEnd: form.workEnd,
-          prepMinutes: Number(form.prepMinutes) || 0,
+          commissionRate: form.staffKind === 'RECEPTIONIST' ? 0 : Number(form.commissionRate),
+          workStart: form.staffKind === 'BARBER' ? form.workStart : undefined,
+          workEnd: form.staffKind === 'BARBER' ? form.workEnd : undefined,
+          prepMinutes: form.staffKind === 'RECEPTIONIST' ? 0 : Number(form.prepMinutes) || 0,
           password: form.password || undefined,
         })
       }
@@ -173,7 +178,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
         <div>
           <h3 className={`text-base font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>Equipe</h3>
           <p className={`text-sm ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-            Gerencie barbeiros, comissões e status.
+            Barbeiros e atendimento. Atendimento não aparece no agendamento do cliente.
           </p>
         </div>
         <AdminButton onClick={openCreate}>
@@ -198,6 +203,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
             <thead className={lightMode ? 'bg-slate-50 text-slate-500' : 'bg-[#142035] text-slate-400'}>
               <tr className="text-xs font-semibold uppercase tracking-wide">
                 <th className="px-4 py-3">Nome</th>
+                <th className="px-4 py-3">Função</th>
                 <th className="px-4 py-3">Contato</th>
                 <th className="px-4 py-3">Comissão (%)</th>
                 <th className="px-4 py-3">Status</th>
@@ -207,6 +213,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
             <tbody>
               {team.map((member) => {
                 const isOwner = member.userId === resolvedOwnerId || member.user?.id === resolvedOwnerId
+                const isReceptionist = member.user?.role === 'RECEPTIONIST' || member.bookable === false
                 return (
                   <tr
                     key={member.id}
@@ -229,13 +236,24 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
                       </p>
                     </td>
                     <td className="px-4 py-4 align-top">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          isReceptionist
+                            ? 'bg-sky-100 text-sky-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        {isReceptionist ? 'Atendimento' : 'Barbeiro'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 align-top">
                       <p className={lightMode ? 'text-slate-800' : 'text-slate-200'}>{member.user?.email || '—'}</p>
                       <p className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                         {formatPhone(member.user?.phone)}
                       </p>
                     </td>
                     <td className="px-4 py-4 align-top font-semibold text-indigo-600">
-                      {isOwner || member.commissionRate === 0
+                      {isOwner || isReceptionist || member.commissionRate === 0
                         ? '0% (lucro da casa)'
                         : `${member.commissionRate}%`}
                     </td>
@@ -271,7 +289,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
 
       {modal ? (
         <AdminModal
-          title={modal === 'create' ? 'Novo profissional' : 'Editar profissional'}
+          title={modal === 'create' ? 'Novo membro' : 'Editar membro'}
           onClose={() => setModal(null)}
           lightMode={lightMode}
         >
@@ -284,6 +302,38 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className={inputClass(lightMode)}
               />
+            </div>
+            <div>
+              <label className={labelClass(lightMode)}>Função</label>
+              {modal === 'create' ? (
+                <select
+                  value={form.staffKind}
+                  onChange={(e) => {
+                    const staffKind = e.target.value as 'BARBER' | 'RECEPTIONIST'
+                    setForm({
+                      ...form,
+                      staffKind,
+                      commissionRate: staffKind === 'RECEPTIONIST' ? '0' : form.commissionRate || '30',
+                      prepMinutes: staffKind === 'RECEPTIONIST' ? '0' : form.prepMinutes,
+                    })
+                  }}
+                  className={inputClass(lightMode)}
+                >
+                  <option value="BARBER">Barbeiro</option>
+                  <option value="RECEPTIONIST">Atendimento (só agenda e fila)</option>
+                </select>
+              ) : (
+                <input
+                  readOnly
+                  value={form.staffKind === 'RECEPTIONIST' ? 'Atendimento (só agenda e fila)' : 'Barbeiro'}
+                  className={`${inputClass(lightMode)} opacity-80`}
+                />
+              )}
+              <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                {form.staffKind === 'RECEPTIONIST'
+                  ? 'Acessa agenda e fila do salão inteiro, registra pagamento e conclui horários. Não aparece no booking do cliente e não tem comissão nem serviços bookable.'
+                  : 'Aparece no agendamento do cliente, recebe comissão e oferece serviços.'}
+              </p>
             </div>
             {modal === 'create' ? (
               <div>
@@ -305,52 +355,66 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
                 className={inputClass(lightMode)}
               />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            {form.staffKind === 'BARBER' ? (
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className={labelClass(lightMode)}>Comissão %</label>
+                  <input
+                    required
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={form.commissionRate}
+                    onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
+                    className={inputClass(lightMode)}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass(lightMode)}>Início</label>
+                  <input
+                    type="time"
+                    value={form.workStart}
+                    onChange={(e) => setForm({ ...form, workStart: e.target.value })}
+                    className={inputClass(lightMode)}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass(lightMode)}>Fim</label>
+                  <input
+                    type="time"
+                    value={form.workEnd}
+                    onChange={(e) => setForm({ ...form, workEnd: e.target.value })}
+                    className={inputClass(lightMode)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div
+                className={`rounded-xl border px-3 py-2.5 text-xs ${
+                  lightMode
+                    ? 'border-sky-200 bg-sky-50 text-sky-900'
+                    : 'border-sky-500/30 bg-sky-500/10 text-sky-100'
+                }`}
+              >
+                Sem comissão e sem serviços bookable. O cliente não agenda com este perfil.
+              </div>
+            )}
+            {form.staffKind === 'BARBER' ? (
               <div>
-                <label className={labelClass(lightMode)}>Comissão %</label>
+                <label className={labelClass(lightMode)}>Tempo de preparação após o atendimento</label>
                 <input
-                  required
                   type="number"
                   min="0"
-                  max="100"
-                  value={form.commissionRate}
-                  onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
+                  max="240"
+                  value={form.prepMinutes}
+                  onChange={(e) => setForm({ ...form, prepMinutes: e.target.value })}
                   className={inputClass(lightMode)}
                 />
+                <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Minutos extras depois do serviço. Zero não acrescenta bloqueio.
+                </p>
               </div>
-              <div>
-                <label className={labelClass(lightMode)}>Início</label>
-                <input
-                  type="time"
-                  value={form.workStart}
-                  onChange={(e) => setForm({ ...form, workStart: e.target.value })}
-                  className={inputClass(lightMode)}
-                />
-              </div>
-              <div>
-                <label className={labelClass(lightMode)}>Fim</label>
-                <input
-                  type="time"
-                  value={form.workEnd}
-                  onChange={(e) => setForm({ ...form, workEnd: e.target.value })}
-                  className={inputClass(lightMode)}
-                />
-              </div>
-            </div>
-            <div>
-              <label className={labelClass(lightMode)}>Tempo de preparação após o atendimento</label>
-              <input
-                type="number"
-                min="0"
-                max="240"
-                value={form.prepMinutes}
-                onChange={(e) => setForm({ ...form, prepMinutes: e.target.value })}
-                className={inputClass(lightMode)}
-              />
-              <p className={`mt-1 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Minutos extras depois do serviço. Zero não acrescenta bloqueio.
-              </p>
-            </div>
+            ) : null}
             <div>
               <label className={labelClass(lightMode)}>
                 {modal === 'create' ? 'Senha do funcionário' : 'Nova senha (opcional)'}

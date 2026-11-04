@@ -1,20 +1,25 @@
 'use client'
 
-import { CheckCircle2, Clock, Lock, Plus, Scissors, User } from 'lucide-react'
+import { CheckCircle2, Clock, Lock, Plus, Scissors, User, UserPlus } from 'lucide-react'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import AdminCheckoutModal from '../AdminCheckoutModal'
 import QueuePermanentQrCard from '../QueuePermanentQrCard'
 import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminModal, inputClass, labelClass } from '../ui/AdminUi'
 import { useConfirm } from '../ui/useConfirm'
-import type { AdminTabProps, Appointment, Professional, SalonSettings } from '@/lib/admin/types'
+import type { AdminTabProps, Appointment, Professional, SalonSettings, Service } from '@/lib/admin/types'
 import {
   blockAppointment,
+  createWalkInAppointment,
   fetchAppointments,
   fetchProfessionals,
   fetchSalon,
+  fetchServices,
   updateAppointmentStatus,
 } from '@/lib/admin/api'
 import { resolveClientLink } from '@/lib/admin/platform-urls'
+import { getSessionUser } from '@/lib/auth'
+
+type WalkInPayment = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'
 
 function formatPhone(phone?: string) {
   if (!phone) return ''
@@ -217,10 +222,18 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   const [items, setItems] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [filter, setFilter] = useState<'PENDING' | 'COMPLETED'>('PENDING')
   const [checkoutApt, setCheckoutApt] = useState<Appointment | null>(null)
   const [salon, setSalon] = useState<SalonSettings | null>(null)
   const { confirm, confirmDialog } = useConfirm(lightMode)
+  const sessionUser = getSessionUser()
+  /** Dono/admin/atendimento: visão do salão (escolhe barbeiro no avulso / bloqueio). */
+  const isSalonOperator =
+    sessionUser?.role === 'OWNER' ||
+    sessionUser?.role === 'SUPER_ADMIN' ||
+    sessionUser?.role === 'RECEPTIONIST'
+  const isOwner = isSalonOperator
 
   const bookingUrl = useMemo(() => {
     const slug = salon?.slug
@@ -283,6 +296,21 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
     endTime: '',
   })
 
+  const [walkInOpen, setWalkInOpen] = useState(false)
+  const [walkInSaving, setWalkInSaving] = useState(false)
+  const [services, setServices] = useState<Service[]>([])
+  const [walkInForm, setWalkInForm] = useState<{
+    name: string
+    serviceId: string
+    paymentMethod: WalkInPayment
+    professionalId: string
+  }>({
+    name: '',
+    serviceId: '',
+    paymentMethod: 'CASH',
+    professionalId: '',
+  })
+
   const localToday = useMemo(() => {
     const d = new Date()
     const y = d.getFullYear()
@@ -293,6 +321,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
 
   async function openBlockModal() {
     setError('')
+    setSuccess('')
     setBlockOpen(true)
     try {
       if (!salonId) return
@@ -305,6 +334,81 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
       }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar profissionais.')
+    }
+  }
+
+  async function openWalkInModal() {
+    setError('')
+    setSuccess('')
+    setWalkInOpen(true)
+    if (!salonId) return
+    try {
+      const [svcList, profList] = await Promise.all([
+        services.length ? Promise.resolve(services) : fetchServices(salonId),
+        isOwner
+          ? professionals.length
+            ? Promise.resolve(professionals)
+            : fetchProfessionals(salonId)
+          : Promise.resolve(professionals),
+      ])
+      const activeServices = svcList.filter((s) => s.active)
+      if (!services.length) setServices(svcList)
+      if (isOwner && !professionals.length) setProfessionals(profList)
+      setWalkInForm((prev) => ({
+        ...prev,
+        name: '',
+        serviceId: prev.serviceId || activeServices[0]?.id || '',
+        paymentMethod: 'CASH',
+        professionalId: isOwner ? prev.professionalId || profList[0]?.id || '' : '',
+      }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao abrir cliente avulso.')
+    }
+  }
+
+  async function handleWalkInSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (!salonId) return
+
+    const name = walkInForm.name.trim()
+    if (name.length < 2) {
+      setError('Informe o nome do cliente.')
+      return
+    }
+    if (!walkInForm.serviceId) {
+      setError('Selecione o serviço.')
+      return
+    }
+    if (isOwner && !walkInForm.professionalId) {
+      setError('Selecione o profissional que atendeu.')
+      return
+    }
+
+    setWalkInSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      await createWalkInAppointment({
+        salonId,
+        serviceId: walkInForm.serviceId,
+        name,
+        paymentMethod: walkInForm.paymentMethod,
+        ...(isOwner ? { professionalId: walkInForm.professionalId } : {}),
+      })
+      setWalkInOpen(false)
+      setWalkInForm({
+        name: '',
+        serviceId: '',
+        paymentMethod: 'CASH',
+        professionalId: isOwner ? professionals[0]?.id || '' : '',
+      })
+      setFilter('COMPLETED')
+      setSuccess('Cliente avulso registrado.')
+      await load({ silent: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao registrar cliente avulso.')
+    } finally {
+      setWalkInSaving(false)
     }
   }
 
@@ -429,6 +533,17 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
           >
             <Plus className="size-4" /> Bloquear Horário
           </button>
+          <button
+            type="button"
+            onClick={() => void openWalkInModal()}
+            className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-bold shadow-sm sm:min-h-0 sm:w-auto sm:py-2 ${
+              lightMode
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+            }`}
+          >
+            <UserPlus className="size-4" /> Cliente avulso
+          </button>
           <div
             className={`grid grid-cols-2 gap-1 rounded-xl border p-1.5 ${
               lightMode ? 'border-gray-200 bg-gray-100' : 'border-slate-700 bg-slate-800'
@@ -483,6 +598,9 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
         <div className="mb-4">
           <AdminError message={error} />
         </div>
+      ) : null}
+      {success ? (
+        <p className="mb-4 text-sm font-semibold text-emerald-500">{success}</p>
       ) : null}
 
       {loading ? (
@@ -754,6 +872,107 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
               </AdminButton>
               <AdminButton type="submit" disabled={blocking}>
                 {blocking ? 'Bloqueando...' : 'Confirmar Bloqueio'}
+              </AdminButton>
+            </div>
+          </form>
+        </AdminModal>
+      ) : null}
+
+      {walkInOpen ? (
+        <AdminModal
+          title="Cliente avulso"
+          onClose={() => {
+            if (!walkInSaving) setWalkInOpen(false)
+          }}
+          lightMode={lightMode}
+        >
+          <form onSubmit={handleWalkInSubmit} className="space-y-4">
+            <p className={`text-sm ${muted}`}>
+              Registra um atendimento já feito agora — sem horário marcado e sem telefone.
+            </p>
+            <div>
+              <label className={labelClass(lightMode)}>Nome do cliente</label>
+              <input
+                required
+                minLength={2}
+                maxLength={80}
+                value={walkInForm.name}
+                onChange={(e) => setWalkInForm({ ...walkInForm, name: e.target.value })}
+                placeholder="Ex.: João"
+                className={inputClass(lightMode)}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className={labelClass(lightMode)}>Serviço</label>
+              <select
+                required
+                value={walkInForm.serviceId}
+                onChange={(e) => setWalkInForm({ ...walkInForm, serviceId: e.target.value })}
+                className={inputClass(lightMode)}
+              >
+                <option value="" disabled>
+                  Selecione o serviço
+                </option>
+                {services
+                  .filter((s) => s.active)
+                  .map((svc) => (
+                    <option key={svc.id} value={svc.id}>
+                      {svc.name}
+                      {svc.price != null ? ` · R$ ${Number(svc.price).toFixed(2).replace('.', ',')}` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass(lightMode)}>Forma de pagamento</label>
+              <select
+                value={walkInForm.paymentMethod}
+                onChange={(e) =>
+                  setWalkInForm({
+                    ...walkInForm,
+                    paymentMethod: e.target.value as WalkInPayment,
+                  })
+                }
+                className={inputClass(lightMode)}
+              >
+                <option value="CASH">Dinheiro</option>
+                <option value="PIX">PIX</option>
+                <option value="CREDIT_CARD">Cartão crédito</option>
+                <option value="DEBIT_CARD">Cartão débito</option>
+              </select>
+            </div>
+            {isOwner ? (
+              <div>
+                <label className={labelClass(lightMode)}>Profissional que atendeu</label>
+                <select
+                  required
+                  value={walkInForm.professionalId}
+                  onChange={(e) => setWalkInForm({ ...walkInForm, professionalId: e.target.value })}
+                  className={inputClass(lightMode)}
+                >
+                  <option value="" disabled>
+                    Selecione o profissional
+                  </option>
+                  {professionals.map((prof) => (
+                    <option key={prof.id} value={prof.id}>
+                      {prof.user?.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <AdminButton
+                type="button"
+                variant="ghost"
+                disabled={walkInSaving}
+                onClick={() => setWalkInOpen(false)}
+              >
+                Cancelar
+              </AdminButton>
+              <AdminButton type="submit" disabled={walkInSaving}>
+                {walkInSaving ? 'Salvando...' : 'Registrar'}
               </AdminButton>
             </div>
           </form>

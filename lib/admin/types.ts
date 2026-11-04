@@ -106,6 +106,8 @@ export type Professional = {
   prepMinutes?: number
   queueMode?: boolean
   isActive?: boolean
+  /** false = Atendimento (não aparece no booking). */
+  bookable?: boolean
   user?: { id?: string; name?: string; email?: string; phone?: string | null; role?: string }
 }
 

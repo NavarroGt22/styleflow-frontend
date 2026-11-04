@@ -201,6 +201,21 @@ export async function blockAppointment(payload: {
   await parseJson(response)
 }
 
+/** Corte avulso presencial: COMPLETED + financeiro na hora (sem telefone / fila / slot). */
+export async function createWalkInAppointment(payload: {
+  salonId: string
+  serviceId: string
+  name: string
+  paymentMethod?: 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'
+  professionalId?: string
+}): Promise<Appointment> {
+  const response = await authFetch('/appointments/walk-in', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return parseJson(response)
+}
+
 export async function completeAppointment(
   id: string,
   finalPrice: number,
@@ -265,8 +280,15 @@ export async function closeFinancialRegister(salonId: string): Promise<void> {
   await parseJson(response)
 }
 
+/** Barbeiros bookable (agenda / booking). */
 export async function fetchProfessionals(salonId: string): Promise<Professional[]> {
   const response = await authFetch(`/professionals/${salonId}`)
+  return parseJson(response)
+}
+
+/** Equipe completa incluindo Atendimento. */
+export async function fetchSalonStaff(salonId: string): Promise<Professional[]> {
+  const response = await authFetch(`/professionals/salon/${salonId}/staff`)
   return parseJson(response)
 }
 
@@ -275,7 +297,8 @@ export async function createProfessional(payload: {
   name: string
   email: string
   phone?: string
-  commissionRate: number
+  staffKind?: 'BARBER' | 'RECEPTIONIST'
+  commissionRate?: number
   workStart?: string
   workEnd?: string
   prepMinutes?: number
@@ -285,6 +308,7 @@ export async function createProfessional(payload: {
     method: 'POST',
     body: JSON.stringify({
       ...payload,
+      staffKind: payload.staffKind || 'BARBER',
       workStart: payload.workStart || '09:00',
       workEnd: payload.workEnd || '18:00',
     }),

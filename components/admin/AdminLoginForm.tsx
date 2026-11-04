@@ -263,7 +263,7 @@ export default function AdminLoginForm() {
       }
 
       if (user.role === 'CUSTOMER') {
-        throw new Error('Este portal é exclusivo para donos e profissionais.')
+        throw new Error('Este portal é exclusivo para donos, barbeiros e atendimento.')
       }
 
       clearLoginLockout(email)

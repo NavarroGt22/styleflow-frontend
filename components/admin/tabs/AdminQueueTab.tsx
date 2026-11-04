@@ -28,6 +28,7 @@ import {
   skipQueueEntry,
   startNextInQueue,
 } from '@/lib/admin/api'
+import { getSessionUser } from '@/lib/auth'
 
 function localToday() {
   return new Date().toISOString().slice(0, 10)
@@ -65,6 +66,7 @@ function entryDuration(entry: QueueEntry) {
 
 export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, onNavigateTab }: AdminTabProps) {
   const { confirm, confirmDialog } = useConfirm(lightMode)
+  const isReceptionist = getSessionUser()?.role === 'RECEPTIONIST'
   const [salon, setSalon] = useState<{
     name?: string
     queueMode?: boolean
@@ -308,6 +310,11 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
                 </option>
               ))}
             </select>
+            {isReceptionist ? (
+              <p className={`mt-1.5 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Atendimento: você opera a fila de qualquer barbeiro do salão.
+              </p>
+            ) : null}
           </div>
           {session ? (
             <AdminButton variant="success" onClick={() => setWalkInOpen(true)} className="h-11">
