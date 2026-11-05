@@ -199,7 +199,15 @@ export default function AdminCancelledTab({ salonId, lightMode = false }: AdminT
         <div className="space-y-3">
           {items.map((apt) => {
             const origin = originOf(apt.status)
-            const price = apt.quotedPrice ?? apt.service?.price ?? 0
+            const serviceLabel = apt.items?.length
+              ? apt.items.map((row) => row.name).filter(Boolean).join(' + ')
+              : apt.service?.name || 'Serviço removido'
+            const price =
+              apt.quotedPrice ??
+              (apt.items?.length
+                ? apt.items.reduce((sum, row) => sum + Number(row.unitPrice || 0), 0)
+                : apt.service?.price) ??
+              0
             return (
               <div key={apt.id} className={`rounded-xl border p-4 ${cardBg}`}>
                 <div className="flex items-start justify-between gap-3">
@@ -209,7 +217,7 @@ export default function AdminCancelledTab({ salonId, lightMode = false }: AdminT
                     </p>
                     <p className={`mt-1 flex items-center gap-1.5 text-xs ${muted}`}>
                       <Scissors className="size-3.5" />
-                      {apt.service?.name || 'Serviço removido'}
+                      {serviceLabel}
                       {apt.professional?.user?.name ? ` · ${apt.professional.user.name}` : ''}
                     </p>
                     {apt.customer?.user?.phone ? (

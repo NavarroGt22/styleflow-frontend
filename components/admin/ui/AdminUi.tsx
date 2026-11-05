@@ -191,13 +191,24 @@ export function AdminModal({
   lightMode?: boolean
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={onClose}
+    >
       <div
-        className={`w-full max-w-lg rounded-2xl border p-5 shadow-2xl ${
+        className={`flex max-h-[min(92dvh,920px)] w-full max-w-lg flex-col rounded-t-2xl border shadow-2xl sm:rounded-2xl ${
           lightMode ? 'border-slate-200 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
         }`}
+        onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div
+          className={`sticky top-0 z-10 flex shrink-0 items-center justify-between border-b px-5 py-4 ${
+            lightMode ? 'border-slate-100 bg-white' : 'border-slate-700 bg-[#1d2a3e]'
+          }`}
+        >
           <h3 className={`text-lg font-bold ${lightMode ? 'text-slate-900' : 'text-white'}`}>{title}</h3>
           <button
             type="button"
@@ -208,7 +219,9 @@ export function AdminModal({
             ✕
           </button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {children}
+        </div>
       </div>
     </div>
   )

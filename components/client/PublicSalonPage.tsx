@@ -29,10 +29,22 @@ import {
   writePendingPaymentStorage,
 } from '@/lib/client/pending-payment-storage';
 import { useConfirm } from '@/components/admin/ui/useConfirm';
+import {
+  compositionSelectionIssue,
+  isPrimaryBookableOption,
+  isUnofferableAddon,
+  type BookingServiceOption,
+} from '@/lib/client/appointment-items';
 
 type ClientPaymentMode = 'STORE' | 'PIX' | 'CARD';
 
 type OfferSlot = { time: string; available: boolean; startTime?: string; endTime?: string };
+
+type AvailabilityQuote = {
+  totalPrice: number | null
+  durationMinutes: number | null
+  error: string | null
+}
 
 function localDateTimeParts(iso: string): { date: string; time: string } {
   const d = new Date(iso)
@@ -90,9 +102,26 @@ export default function PublicSalonPage() {
   // States para Agendamento Comercial
   const [services, setServices] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
-  const [selectedService, setSelectedService] = useState<any>(null);
+  const [selectedServices, setSelectedServices] = useState<BookingServiceOption[]>([]);
+  const selectedService = selectedServices[0] ?? null;
+  const selectedServiceIds = useMemo(
+    () => selectedServices.map((item) => String(item.id)).filter(Boolean),
+    [selectedServices],
+  );
+  const [compatibleAddons, setCompatibleAddons] = useState<BookingServiceOption[]>([]);
+  const [availabilityQuote, setAvailabilityQuote] = useState<AvailabilityQuote>({
+    totalPrice: null,
+    durationMinutes: null,
+    error: null,
+  });
   const [plansOpen, setPlansOpen] = useState(false);
-  const [subscriptionQuote, setSubscriptionQuote] = useState<{ covered?: boolean; reason?: string; subscriptionName?: string } | null>(null);
+  const [subscriptionQuote, setSubscriptionQuote] = useState<{
+    covered?: boolean;
+    partial?: boolean;
+    reason?: string;
+    subscriptionName?: string;
+    items?: Array<{ serviceId: string; covered?: boolean; reason?: string }>;
+  } | null>(null);
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [subscriptionTick, setSubscriptionTick] = useState(0);
   const [mySubscription, setMySubscription] = useState<{
@@ -189,7 +218,8 @@ export default function PublicSalonPage() {
     sessionStorage.removeItem('client_refreshToken');
     setCurrentUser(null);
     setLoyalty(null);
-    setSelectedService(null);
+    setSelectedServices([]);
+    setCompatibleAddons([]);
     setSelectedProfessional(null);
     setSelectedDate('');
     setSelectedTime('');
@@ -198,28 +228,50 @@ export default function PublicSalonPage() {
     router.replace(loginPath);
   };
 
+  const compositionIssue = useMemo(
+    () => compositionSelectionIssue(selectedServices),
+    [selectedServices],
+  );
+
+  // Remove da seleção serviços que não têm como ser contratados (adicional sem liberação).
+  useEffect(() => {
+    if (!selectedServices.some((item) => isUnofferableAddon(item))) return;
+    setSelectedServices((current) => current.filter((item) => !isUnofferableAddon(item)));
+  }, [selectedServices]);
+
   const getServiceDisplayInfo = () => {
-    if (!selectedService) return null;
-    if (!selectedProfessional || !selectedProfessional.services) {
-      return {
-        name: selectedService.name,
-        price: selectedService.price,
-        duration: selectedService.duration
-      };
-    }
-    const custom = selectedProfessional.services.find((ps: any) => ps.serviceId === selectedService.id);
-    if (custom && custom.isActive) {
-      return {
-        name: custom.customName || selectedService.name,
-        price: (custom.customPrice !== null && custom.customPrice !== undefined) ? custom.customPrice : selectedService.price,
-        duration: (custom.customDuration !== null && custom.customDuration !== undefined) ? custom.customDuration : selectedService.duration
-      };
-    }
+    if (!selectedServices.length) return null;
+    const catalogPrice = selectedServices.reduce((sum, item) => sum + Number(item.price || 0), 0);
+    const catalogDuration = selectedServices.reduce((sum, item) => sum + Number(item.duration || 0), 0);
     return {
-      name: selectedService.name,
-      price: selectedService.price,
-      duration: selectedService.duration
+      name: selectedServices.map((item) => item.name).join(' + '),
+      // Prefere totais oficiais do availability; catálogo só como preview imediato.
+      price: availabilityQuote.totalPrice != null ? availabilityQuote.totalPrice : catalogPrice,
+      duration:
+        availabilityQuote.durationMinutes != null
+          ? availabilityQuote.durationMinutes
+          : catalogDuration,
     };
+  };
+
+  const toggleSelectedService = (service: BookingServiceOption) => {
+    setSelectedTime('');
+    setPaymentMode(null);
+    setSelectedServices((current) => {
+      const removing = current.some((item) => item.id === service.id);
+      const next = removing
+        ? current.filter((item) => item.id !== service.id)
+        : current.some((item) => item.id === service.id)
+          ? current
+          : [...current, service];
+      const issue = compositionSelectionIssue(next);
+      if (issue && removing) {
+        setBookingError(issue);
+      } else if (!issue) {
+        setBookingError(null);
+      }
+      return next;
+    });
   };
 
   const displayService = getServiceDisplayInfo();
@@ -389,8 +441,18 @@ export default function PublicSalonPage() {
         duration: ps.customDuration != null ? ps.customDuration : ps.service.duration,
         isActive: true,
         serviceId: ps.serviceId,
+        standaloneAllowed: ps.service.standaloneAllowed !== false,
+        addonAllowed: ps.service.addonAllowed === true,
+        isDefaultCutAddon: ps.service.isDefaultCutAddon === true,
+        comboItemServiceIds: Array.isArray(ps.service.comboItemServiceIds)
+          ? ps.service.comboItemServiceIds.map(String)
+          : [],
+        addonHostServiceIds: Array.isArray(ps.service.addonHostServiceIds)
+          ? ps.service.addonHostServiceIds.map(String)
+          : [],
       }))
-      .filter((service: { id: string }) => !blockedServiceIds.includes(service.id));
+      .filter((service: BookingServiceOption) => !blockedServiceIds.includes(service.id))
+      .filter((service: BookingServiceOption) => !isUnofferableAddon(service));
     if (linked.length > 0) return linked;
 
     // Fallback: barbeiro dono sem vínculo ainda — usa catálogo público do salão.
@@ -404,11 +466,26 @@ export default function PublicSalonPage() {
           duration: s.duration,
           isActive: true,
           serviceId: s.id,
+          standaloneAllowed: s.standaloneAllowed !== false,
+          addonAllowed: s.addonAllowed === true,
+          isDefaultCutAddon: s.isDefaultCutAddon === true,
+          comboItemServiceIds: Array.isArray(s.comboItemServiceIds)
+            ? s.comboItemServiceIds.map(String)
+            : [],
+          addonHostServiceIds: Array.isArray(s.addonHostServiceIds)
+            ? s.addonHostServiceIds.map(String)
+            : [],
         }))
-        .filter((service: { id: string }) => !blockedServiceIds.includes(service.id));
+        .filter((service: BookingServiceOption) => !blockedServiceIds.includes(service.id))
+        .filter((service: BookingServiceOption) => !isUnofferableAddon(service));
     }
     return [];
   }, [selectedProfessional, services, blockedServiceIds]);
+
+  const primaryBookingServices = useMemo(
+    () => bookingServicesForProfessional.filter((s: BookingServiceOption) => isPrimaryBookableOption(s)),
+    [bookingServicesForProfessional],
+  );
 
   // Cada barbeiro tem o próprio expediente e o próprio calendário no app.
   const bookingWeekdaysForProfessional = useMemo<number[]>(() => {
@@ -476,8 +553,14 @@ export default function PublicSalonPage() {
 
   // Horários calculados no backend (duração + preparação + grade)
   useEffect(() => {
-    if (!data?.salon?.id || !selectedProfessional || !selectedDate || !selectedService?.id) {
+    if (!data?.salon?.id || !selectedProfessional || !selectedDate || !selectedServiceIds.length) {
       setTimeSlots([]);
+      setAvailabilityQuote({ totalPrice: null, durationMinutes: null, error: null });
+      return;
+    }
+    if (compositionIssue) {
+      setTimeSlots([]);
+      setAvailabilityQuote({ totalPrice: null, durationMinutes: null, error: compositionIssue });
       return;
     }
     let cancelled = false;
@@ -488,15 +571,40 @@ export default function PublicSalonPage() {
           salonId: data.salon.id,
           professionalId: selectedProfessional.id,
           date: selectedDate,
-          serviceId: selectedService.id,
+          serviceIds: selectedServiceIds.join(','),
         });
         const res = await fetch(apiUrl(`/appointments/availability?${params.toString()}`));
-        if (!res.ok) throw new Error('availability');
-        const json = await res.json();
-        if (!cancelled) setTimeSlots(Array.isArray(json.slots) ? json.slots : []);
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const message =
+            typeof json?.error === 'string'
+              ? json.error
+              : 'Seleção de serviços inválida para este horário.';
+          if (!cancelled) {
+            setTimeSlots([]);
+            setAvailabilityQuote({ totalPrice: null, durationMinutes: null, error: message });
+            setBookingError(message);
+          }
+          return;
+        }
+        if (!cancelled) {
+          setTimeSlots(Array.isArray(json.slots) ? json.slots : []);
+          setAvailabilityQuote({
+            totalPrice: json.totalPrice != null ? Number(json.totalPrice) : null,
+            durationMinutes: json.durationMinutes != null ? Number(json.durationMinutes) : null,
+            error: null,
+          });
+        }
       } catch (err) {
         console.error('Erro ao buscar horários:', err);
-        if (!cancelled) setTimeSlots([]);
+        if (!cancelled) {
+          setTimeSlots([]);
+          setAvailabilityQuote({
+            totalPrice: null,
+            durationMinutes: null,
+            error: 'Não foi possível carregar os horários.',
+          });
+        }
       } finally {
         if (!cancelled) setLoadingSlots(false);
       }
@@ -505,11 +613,62 @@ export default function PublicSalonPage() {
     return () => {
       cancelled = true;
     };
-  }, [data?.salon?.id, selectedProfessional?.id, selectedDate, selectedService?.id, slotsRefreshKey]);
+  }, [
+    data?.salon?.id,
+    selectedProfessional?.id,
+    selectedDate,
+    selectedServiceIds.join(','),
+    slotsRefreshKey,
+    compositionIssue,
+  ]);
+
+  useEffect(() => {
+    if (!data?.salon?.id || !selectedProfessional?.id || !selectedServiceIds.length || compositionIssue) {
+      setCompatibleAddons([]);
+      return;
+    }
+    let cancelled = false;
+    const params = new URLSearchParams({
+      salonId: data.salon.id,
+      professionalId: selectedProfessional.id,
+      serviceIds: selectedServiceIds.join(','),
+    });
+    fetch(apiUrl(`/appointments/compatible-addons?${params.toString()}`))
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        const addons = Array.isArray(json.addons) ? json.addons : [];
+        setCompatibleAddons(
+          addons
+            .map((addon: any) => ({
+              id: String(addon.id),
+              name: addon.name,
+              price: Number(addon.price || 0),
+              duration: Number(addon.duration || 0),
+              standaloneAllowed: addon.standaloneAllowed !== false,
+              addonAllowed: addon.addonAllowed === true,
+              isDefaultCutAddon: addon.isDefaultCutAddon === true,
+              comboItemServiceIds: Array.isArray(addon.comboItemServiceIds)
+                ? addon.comboItemServiceIds.map(String)
+                : [],
+              addonHostServiceIds: Array.isArray(addon.addonHostServiceIds)
+                ? addon.addonHostServiceIds.map(String)
+                : [],
+            }))
+            .filter((addon: BookingServiceOption) => !isUnofferableAddon(addon)),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCompatibleAddons([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.salon?.id, selectedProfessional?.id, selectedServiceIds.join(','), compositionIssue]);
 
   useEffect(() => {
     const token = sessionStorage.getItem('client_token');
-    if (!token || !data?.salon?.id || !selectedProfessional?.id || !selectedService?.id || !selectedDate || !selectedTime) {
+    if (!token || !data?.salon?.id || !selectedProfessional?.id || !selectedServiceIds.length || !selectedDate || !selectedTime) {
       setSubscriptionQuote(null);
       setCoverageLoading(false);
       return;
@@ -520,7 +679,7 @@ export default function PublicSalonPage() {
     setCoverageLoading(true);
     const params = new URLSearchParams({
       salonId: data.salon.id,
-      serviceId: selectedService.id,
+      serviceIds: selectedServiceIds.join(','),
       professionalId: selectedProfessional.id,
       startTime,
     });
@@ -542,7 +701,7 @@ export default function PublicSalonPage() {
     return () => {
       cancelled = true;
     };
-  }, [data?.salon?.id, selectedProfessional?.id, selectedService?.id, selectedDate, selectedTime, timeSlots]);
+  }, [data?.salon?.id, selectedProfessional?.id, selectedServiceIds.join(','), selectedDate, selectedTime, timeSlots]);
 
   const quotedBookingPrice = (service: { price: number } | null | undefined) =>
     appliedCoupon?.quotedPrice ?? service?.price ?? 0;
@@ -562,7 +721,8 @@ export default function PublicSalonPage() {
   };
 
   const clearBookingForm = () => {
-    setSelectedService(null);
+    setSelectedServices([]);
+    setCompatibleAddons([]);
     setSelectedProfessional(null);
     setSelectedDate('');
     setSelectedTime('');
@@ -896,11 +1056,20 @@ export default function PublicSalonPage() {
   // Agendar horário (loja) ou iniciar pagamento online (Pix/cartão)
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedService || !selectedProfessional || !selectedDate || !selectedTime) {
-      setBookingError('Por favor, preencha todos os campos do agendamento.');
+    if (!selectedServices.length || !selectedProfessional || !selectedDate || !selectedTime) {
+      setBookingError('Escolha pelo menos um serviço e complete o agendamento.');
+      return;
+    }
+    if (compositionIssue) {
+      setBookingError(compositionIssue);
+      return;
+    }
+    if (availabilityQuote.error) {
+      setBookingError(availabilityQuote.error);
       return;
     }
     const coveredNow = Boolean(subscriptionQuote?.covered);
+    const useSubscription = coveredNow || Boolean(subscriptionQuote?.partial);
     if (!coveredNow && !paymentMode) {
       setBookingError('Escolha como deseja pagar: Pix, cartão ou na loja.');
       return;
@@ -922,24 +1091,30 @@ export default function PublicSalonPage() {
     const start = chosen?.startTime
       ? new Date(chosen.startTime)
       : new Date(`${selectedDate}T${selectedTime}:00`);
-    const custom = selectedProfessional?.services?.find((ps: any) => ps.serviceId === selectedService.id);
-    const duration = (custom && custom.customDuration !== null && custom.customDuration !== undefined)
-      ? custom.customDuration
-      : selectedService.duration;
+    const duration =
+      availabilityQuote.durationMinutes != null
+        ? availabilityQuote.durationMinutes
+        : selectedServices.reduce((sum, item) => sum + Number(item.duration || 0), 0);
     const prep = Number(selectedProfessional?.prepMinutes) || 0;
     const end = chosen?.endTime
       ? new Date(chosen.endTime)
       : new Date(start.getTime() + (duration + prep) * 60000);
-    const price = quotedBookingPrice(selectedService);
+    const catalogTotal =
+      availabilityQuote.totalPrice != null
+        ? availabilityQuote.totalPrice
+        : selectedServices.reduce((sum, item) => sum + Number(item.price || 0), 0);
+    const price = appliedCoupon?.quotedPrice ?? catalogTotal;
 
+    // Fonte da verdade de preço/duração é o backend; enviamos só IDs + janela do slot.
     const payload: Record<string, unknown> = {
       salonId: data.salon.id,
       professionalId: selectedProfessional.id,
-      serviceId: selectedService.id,
+      serviceIds: selectedServiceIds,
+      serviceId: selectedServiceIds[0],
       startTime: start.toISOString(),
       endTime: end.toISOString(),
       paymentMode: coveredNow ? 'STORE' : paymentMode,
-      useSubscription: coveredNow,
+      useSubscription,
     };
     if (appliedCoupon?.code && !coveredNow) {
       payload.couponCode = appliedCoupon.code;
@@ -973,9 +1148,10 @@ export default function PublicSalonPage() {
 
       // Pagar na loja: horário marcado na hora
       if (coveredNow || paymentMode === 'STORE') {
+        const successName = selectedServices.map((item) => item.name).join(' + ');
         setBookingSuccess({
           appointment,
-          service: { ...selectedService, price: coveredNow ? 0 : price },
+          service: { id: selectedServiceIds[0], name: successName, price: coveredNow ? 0 : price },
           professional: selectedProfessional,
           date: selectedDate,
           time: selectedTime,
@@ -1028,7 +1204,7 @@ export default function PublicSalonPage() {
         copiaECola: payJson.copiaECola,
         paymentUrl: payJson.paymentUrl,
         expiresAt: payJson.expiresAt || appointment.paymentExpiresAt,
-        serviceName: selectedService.name,
+        serviceName: selectedServices.map((item) => item.name).join(' + '),
         professionalName: selectedProfessional.user.name,
         date: selectedDate,
         time: selectedTime,
@@ -1504,7 +1680,8 @@ export default function PublicSalonPage() {
                           onChange={(e) => {
                             const pro = professionals.find((p) => p.id === e.target.value) ?? null;
                             setSelectedProfessional(pro);
-                            setSelectedService(null);
+                            setSelectedServices([]);
+                            setCompatibleAddons([]);
                             setSelectedTime('');
                           }}
                           className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-900 outline-none focus:ring-1 dark:border-white/10 dark:bg-black/30 dark:text-white"
@@ -1529,10 +1706,10 @@ export default function PublicSalonPage() {
                     )}
                   </div>
 
-                  {/* SELEÇÃO DE SERVIÇO (só do profissional) */}
+                  {/* SELEÇÃO DE SERVIÇOS (multi + adicionais) */}
                   <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#1a1816]">
                     <h3 className="mb-3 flex items-center justify-between gap-2 text-[9px] font-bold tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                      <span><span className="client-accent-text">2</span> SELECIONE O SERVIÇO</span>
+                      <span><span className="client-accent-text">2</span> MONTE SEU ATENDIMENTO</span>
                       <button
                         type="button"
                         onClick={(event) => {
@@ -1543,12 +1720,12 @@ export default function PublicSalonPage() {
                         className="relative rounded-full bg-indigo-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white shadow-md shadow-indigo-500/40"
                       >
                         <span className="absolute inset-0 animate-ping rounded-full bg-indigo-400 opacity-50" />
-                        <span className="relative">Assinaturas</span>
+                        <span className="relative">Planos de cortes</span>
                       </button>
                     </h3>
                     {!selectedProfessional ? (
                       <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">
-                        Escolha o profissional primeiro para ver os cortes dele.
+                        Escolha o profissional primeiro para ver os serviços dele.
                       </p>
                     ) : loadingBookingData ? (
                       <div className="flex justify-center py-8">
@@ -1557,41 +1734,101 @@ export default function PublicSalonPage() {
                           style={{ borderColor: brand, borderTopColor: 'transparent' }}
                         />
                       </div>
-                    ) : bookingServicesForProfessional.length === 0 ? (
+                    ) : primaryBookingServices.length === 0 ? (
                       <p className="text-sm font-medium italic text-slate-500 dark:text-slate-400">
                         {blockedServiceIds.length > 0
                           ? 'Os serviços deste profissional ficam indisponíveis enquanto sua assinatura estiver ativa.'
                           : 'Este profissional ainda não tem serviços cadastrados.'}
                       </p>
                     ) : (
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {bookingServicesForProfessional.map((s: any) => {
-                          const selected = selectedService?.id === s.id;
-                          return (
-                          <div
-                            key={s.id}
-                            onClick={() => { setSelectedService(s); setSelectedTime(''); }}
-                            className={`relative cursor-pointer rounded-lg border p-3 text-left transition-colors ${
-                              selected
-                                ? 'ring-1'
-                                : 'border-slate-200 bg-slate-50 hover:border-slate-300 dark:border-white/10 dark:bg-black/20 dark:hover:border-white/20'
-                            }`}
-                            style={selected ? { borderColor: brand, boxShadow: `0 0 0 1px ${brand}40` } : undefined}
-                          >
-                            {selected && (
-                              <Check className="absolute right-2 top-2 h-3 w-3 client-accent-text" />
-                            )}
-                            <h4 className="text-sm font-bold text-slate-900 dark:text-white">{s.name}</h4>
-                            <div className="mt-2 flex items-center justify-between text-[10px] font-bold">
-                              <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                                <Clock size={10} />
-                                {s.duration} min
-                              </span>
-                              <span className="client-accent-text">R$ {Number(s.price).toFixed(2)}</span>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {primaryBookingServices.map((s: any) => {
+                            const selected = selectedServices.some((item) => item.id === s.id);
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => toggleSelectedService(s)}
+                                className={`relative rounded-lg border p-3 text-left transition-colors ${
+                                  selected
+                                    ? 'ring-1'
+                                    : 'border-slate-200 bg-slate-50 hover:border-slate-300 dark:border-white/10 dark:bg-black/20 dark:hover:border-white/20'
+                                }`}
+                                style={selected ? { borderColor: brand, boxShadow: `0 0 0 1px ${brand}40` } : undefined}
+                              >
+                                {selected ? (
+                                  <Check className="absolute right-2 top-2 h-3 w-3 client-accent-text" />
+                                ) : null}
+                                <h4 className="pr-5 text-sm font-bold text-slate-900 dark:text-white">{s.name}</h4>
+                                <div className="mt-2 flex items-center justify-between text-[10px] font-bold">
+                                  <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                                    <Clock size={10} />
+                                    {s.duration} min
+                                  </span>
+                                  <span className="client-accent-text">R$ {Number(s.price).toFixed(2)}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {selectedServices.length > 0 && compatibleAddons.length > 0 ? (
+                          <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-white/10">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                              Adicionar outros serviços
+                            </p>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              {compatibleAddons
+                                .filter((addon) => !selectedServiceIds.includes(String(addon.id)))
+                                .map((addon) => (
+                                  <button
+                                    key={addon.id}
+                                    type="button"
+                                    onClick={() => toggleSelectedService(addon)}
+                                    className="relative rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-3 text-left transition-colors hover:border-slate-400 dark:border-white/15 dark:bg-black/15"
+                                  >
+                                    <h4 className="pr-5 text-sm font-bold text-slate-900 dark:text-white">{addon.name}</h4>
+                                    <div className="mt-2 flex items-center justify-between text-[10px] font-bold">
+                                      <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                                        <Clock size={10} />
+                                        {addon.duration} min
+                                      </span>
+                                      <span className="client-accent-text">R$ {Number(addon.price).toFixed(2)}</span>
+                                    </div>
+                                  </button>
+                                ))}
                             </div>
                           </div>
-                          );
-                        })}
+                        ) : null}
+
+                        {selectedServices.length > 0 ? (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-black/20">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                              Selecionados
+                            </p>
+                            <ul className="space-y-1.5">
+                              {selectedServices.map((item) => (
+                                <li key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                                  <span className="min-w-0 truncate font-semibold text-slate-800 dark:text-slate-200">
+                                    {item.name}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSelectedService(item)}
+                                    className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-rose-600"
+                                  >
+                                    Remover
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Escolha um ou mais serviços. O corte não é obrigatório.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1633,7 +1870,7 @@ export default function PublicSalonPage() {
                     }}
                     timeSlots={timeSlots}
                     loadingSlots={loadingSlots}
-                    disabled={!selectedProfessional}
+                    disabled={!selectedProfessional || !selectedServices.length}
                   />
 
                 </div>
@@ -1644,16 +1881,44 @@ export default function PublicSalonPage() {
                       RESUMO DA RESERVA
                     </h3>
                     
-                    {bookingError && (
+                    {(bookingError || compositionIssue || availabilityQuote.error) && (
                       <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-950/30 rounded-xl text-xs text-red-600 dark:text-red-400 font-bold mb-4 leading-relaxed">
-                        {bookingError}
+                        {bookingError || compositionIssue || availabilityQuote.error}
                       </div>
                     )}
 
                     <div className="space-y-3.5 text-sm mb-6">
                       <div className="space-y-1">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Serviço</span>
-                        <span className="block text-right font-medium leading-snug text-slate-800 dark:text-slate-200">{displayService ? displayService.name : 'Não selecionado'}</span>
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Serviços</span>
+                        {selectedServices.length ? (
+                          <ul className="space-y-2">
+                            {selectedServices.map((item) => {
+                              const coveredItem = Boolean(
+                                subscriptionQuote?.covered ||
+                                  subscriptionQuote?.items?.find((row) => row.serviceId === item.id)?.covered,
+                              );
+                              return (
+                                <li
+                                  key={item.id}
+                                  className="flex items-start justify-between gap-3 text-xs font-medium leading-snug text-slate-800 dark:text-slate-200"
+                                >
+                                  <span className="min-w-0 text-left">{item.name}</span>
+                                  <span
+                                    className={`shrink-0 text-[10px] font-bold uppercase tracking-wide ${
+                                      coveredItem
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'client-accent-text'
+                                    }`}
+                                  >
+                                    {coveredItem ? 'Incluso' : `A pagar R$ ${Number(item.price).toFixed(2)}`}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <span className="block text-right font-medium leading-snug text-slate-800 dark:text-slate-200">Não selecionado</span>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Duração</span>
@@ -1680,7 +1945,13 @@ export default function PublicSalonPage() {
                             ? 'Incluso'
                             : `R$ ${
                                 displayService
-                                  ? Number(appliedCoupon?.quotedPrice ?? displayService.price ?? 0).toFixed(2)
+                                  ? Number(
+                                      appliedCoupon?.quotedPrice ??
+                                        selectedServices.reduce((sum, item) => {
+                                          const coveredItem = subscriptionQuote?.items?.find((row) => row.serviceId === item.id)?.covered;
+                                          return coveredItem ? sum : sum + Number(item.price || 0);
+                                        }, 0),
+                                    ).toFixed(2)
                                   : '0,00'
                               }`}
                         </span>
@@ -1690,6 +1961,12 @@ export default function PublicSalonPage() {
                         <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
                           <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
                             Incluso na assinatura{subscriptionQuote.subscriptionName ? ` ${subscriptionQuote.subscriptionName}` : ''}. Sem cobrança.
+                          </p>
+                        </div>
+                      ) : subscriptionQuote?.partial ? (
+                        <div className="space-y-1 border-t border-slate-100 pt-3 dark:border-white/10">
+                          <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                            Assinatura cobre só parte dos itens. Veja acima o que está incluso e o que falta pagar.
                           </p>
                         </div>
                       ) : coverageLoading && mySubscription ? (
@@ -1736,7 +2013,13 @@ export default function PublicSalonPage() {
                                   body: JSON.stringify({
                                     salonId: data.salon.id,
                                     code: couponCode,
-                                    servicePrice: displayService.price,
+                                    // Base cobrável (itens não cobertos pela assinatura).
+                                    servicePrice: selectedServices.reduce((sum, item) => {
+                                      const coveredItem = subscriptionQuote?.items?.find(
+                                        (row) => row.serviceId === item.id,
+                                      )?.covered
+                                      return coveredItem ? sum : sum + Number(item.price || 0)
+                                    }, 0),
                                   }),
                                 })
                                 const json = await res.json()
@@ -1901,7 +2184,9 @@ export default function PublicSalonPage() {
                         bookingLoading ||
                         coverageLoading ||
                         data?.salon?.bookingLinkEnabled === false ||
-                        !selectedService ||
+                        !selectedServices.length ||
+                        Boolean(compositionIssue) ||
+                        Boolean(availabilityQuote.error) ||
                         !selectedProfessional ||
                         !selectedDate ||
                         !selectedTime ||

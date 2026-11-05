@@ -301,12 +301,12 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   const [services, setServices] = useState<Service[]>([])
   const [walkInForm, setWalkInForm] = useState<{
     name: string
-    serviceId: string
+    serviceIds: string[]
     paymentMethod: WalkInPayment
     professionalId: string
   }>({
     name: '',
-    serviceId: '',
+    serviceIds: [],
     paymentMethod: 'CASH',
     professionalId: '',
   })
@@ -357,13 +357,27 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
       setWalkInForm((prev) => ({
         ...prev,
         name: '',
-        serviceId: prev.serviceId || activeServices[0]?.id || '',
+        serviceIds: prev.serviceIds.length
+          ? prev.serviceIds
+          : activeServices[0]?.id
+            ? [activeServices[0].id]
+            : [],
         paymentMethod: 'CASH',
         professionalId: isOwner ? prev.professionalId || profList[0]?.id || '' : '',
       }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao abrir cliente avulso.')
     }
+  }
+
+  function toggleWalkInService(serviceId: string) {
+    setWalkInForm((prev) => {
+      const has = prev.serviceIds.includes(serviceId)
+      return {
+        ...prev,
+        serviceIds: has ? prev.serviceIds.filter((id) => id !== serviceId) : [...prev.serviceIds, serviceId],
+      }
+    })
   }
 
   async function handleWalkInSubmit(event: FormEvent) {
@@ -375,8 +389,8 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
       setError('Informe o nome do cliente.')
       return
     }
-    if (!walkInForm.serviceId) {
-      setError('Selecione o serviço.')
+    if (!walkInForm.serviceIds.length) {
+      setError('Selecione pelo menos um serviço.')
       return
     }
     if (isOwner && !walkInForm.professionalId) {
@@ -390,7 +404,8 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
     try {
       await createWalkInAppointment({
         salonId,
-        serviceId: walkInForm.serviceId,
+        serviceIds: walkInForm.serviceIds,
+        serviceId: walkInForm.serviceIds[0],
         name,
         paymentMethod: walkInForm.paymentMethod,
         ...(isOwner ? { professionalId: walkInForm.professionalId } : {}),
@@ -398,7 +413,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
       setWalkInOpen(false)
       setWalkInForm({
         name: '',
-        serviceId: '',
+        serviceIds: [],
         paymentMethod: 'CASH',
         professionalId: isOwner ? professionals[0]?.id || '' : '',
       })
@@ -658,7 +673,9 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                         <Scissors className={`size-4 shrink-0 ${muted}`} />
                         <div className="min-w-0">
                           <p className={`truncate text-sm font-semibold ${title}`}>
-                            {apt.service?.name || '-'}
+                            {apt.items?.length
+                              ? apt.items.map((item) => item.name).join(' + ')
+                              : apt.service?.name || '-'}
                           </p>
                           {appointmentServicePrice(apt) != null ? (
                             <div className={`text-xs ${muted}`}>
@@ -904,25 +921,28 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
               />
             </div>
             <div>
-              <label className={labelClass(lightMode)}>Serviço</label>
-              <select
-                required
-                value={walkInForm.serviceId}
-                onChange={(e) => setWalkInForm({ ...walkInForm, serviceId: e.target.value })}
-                className={inputClass(lightMode)}
-              >
-                <option value="" disabled>
-                  Selecione o serviço
-                </option>
+              <label className={labelClass(lightMode)}>Serviços</label>
+              <p className={`mb-2 text-[11px] ${muted}`}>Pode marcar mais de um (ex.: corte + barba).</p>
+              <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl border border-slate-600 p-2">
                 {services
                   .filter((s) => s.active)
-                  .map((svc) => (
-                    <option key={svc.id} value={svc.id}>
-                      {svc.name}
-                      {svc.price != null ? ` · R$ ${Number(svc.price).toFixed(2).replace('.', ',')}` : ''}
-                    </option>
-                  ))}
-              </select>
+                  .map((svc) => {
+                    const checked = walkInForm.serviceIds.includes(svc.id)
+                    return (
+                      <label key={svc.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-white/5">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleWalkInService(svc.id)}
+                        />
+                        <span className="min-w-0 flex-1">{svc.name}</span>
+                        <span className="shrink-0 text-xs text-slate-400">
+                          {svc.price != null ? `R$ ${Number(svc.price).toFixed(2).replace('.', ',')}` : ''}
+                        </span>
+                      </label>
+                    )
+                  })}
+              </div>
             </div>
             <div>
               <label className={labelClass(lightMode)}>Forma de pagamento</label>

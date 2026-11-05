@@ -42,6 +42,16 @@ export type Service = {
   professionalIds?: string[]
   /** Se o barbeiro logado oferece este corte. */
   isMine?: boolean
+  /** Pode ser contratado sozinho. */
+  standaloneAllowed?: boolean
+  /** Pode aparecer como adicional. */
+  addonAllowed?: boolean
+  /** Componentes do combo (vínculos explícitos). */
+  comboItemServiceIds?: string[]
+  /** Hosts que habilitam este serviço como adicional. */
+  addonHostServiceIds?: string[]
+  /** Adicional fixo: aparece automaticamente em todos os cortes. */
+  isDefaultCutAddon?: boolean
 }
 
 export type MyProfessionalProfile = {
@@ -79,6 +89,15 @@ export type Appointment = {
   quotedPrice?: number | null
   customer?: { user?: { name?: string; phone?: string } }
   service?: { name?: string; price?: number }
+  /** Itens do atendimento (multi-serviço). Legado pode vir vazio. */
+  items?: Array<{
+    id?: string
+    name: string
+    unitPrice: number
+    durationMinutes: number
+    kind?: string
+    coveredBySubscription?: boolean
+  }>
   professional?: { user?: { name?: string } }
   /** Preenchido quando o PIX do serviço já foi registrado. null = ainda não pago. */
   paidAt?: string | null

@@ -57,6 +57,15 @@ export function mapService(item: Record<string, unknown>): Service {
       ? (item.professionalIds as unknown[]).map(String)
       : [],
     isMine: item.isMine === true,
+    standaloneAllowed: item.standaloneAllowed !== false,
+    addonAllowed: item.addonAllowed === true,
+    comboItemServiceIds: Array.isArray(item.comboItemServiceIds)
+      ? (item.comboItemServiceIds as unknown[]).map(String)
+      : [],
+    addonHostServiceIds: Array.isArray(item.addonHostServiceIds)
+      ? (item.addonHostServiceIds as unknown[]).map(String)
+      : [],
+    isDefaultCutAddon: item.isDefaultCutAddon === true,
   }
 }
 
@@ -74,6 +83,11 @@ export async function createService(payload: {
   description?: string
   category?: string
   professionalId?: string
+  standaloneAllowed?: boolean
+  addonAllowed?: boolean
+  isDefaultCutAddon?: boolean
+  comboItemServiceIds?: string[]
+  addonHostServiceIds?: string[]
 }): Promise<Service> {
   const response = await authFetch('/services', {
     method: 'POST',
@@ -91,6 +105,11 @@ export async function updateService(
     description?: string
     category?: string
     isActive?: boolean
+    standaloneAllowed?: boolean
+    addonAllowed?: boolean
+    isDefaultCutAddon?: boolean
+    comboItemServiceIds?: string[]
+    addonHostServiceIds?: string[]
   },
 ): Promise<Service> {
   const response = await authFetch(`/services/${id}`, {
@@ -204,7 +223,8 @@ export async function blockAppointment(payload: {
 /** Corte avulso presencial: COMPLETED + financeiro na hora (sem telefone / fila / slot). */
 export async function createWalkInAppointment(payload: {
   salonId: string
-  serviceId: string
+  serviceId?: string
+  serviceIds?: string[]
   name: string
   paymentMethod?: 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'
   professionalId?: string
@@ -384,7 +404,7 @@ export async function skipQueueEntry(entryId: string, reason?: string): Promise<
 
 export async function addWalkInToQueue(
   sessionId: string,
-  payload: { name: string; phone?: string; serviceId: string },
+  payload: { name: string; phone?: string; serviceId?: string; serviceIds?: string[] },
 ): Promise<void> {
   const response = await authFetch(`/queue/${sessionId}/walkin`, {
     method: 'POST',

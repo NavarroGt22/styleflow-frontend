@@ -190,7 +190,7 @@ export default function ClientPlansSheet({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-bold">Assinaturas</h3>
+          <h3 className="text-lg font-bold">Planos de cortes</h3>
           <button type="button" onClick={onClose} className="text-sm text-slate-400">Fechar</button>
         </div>
         <p className="mb-4 text-xs text-slate-400">{note}</p>

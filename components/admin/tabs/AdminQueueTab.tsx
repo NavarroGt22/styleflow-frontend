@@ -57,10 +57,17 @@ function entryName(entry: QueueEntry) {
 }
 
 function entryService(entry: QueueEntry) {
+  const items = entry.appointment?.items as Array<{ name?: string }> | undefined
+  if (items?.length) return items.map((row) => row.name).filter(Boolean).join(' + ') || 'Serviço'
   return entry.appointment?.service?.name || entry.serviceName || entry.service?.name || 'Serviço'
 }
 
 function entryDuration(entry: QueueEntry) {
+  const items = entry.appointment?.items as Array<{ durationMinutes?: number }> | undefined
+  if (items?.length) {
+    const sum = items.reduce((acc, row) => acc + Number(row.durationMinutes || 0), 0)
+    if (sum > 0) return sum
+  }
   return entry.appointment?.service?.duration || entry.serviceDuration || entry.service?.duration || 30
 }
 
@@ -87,7 +94,7 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
   const [working, setWorking] = useState(false)
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [walkInName, setWalkInName] = useState('')
-  const [walkInService, setWalkInService] = useState('')
+  const [walkInServiceIds, setWalkInServiceIds] = useState<string[]>([])
   const [checkoutApt, setCheckoutApt] = useState<Appointment | null>(null)
   const [checkoutAction, setCheckoutAction] = useState<'complete' | 'completeAndNext' | null>(null)
   const autoFinishTriggeredRef = useRef<string | null>(null)
@@ -110,7 +117,7 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
       setProfessionals(team)
       setServices(svc.filter((s) => s.active))
       if (!selectedProf && team[0]) setSelectedProf(team[0].id)
-      if (!walkInService && svc[0]) setWalkInService(svc[0].id)
+      if (!walkInServiceIds.length && svc[0]) setWalkInServiceIds([svc[0].id])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar fila.')
     } finally {
@@ -207,10 +214,14 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
   }
 
   async function handleWalkIn() {
-    if (!session?.id || !walkInName.trim() || !walkInService) return
+    if (!session?.id || !walkInName.trim() || !walkInServiceIds.length) return
     setWorking(true)
     try {
-      await addWalkInToQueue(session.id, { name: walkInName.trim(), serviceId: walkInService })
+      await addWalkInToQueue(session.id, {
+        name: walkInName.trim(),
+        serviceIds: walkInServiceIds,
+        serviceId: walkInServiceIds[0],
+      })
       setWalkInOpen(false)
       setWalkInName('')
       await loadSession(selectedProf)
@@ -518,14 +529,30 @@ export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, o
               <input value={walkInName} onChange={(e) => setWalkInName(e.target.value)} className={inputClass(lightMode)} />
             </div>
             <div>
-              <label className={labelClass(lightMode)}>Serviço</label>
-              <select value={walkInService} onChange={(e) => setWalkInService(e.target.value)} className={inputClass(lightMode)}>
-                {services.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} · {s.duration} min
-                  </option>
-                ))}
-              </select>
+              <label className={labelClass(lightMode)}>Serviços</label>
+              <p className={`mb-2 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Pode marcar mais de um.
+              </p>
+              <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl border border-slate-600 p-2">
+                {services.map((s) => {
+                  const checked = walkInServiceIds.includes(s.id)
+                  return (
+                    <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setWalkInServiceIds((current) =>
+                            checked ? current.filter((id) => id !== s.id) : [...current, s.id],
+                          )
+                        }
+                      />
+                      <span className="min-w-0 flex-1">{s.name}</span>
+                      <span className="shrink-0 text-xs opacity-70">{s.duration} min</span>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setWalkInOpen(false)} className="text-sm text-slate-500">

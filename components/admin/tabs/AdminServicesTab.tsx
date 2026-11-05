@@ -15,6 +15,7 @@ import {
 } from '../ui/AdminUi'
 import type { AdminTabProps, Service } from '@/lib/admin/types'
 import { createService, deleteService, fetchServices, updateService } from '@/lib/admin/api'
+import { cutServiceIdsAmong } from '@/lib/admin/service-helpers'
 
 const CATEGORIES = ['Cabelo', 'Sobrancelha', 'Coloração', 'Barba', 'Unha', 'Maquiagem', 'Depilação', 'Estética']
 
@@ -24,6 +25,11 @@ const emptyForm = {
   customCategory: '',
   price: '',
   duration: '',
+  standaloneAllowed: true,
+  addonAllowed: false,
+  addonHostServiceIds: [] as string[],
+  comboItemServiceIds: [] as string[],
+  isDefaultCutAddon: false,
 }
 
 export default function AdminServicesTab({ salonId, lightMode = false }: AdminTabProps) {
@@ -36,6 +42,7 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [togglingFixedId, setTogglingFixedId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -80,8 +87,17 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
       customCategory: isKnown ? '' : service.category,
       price: String(service.price),
       duration: String(service.duration),
+      standaloneAllowed: service.standaloneAllowed !== false,
+      addonAllowed: service.addonAllowed === true,
+      addonHostServiceIds: service.addonHostServiceIds ?? [],
+      comboItemServiceIds: service.comboItemServiceIds ?? [],
+      isDefaultCutAddon: service.isDefaultCutAddon === true,
     })
     setModalOpen(true)
+  }
+
+  function toggleId(list: string[], id: string) {
+    return list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -97,6 +113,11 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
       description: category,
       price: Number(form.price.replace(',', '.')),
       duration: Number(form.duration) || 30,
+      standaloneAllowed: form.isDefaultCutAddon ? false : form.standaloneAllowed,
+      addonAllowed: form.isDefaultCutAddon ? true : form.addonAllowed,
+      isDefaultCutAddon: form.isDefaultCutAddon,
+      addonHostServiceIds: form.isDefaultCutAddon ? [] : form.addonAllowed ? form.addonHostServiceIds : [],
+      comboItemServiceIds: form.comboItemServiceIds,
     }
     try {
       if (editing) {
@@ -126,6 +147,24 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
       setError(err instanceof Error ? err.message : 'Erro ao atualizar status do serviço.')
     } finally {
       setTogglingId(null)
+    }
+  }
+
+  async function handleToggleFixedCutAddon(service: Service) {
+    setTogglingFixedId(service.id)
+    setError('')
+    try {
+      const next = !service.isDefaultCutAddon
+      const updated = await updateService(service.id, {
+        isDefaultCutAddon: next,
+        addonAllowed: next ? true : service.addonAllowed,
+        standaloneAllowed: next ? false : true,
+      })
+      setServices((current) => current.map((item) => (item.id === service.id ? updated : item)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar adicional fixo.')
+    } finally {
+      setTogglingFixedId(null)
     }
   }
 
@@ -214,12 +253,46 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
                 <p className="mt-2 text-sm font-bold text-emerald-600">
                   R$ {service.price.toFixed(2).replace('.', ',')}
                 </p>
+                <p className={`mt-2 text-[10px] font-semibold uppercase tracking-wide ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {service.isDefaultCutAddon
+                    ? 'Adicional fixo nos cortes'
+                    : service.standaloneAllowed === false
+                      ? 'Só adicional'
+                      : 'Independente'}
+                  {!service.isDefaultCutAddon && service.addonAllowed ? ' · Adicional' : ''}
+                  {(service.comboItemServiceIds?.length ?? 0) > 0 ? ' · Combo' : ''}
+                </p>
+                {service.standaloneAllowed === false &&
+                !service.isDefaultCutAddon &&
+                !(service.addonHostServiceIds?.length) ? (
+                  <p className={`mt-2 text-[10px] font-medium ${lightMode ? 'text-rose-600' : 'text-rose-300'}`}>
+                    Não aparece no agendamento: marque “Fixo nos cortes” ou diga com quais serviços ele aparece.
+                  </p>
+                ) : null}
               </div>
               <footer
-                className={`flex items-center justify-end gap-2 border-t px-4 py-3 ${
+                className={`flex flex-wrap items-center justify-end gap-2 border-t px-4 py-3 ${
                   lightMode ? 'border-slate-100 bg-slate-50' : 'border-slate-700'
                 }`}
               >
+                <AdminButton
+                  variant="soft"
+                  onClick={() => handleToggleFixedCutAddon(service)}
+                  disabled={togglingFixedId === service.id}
+                  className={`h-9 px-3 text-xs ${
+                    service.isDefaultCutAddon
+                      ? lightMode
+                        ? 'border-amber-300 bg-amber-50 text-amber-800'
+                        : 'border-amber-500/40 bg-amber-500/15 text-amber-200'
+                      : ''
+                  }`}
+                >
+                  {togglingFixedId === service.id
+                    ? '...'
+                    : service.isDefaultCutAddon
+                      ? 'Tirar fixo'
+                      : 'Fixo nos cortes'}
+                </AdminButton>
                 <AdminButton variant="soft" onClick={() => openEdit(service)} className="h-9 px-3 text-xs">
                   <Pencil className="size-3.5" /> Editar
                 </AdminButton>
@@ -328,6 +401,121 @@ export default function AdminServicesTab({ salonId, lightMode = false }: AdminTa
                 />
               </div>
             </div>
+            <div className={`space-y-2 rounded-xl border p-3 ${lightMode ? 'border-amber-200 bg-amber-50' : 'border-amber-500/30 bg-amber-500/10'}`}>
+              <label className={`flex items-center gap-2 text-sm font-semibold ${lightMode ? 'text-amber-950' : 'text-amber-100'}`}>
+                <input
+                  type="checkbox"
+                  checked={form.isDefaultCutAddon}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      isDefaultCutAddon: e.target.checked,
+                      addonAllowed: e.target.checked ? true : form.addonAllowed,
+                      standaloneAllowed: e.target.checked ? false : form.standaloneAllowed,
+                    })
+                  }
+                />
+                Adicional fixo em todos os cortes
+              </label>
+              <p className={`text-[11px] ${lightMode ? 'text-amber-800' : 'text-amber-200/90'}`}>
+                Quando marcado, este serviço aparece automaticamente ao escolher um corte (ex.: pigmentação, hidratação). Dá para ligar e desligar a qualquer momento.
+              </p>
+            </div>
+            {!form.isDefaultCutAddon ? (
+              <>
+                <div className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-600">
+                  <label className="flex items-center gap-2 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={form.standaloneAllowed}
+                      onChange={(e) => setForm({ ...form, standaloneAllowed: e.target.checked })}
+                    />
+                    Cliente pode pedir sozinho
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={form.addonAllowed}
+                      onChange={(e) => setForm({ ...form, addonAllowed: e.target.checked })}
+                    />
+                    Pode aparecer como adicional
+                  </label>
+                  <p className={`text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Mesmo cadastro serve para pedir sozinho e como adicional. Não cadastre o serviço duas vezes.
+                  </p>
+                </div>
+                {form.addonAllowed && services.filter((item) => item.id !== editing?.id).length > 0 ? (
+                  <div>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <label className={labelClass(lightMode)}>Aparece junto com quais serviços?</label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            addonHostServiceIds: cutServiceIdsAmong(services, editing?.id),
+                          })
+                        }
+                        className={`text-[11px] font-bold uppercase tracking-wide ${
+                          lightMode ? 'text-indigo-600' : 'text-indigo-300'
+                        }`}
+                      >
+                        Liberar com todos os cortes
+                      </button>
+                    </div>
+                    <p className={`mb-2 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Marque os serviços principais (ex.: corte). O cliente só vê este adicional depois de escolher um deles.
+                    </p>
+                    <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-600">
+                      {services
+                        .filter((item) => item.id !== editing?.id)
+                        .map((item) => (
+                          <label key={item.id} className="flex items-center gap-2 text-xs font-medium">
+                            <input
+                              type="checkbox"
+                              checked={form.addonHostServiceIds.includes(item.id)}
+                              onChange={() =>
+                                setForm({
+                                  ...form,
+                                  addonHostServiceIds: toggleId(form.addonHostServiceIds, item.id),
+                                })
+                              }
+                            />
+                            {item.name}
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+            {services.filter((item) => item.id !== editing?.id).length > 0 ? (
+              <div>
+                <label className={labelClass(lightMode)}>Este combo já inclui (opcional)</label>
+                <p className={`mb-2 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Se for um combo (ex.: Corte + barba), marque o que já vem nele. Assim o cliente não paga de novo o mesmo item.
+                </p>
+                <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-600">
+                  {services
+                    .filter((item) => item.id !== editing?.id)
+                    .map((item) => (
+                      <label key={item.id} className="flex items-center gap-2 text-xs font-medium">
+                        <input
+                          type="checkbox"
+                          checked={form.comboItemServiceIds.includes(item.id)}
+                          onChange={() =>
+                            setForm({
+                              ...form,
+                              comboItemServiceIds: toggleId(form.comboItemServiceIds, item.id),
+                            })
+                          }
+                        />
+                        {item.name}
+                      </label>
+                    ))}
+                </div>
+              </div>
+            ) : null}
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"

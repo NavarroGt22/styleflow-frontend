@@ -22,7 +22,13 @@ type AppointmentItem = {
   discountAmount?: number | null
   couponId?: string | null
   service?: { name?: string; price?: number } | null
+  items?: Array<{ name: string; unitPrice?: number }>
   professionalName?: string | null
+}
+
+function appointmentServiceLabel(item: AppointmentItem) {
+  if (item.items?.length) return item.items.map((row) => row.name).join(' + ')
+  return item.service?.name || 'Serviço'
 }
 
 type Props = {
@@ -310,7 +316,7 @@ export default function ClientProfileSheet({
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            {item.service?.name || 'Serviço'}
+            {appointmentServiceLabel(item)}
           </p>
           <p className={`mt-1 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             {formatWhen(item.startTime)}
@@ -533,7 +539,7 @@ export default function ClientProfileSheet({
           >
             <p className="text-base font-bold">Remarcar no mesmo dia</p>
             <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              {rescheduleTarget.service?.name || 'Seu corte'} · hoje marcado para{' '}
+              {appointmentServiceLabel(rescheduleTarget)} · hoje marcado para{' '}
               {formatWhen(rescheduleTarget.startTime)}
               {rescheduleTarget.professionalName ? ` com ${rescheduleTarget.professionalName}` : ''}.
             </p>
@@ -616,7 +622,7 @@ export default function ClientProfileSheet({
           >
             <p className="text-base font-bold">Você tem certeza?</p>
             <p className={`mt-2 text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-              Desmarcar <strong>{cancelTarget.service?.name || 'este corte'}</strong> de{' '}
+              Desmarcar <strong>{appointmentServiceLabel(cancelTarget)}</strong> de{' '}
               <strong>{formatWhen(cancelTarget.startTime)}</strong>
               {cancelTarget.professionalName ? ` com ${cancelTarget.professionalName}` : ''}? O horário ficará vago
               novamente.
