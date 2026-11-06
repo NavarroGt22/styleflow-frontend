@@ -1,8 +1,9 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
-import { CheckCircle2, XCircle } from 'lucide-react'
-import { AdminButton, AdminError, AdminLoading, inputClass, labelClass } from '../ui/AdminUi'
+import { CheckCircle2, Minus, Plus, XCircle } from 'lucide-react'
+import { AdminButton, AdminError, AdminLoading, AdminModal, inputClass, labelClass } from '../ui/AdminUi'
+import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps } from '@/lib/admin/types'
 import { authFetch } from '@/lib/api'
 import { fetchProfessionals, fetchServices } from '@/lib/admin/api'
@@ -17,6 +18,21 @@ const WEEKDAYS = [
   { value: 0, label: 'Dom' },
 ]
 
+const COMPANION_SERVICE_ID = '__COMPANION__'
+
+type UsagePace = 'FLEXIBLE' | 'ONCE_PER_WEEK'
+
+type Benefit = {
+  serviceId: string
+  serviceName?: string
+  kind?: 'REGULAR' | 'COMPANION' | string
+  granted: number
+  reserved: number
+  consumed: number
+  available: number
+  forfeited?: number
+}
+
 type Plan = {
   id: string
   name: string
@@ -25,6 +41,9 @@ type Plan = {
   availability: 'AVAILABLE' | 'UNAVAILABLE'
   coveredWeekdays: number[]
   blockedServiceIds?: string[]
+  usagePace?: UsagePace
+  allowsCompanionCuts?: boolean
+  companionCutsPerCycle?: number
   items: Array<{ serviceId: string; quantity: number; service?: { name?: string } }>
   professionals: Array<{ professionalId: string; professional?: { user?: { name?: string } } }>
 }
@@ -38,7 +57,18 @@ type Subscriber = {
   cancelRenewalAt?: string | null
   paymentStatus?: string | null
   cycleEndsAt?: string | null
-  benefits: Array<{ serviceId: string; serviceName?: string; granted: number; reserved: number; consumed: number; available: number }>
+  benefits: Benefit[]
+}
+
+function benefitLabel(benefit: Pick<Benefit, 'serviceId' | 'serviceName' | 'kind'>) {
+  if (benefit.serviceId === COMPANION_SERVICE_ID || benefit.kind === 'COMPANION') return 'Acompanhamento'
+  return benefit.serviceName || 'Serviço'
+}
+
+function paceLabel(pace?: string | null) {
+  return pace === 'ONCE_PER_WEEK'
+    ? 'No máximo 1 corte coberto por semana'
+    : 'Qualquer dia coberto até acabar o mês'
 }
 
 const emptyForm = {
@@ -49,9 +79,14 @@ const emptyForm = {
   coveredWeekdays: [1, 2, 3, 4, 5],
   blockedServiceIds: [] as string[],
   quantities: {} as Record<string, string>,
+  usagePace: 'FLEXIBLE' as UsagePace,
+  allowsCompanionCuts: false,
+  companionCutsPerCycle: '1',
+  applyToActiveSubscribers: true,
 }
 
 export default function AdminSubscriptionsTab({ salonId, lightMode = false }: AdminTabProps) {
+  const { confirm, confirmDialog } = useConfirm(lightMode)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -64,6 +99,15 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
   const [editingId, setEditingId] = useState<string | null>(null)
   const [noShowConsumes, setNoShowConsumes] = useState(false)
   const [view, setView] = useState<'planos' | 'assinantes'>('planos')
+  const [adjustTarget, setAdjustTarget] = useState<{
+    subscriberId: string
+    serviceId: string
+    label: string
+    delta: 1 | -1
+  } | null>(null)
+  const [adjustReason, setAdjustReason] = useState('')
+  const [adjustSaving, setAdjustSaving] = useState(false)
+  const [adjustError, setAdjustError] = useState('')
 
   async function load() {
     if (!salonId) return
@@ -116,6 +160,30 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
     }))
   }
 
+  function setServiceIncluded(serviceId: string, included: boolean) {
+    setForm((current) => {
+      const blocked = new Set(current.blockedServiceIds)
+      if (included) blocked.delete(serviceId)
+      else blocked.add(serviceId)
+      const quantities = { ...current.quantities }
+      if (included && (!quantities[serviceId] || Number(quantities[serviceId]) < 1)) {
+        quantities[serviceId] = '1'
+      }
+      return { ...current, blockedServiceIds: [...blocked], quantities }
+    })
+  }
+
+  function bumpServiceQty(serviceId: string, delta: number) {
+    setForm((current) => {
+      if (current.blockedServiceIds.includes(serviceId)) return current
+      const next = Math.max(1, (Number(current.quantities[serviceId] || '1') || 1) + delta)
+      return {
+        ...current,
+        quantities: { ...current.quantities, [serviceId]: String(next) },
+      }
+    })
+  }
+
   async function handleSave(event: FormEvent) {
     event.preventDefault()
     if (!salonId) return
@@ -142,13 +210,35 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
       return
     }
     if (items.length === 0) {
-      setError('Deixe pelo menos um serviço no plano. Os marcados como indisponíveis ficam de fora.')
+      setError('Inclua pelo menos um serviço no plano.')
       return
     }
     if (form.professionalIds.length === 0) {
       setError('Selecione pelo menos um profissional habilitado.')
       return
     }
+    const companionCutsPerCycle = form.allowsCompanionCuts ? Number(form.companionCutsPerCycle || '0') : 0
+    if (
+      form.allowsCompanionCuts
+      && (!Number.isInteger(companionCutsPerCycle) || companionCutsPerCycle < 1 || companionCutsPerCycle > 100)
+    ) {
+      setError('Com acompanhamento ligado, a quantidade por ciclo precisa ser de 1 a 100.')
+      return
+    }
+
+    let applyToActiveSubscribers = true
+    if (editingId) {
+      const ok = await confirm({
+        title: 'Salvar alterações do plano',
+        message:
+          'Isso atualiza também os assinantes ACTIVE deste plano (saldos do ciclo aberto serão ajustados; cortes já usados/reservados não são apagados).',
+        confirmLabel: 'Salvar e atualizar assinantes',
+        cancelLabel: 'Cancelar',
+      })
+      if (!ok) return
+      applyToActiveSubscribers = true
+    }
+
     setSaving(true)
     setError('')
     setSuccess('')
@@ -167,6 +257,10 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
             blockedServiceIds: form.blockedServiceIds,
             professionalIds: form.professionalIds,
             items,
+            usagePace: form.usagePace,
+            allowsCompanionCuts: form.allowsCompanionCuts,
+            companionCutsPerCycle,
+            applyToActiveSubscribers,
           }),
         },
       )
@@ -174,14 +268,62 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
       if (!response.ok) throw new Error(data.error || 'Não foi possível salvar o plano.')
       setForm(emptyForm)
       setEditingId(null)
-      setSuccess(editingId
-        ? 'Plano atualizado. Quem já assinou continua com as condições do contrato antigo.'
-        : 'Plano criado. Contratos antigos não mudam quando você editar este plano depois.')
+      setSuccess(
+        editingId
+          ? 'Plano atualizado e aplicado aos assinantes ativos.'
+          : 'Plano criado. Contratos antigos não mudam quando você editar este plano depois.',
+      )
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function submitAdjust() {
+    if (!salonId || !adjustTarget) return
+    if (adjustReason.trim().length < 3) {
+      setAdjustError('Informe o motivo do ajuste (mín. 3 letras).')
+      return
+    }
+    setAdjustSaving(true)
+    setAdjustError('')
+    try {
+      const res = await authFetch(
+        `/subscriptions/salon/${salonId}/subscribers/${adjustTarget.subscriberId}/adjust`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            serviceId: adjustTarget.serviceId,
+            quantity: adjustTarget.delta,
+            reason: adjustReason.trim(),
+          }),
+        },
+      )
+      const json = (await res.json().catch(() => ({}))) as { error?: string; benefits?: Benefit[] }
+      if (!res.ok) {
+        setAdjustError(json.error || 'Não foi possível ajustar.')
+        return
+      }
+      if (Array.isArray(json.benefits)) {
+        setSubscribers((current) =>
+          current.map((row) =>
+            row.id === adjustTarget.subscriberId ? { ...row, benefits: json.benefits! } : row,
+          ),
+        )
+      }
+      setAdjustTarget(null)
+      setAdjustReason('')
+      setSuccess(
+        adjustTarget.delta > 0
+          ? `+1 em ${adjustTarget.label}.`
+          : `−1 em ${adjustTarget.label}.`,
+      )
+    } catch (err) {
+      setAdjustError(err instanceof Error ? err.message : 'Não foi possível ajustar.')
+    } finally {
+      setAdjustSaving(false)
     }
   }
 
@@ -197,6 +339,10 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
       coveredWeekdays: plan.coveredWeekdays,
       blockedServiceIds: plan.blockedServiceIds || [],
       quantities,
+      usagePace: plan.usagePace === 'ONCE_PER_WEEK' ? 'ONCE_PER_WEEK' : 'FLEXIBLE',
+      allowsCompanionCuts: Boolean(plan.allowsCompanionCuts),
+      companionCutsPerCycle: String(plan.companionCutsPerCycle ?? 0),
+      applyToActiveSubscribers: true,
     })
     setError('')
     setSuccess('')
@@ -261,6 +407,85 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
             />
             <input required type="number" min="1" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Preço do ciclo" className={inputClass(lightMode)} />
             <div>
+              <label className={labelClass(lightMode)} htmlFor="plan-usage-pace">
+                Uso dos cortes
+              </label>
+              <select
+                id="plan-usage-pace"
+                value={form.usagePace}
+                onChange={(event) => setForm({
+                  ...form,
+                  usagePace: event.target.value === 'ONCE_PER_WEEK' ? 'ONCE_PER_WEEK' : 'FLEXIBLE',
+                })}
+                className={inputClass(lightMode)}
+              >
+                <option value="FLEXIBLE">Qualquer dia coberto até acabar o mês</option>
+                <option value="ONCE_PER_WEEK">No máximo 1 corte coberto por semana</option>
+              </select>
+            </div>
+            <div className={`rounded-xl border p-3 ${lightMode ? 'border-slate-200' : 'border-slate-600'}`}>
+              <p className={labelClass(lightMode)}>Cortes com acompanhamento</p>
+              <label className={`mt-1 flex items-center justify-between gap-3 text-sm ${lightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                <span>Permitir acompanhante no ciclo</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={form.allowsCompanionCuts}
+                  onChange={(event) => {
+                    const enabled = event.target.checked
+                    setForm((current) => ({
+                      ...current,
+                      allowsCompanionCuts: enabled,
+                      companionCutsPerCycle: enabled
+                        ? String(Math.max(1, Number(current.companionCutsPerCycle) || 1))
+                        : '0',
+                    }))
+                  }}
+                  className="size-4 accent-indigo-600"
+                />
+              </label>
+              {form.allowsCompanionCuts ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="Diminuir acompanhamento"
+                    onClick={() =>
+                      setForm((current) => ({
+                        ...current,
+                        companionCutsPerCycle: String(
+                          Math.max(1, (Number(current.companionCutsPerCycle) || 1) - 1),
+                        ),
+                      }))
+                    }
+                    className="grid size-9 place-items-center rounded-lg border border-slate-500/40"
+                  >
+                    <Minus className="size-4" />
+                  </button>
+                  <span className="min-w-10 text-center text-sm font-bold">
+                    {Math.max(1, Number(form.companionCutsPerCycle) || 1)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Aumentar acompanhamento"
+                    onClick={() =>
+                      setForm((current) => ({
+                        ...current,
+                        companionCutsPerCycle: String(
+                          Math.min(100, (Number(current.companionCutsPerCycle) || 1) + 1),
+                        ),
+                      }))
+                    }
+                    className="grid size-9 place-items-center rounded-lg border border-slate-500/40"
+                  >
+                    <Plus className="size-4" />
+                  </button>
+                  <span className={`text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    por ciclo
+                  </span>
+                </div>
+              ) : null}
+            </div>
+            <div>
               <p className={labelClass(lightMode)}>Dias cobertos</p>
               <p className={`mb-2 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>Fora desses dias o cliente paga o valor normal do serviço. Ex.: só de segunda a quinta.</p>
               <div className="flex flex-wrap gap-2">
@@ -272,47 +497,57 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
               </div>
             </div>
             <div>
-              <p className={labelClass(lightMode)}>Serviços e unidades por mês</p>
+              <p className={labelClass(lightMode)}>Serviços do plano</p>
               <p className={`mb-2 text-xs ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Cada serviço tem a própria quantidade. Ex.: 1 pigmentação e 2 barbas. Marque indisponível para tirar do plano. Um corte não vira barba.
+                Marque “Incluir no plano” e ajuste a quantidade com − / +. Desmarcar tira o serviço do plano.
               </p>
               <div className="space-y-2">
                 {services.map((service) => {
-                  const blocked = form.blockedServiceIds.includes(service.id)
+                  const included = !form.blockedServiceIds.includes(service.id)
+                  const qty = Math.max(1, Number(form.quantities[service.id] || '1') || 1)
                   return (
-                    <div key={service.id} className="flex items-center gap-2 text-sm">
+                    <div
+                      key={service.id}
+                      className={`flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2 text-sm ${
+                        lightMode ? 'border-slate-200' : 'border-slate-600'
+                      }`}
+                    >
                       <label className="flex min-w-0 flex-1 items-center gap-2">
                         <input
                           type="checkbox"
-                          checked={blocked}
-                          onChange={() => setForm((current) => ({
-                            ...current,
-                            blockedServiceIds: blocked
-                              ? current.blockedServiceIds.filter((id) => id !== service.id)
-                              : [...current.blockedServiceIds, service.id],
-                          }))}
+                          checked={included}
+                          onChange={(event) => setServiceIncluded(service.id, event.target.checked)}
                         />
-                        <span className="truncate">{service.name}{service.active ? '' : ' (inativo)'}</span>
+                        <span className="truncate">
+                          Incluir no plano · {service.name}
+                          {service.active ? '' : ' (inativo)'}
+                        </span>
                       </label>
-                      <input
-                        type="number"
-                        min="1"
-                        disabled={blocked}
-                        value={form.quantities[service.id] ?? '1'}
-                        onChange={(event) => setForm((current) => ({
-                          ...current,
-                          quantities: { ...current.quantities, [service.id]: event.target.value },
-                        }))}
-                        aria-label={`Quantidade de ${service.name}`}
-                        className={`${inputClass(lightMode)} !w-24 shrink-0 disabled:opacity-40`}
-                      />
+                      {included ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            aria-label={`Diminuir ${service.name}`}
+                            onClick={() => bumpServiceQty(service.id, -1)}
+                            className="grid size-8 place-items-center rounded-lg border border-slate-500/40"
+                          >
+                            <Minus className="size-3.5" />
+                          </button>
+                          <span className="min-w-7 text-center text-xs font-bold">{qty}</span>
+                          <button
+                            type="button"
+                            aria-label={`Aumentar ${service.name}`}
+                            onClick={() => bumpServiceQty(service.id, 1)}
+                            className="grid size-8 place-items-center rounded-lg border border-slate-500/40"
+                          >
+                            <Plus className="size-3.5" />
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   )
                 })}
               </div>
-              <p className={`mt-1 text-[11px] ${lightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                A caixa marca o serviço como indisponível para quem assina. O número é quantas vezes ele entra no mês.
-              </p>
             </div>
             <div>
               <p className={labelClass(lightMode)}>Profissionais habilitados</p>
@@ -325,8 +560,15 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
                 ))}
               </div>
             </div>
+            {editingId ? (
+              <p className={`text-xs ${lightMode ? 'text-amber-700' : 'text-amber-300'}`}>
+                Ao salvar, confirmamos a atualização dos assinantes ACTIVE deste plano.
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-2">
-              <AdminButton type="submit" disabled={saving}>{saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Criar plano'}</AdminButton>
+              <AdminButton type="submit" disabled={saving}>
+                {saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Criar plano'}
+              </AdminButton>
               {editingId ? (
                 <AdminButton type="button" variant="ghost" onClick={() => { setEditingId(null); setForm(emptyForm) }}>
                   Cancelar edição
@@ -377,6 +619,12 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
                 <p className="mt-1 text-xs text-slate-500">
                   Dias: {plan.coveredWeekdays.map((day) => WEEKDAYS.find((item) => item.value === day)?.label).filter(Boolean).join(', ')}
                 </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Uso: {paceLabel(plan.usagePace)}
+                  {plan.allowsCompanionCuts
+                    ? ` · Acompanhamento: ${plan.companionCutsPerCycle ?? 0}x`
+                    : ' · Sem acompanhamento'}
+                </p>
                 {(plan.blockedServiceIds || []).length > 0 ? (
                   <p className="mt-1 text-xs text-rose-300">
                     Indisponível para assinantes: {(plan.blockedServiceIds || []).map((id) => services.find((service) => service.id === id)?.name || 'serviço').join(', ')}
@@ -396,56 +644,115 @@ export default function AdminSubscriptionsTab({ salonId, lightMode = false }: Ad
                 {subscriber.cycleEndsAt ? `Ciclo até ${new Date(subscriber.cycleEndsAt).toLocaleString('pt-BR')}` : 'Sem ciclo aberto'}
                 {subscriber.cancelRenewalAt ? ' · renovação cancelada' : ''}
               </p>
-              <ul className="mt-2 space-y-1 text-xs text-slate-300">
-                {subscriber.benefits.map((benefit) => (
-                  <li key={benefit.serviceId}>
-                    {benefit.serviceName || 'Serviço'}: disponível {benefit.available} · reservado {benefit.reserved} · consumido {benefit.consumed} · concedido {benefit.granted}
-                  </li>
-                ))}
+              <ul className="mt-3 space-y-2">
+                {subscriber.benefits.map((benefit) => {
+                  const label = benefitLabel(benefit)
+                  const isCompanion =
+                    benefit.serviceId === COMPANION_SERVICE_ID || benefit.kind === 'COMPANION'
+                  return (
+                    <li
+                      key={benefit.serviceId}
+                      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs ${
+                        lightMode ? 'border-slate-200 text-slate-700' : 'border-slate-600 text-slate-200'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold">
+                          {isCompanion ? 'Acompanhamento' : label}
+                        </p>
+                        <p className={lightMode ? 'text-slate-500' : 'text-slate-400'}>
+                          disponível {benefit.available} · reservado {benefit.reserved} · consumido{' '}
+                          {benefit.consumed} · concedido {benefit.granted}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdjustError('')
+                            setAdjustReason('')
+                            setAdjustTarget({
+                              subscriberId: subscriber.id,
+                              serviceId: benefit.serviceId,
+                              label: isCompanion ? 'Acompanhamento' : label,
+                              delta: -1,
+                            })
+                          }}
+                          className="rounded-lg border border-rose-400/40 px-2.5 py-1.5 text-[11px] font-bold text-rose-400"
+                        >
+                          −1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdjustError('')
+                            setAdjustReason('')
+                            setAdjustTarget({
+                              subscriberId: subscriber.id,
+                              serviceId: benefit.serviceId,
+                              label: isCompanion ? 'Acompanhamento' : label,
+                              delta: 1,
+                            })
+                          }}
+                          className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-bold text-emerald-400"
+                        >
+                          +1
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
-              <AdjustForm salonId={salonId} subscriber={subscriber} onDone={load} />
             </article>
           ))}
         </div>
       )}
+
+      {adjustTarget ? (
+        <AdminModal
+          title={adjustTarget.delta > 0 ? `Adicionar +1 · ${adjustTarget.label}` : `Remover −1 · ${adjustTarget.label}`}
+          onClose={() => {
+            if (!adjustSaving) {
+              setAdjustTarget(null)
+              setAdjustReason('')
+              setAdjustError('')
+            }
+          }}
+          lightMode={lightMode}
+        >
+          <div className="space-y-3">
+            <p className={`text-sm ${lightMode ? 'text-slate-600' : 'text-slate-300'}`}>
+              Informe o motivo do ajuste (obrigatório).
+            </p>
+            <input
+              autoFocus
+              value={adjustReason}
+              onChange={(event) => setAdjustReason(event.target.value)}
+              placeholder="Ex.: cortesia, correção de saldo…"
+              className={inputClass(lightMode)}
+            />
+            {adjustError ? <p className="text-xs font-semibold text-rose-400">{adjustError}</p> : null}
+            <div className="flex justify-end gap-2 pt-1">
+              <AdminButton
+                type="button"
+                variant="ghost"
+                disabled={adjustSaving}
+                onClick={() => {
+                  setAdjustTarget(null)
+                  setAdjustReason('')
+                  setAdjustError('')
+                }}
+              >
+                Cancelar
+              </AdminButton>
+              <AdminButton type="button" disabled={adjustSaving} onClick={() => void submitAdjust()}>
+                {adjustSaving ? 'Salvando...' : 'Confirmar'}
+              </AdminButton>
+            </div>
+          </div>
+        </AdminModal>
+      ) : null}
+      {confirmDialog}
     </div>
-  )
-}
-
-function AdjustForm({ salonId, subscriber, onDone }: { salonId: string; subscriber: Subscriber; onDone: () => void }) {
-  const [serviceId, setServiceId] = useState(subscriber.benefits[0]?.serviceId || '')
-  const [quantity, setQuantity] = useState('1')
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState('')
-
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    setError('')
-    const res = await authFetch(`/subscriptions/salon/${salonId}/subscribers/${subscriber.id}/adjust`, {
-      method: 'POST',
-      body: JSON.stringify({ serviceId, quantity: Number(quantity), reason }),
-    })
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      setError(json.error || 'Não foi possível ajustar.')
-      return
-    }
-    setReason('')
-    onDone()
-  }
-
-  if (subscriber.benefits.length === 0) return null
-  return (
-    <form onSubmit={submit} className="mt-3 grid gap-2 sm:grid-cols-[1fr_90px_1fr_auto]">
-      <select className={inputClass(false)} value={serviceId} onChange={(event) => setServiceId(event.target.value)}>
-        {subscriber.benefits.map((benefit) => (
-          <option key={benefit.serviceId} value={benefit.serviceId}>{benefit.serviceName || 'Serviço'}</option>
-        ))}
-      </select>
-      <input className={inputClass(false)} type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
-      <input className={inputClass(false)} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Motivo do ajuste" required />
-      <AdminButton type="submit">Ajustar</AdminButton>
-      {error ? <p className="text-xs text-red-400 sm:col-span-4">{error}</p> : null}
-    </form>
   )
 }

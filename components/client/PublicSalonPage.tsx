@@ -35,6 +35,7 @@ import {
   isUnofferableAddon,
   type BookingServiceOption,
 } from '@/lib/client/appointment-items';
+import { isCutLikeService } from '@/lib/admin/service-helpers';
 
 type ClientPaymentMode = 'STORE' | 'PIX' | 'CARD';
 
@@ -44,6 +45,105 @@ type AvailabilityQuote = {
   totalPrice: number | null
   durationMinutes: number | null
   error: string | null
+}
+
+type CoverageQuote = {
+  covered?: boolean
+  partial?: boolean
+  reason?: string
+  subscriptionName?: string
+  items?: Array<{ serviceId: string; covered?: boolean; reason?: string }>
+}
+
+const PAY_WITH_PLAN_NOTICE =
+  'Sua assinatura não cobre este horário. Você pode agendar pagando.'
+
+const COVERAGE_REASON_COPY: Record<string, string> = {
+  WEEKDAY_NOT_COVERED: PAY_WITH_PLAN_NOTICE,
+  WEEKLY_LIMIT: PAY_WITH_PLAN_NOTICE,
+  NO_BALANCE: PAY_WITH_PLAN_NOTICE,
+  NO_COMPANION_BALANCE: 'Sem saldo de acompanhante neste ciclo — este corte será cobrado.',
+  PROFESSIONAL_NOT_COVERED: PAY_WITH_PLAN_NOTICE,
+  OUTSIDE_CYCLE: PAY_WITH_PLAN_NOTICE,
+}
+
+const FORCE_PAY_REASONS = new Set([
+  'WEEKDAY_NOT_COVERED',
+  'WEEKLY_LIMIT',
+  'NO_BALANCE',
+  'PROFESSIONAL_NOT_COVERED',
+  'OUTSIDE_CYCLE',
+])
+
+function coverageNoticeMessages(quote: CoverageQuote | null): string[] {
+  if (!quote) return []
+  const messages: string[] = []
+  const push = (reason?: string) => {
+    if (!reason) return
+    const copy = COVERAGE_REASON_COPY[reason]
+    if (copy && !messages.includes(copy)) messages.push(copy)
+  }
+  if (quote.reason && quote.reason !== 'OK' && quote.reason !== 'PARTIAL') push(quote.reason)
+  for (const item of quote.items ?? []) {
+    if (
+      item.reason === 'WEEKLY_LIMIT' ||
+      item.reason === 'NO_BALANCE' ||
+      item.reason === 'NO_COMPANION_BALANCE'
+    ) {
+      push(item.reason)
+    }
+  }
+  return messages
+}
+
+/** Cobertura total/parcial usa assinatura; motivos de exclusão forçam pagamento (useSubscription=false). */
+function shouldUseSubscription(quote: CoverageQuote | null): boolean {
+  if (!quote) return false
+  if (quote.covered) return true
+  if (quote.partial) return true
+  if (quote.reason && FORCE_PAY_REASONS.has(quote.reason)) return false
+  return false
+}
+
+function uncoveredItemLabel(reason?: string): string | null {
+  if (reason === 'WEEKLY_LIMIT') return 'Limite semanal'
+  if (reason === 'NO_COMPANION_BALANCE') return 'Sem saldo de acompanhante'
+  return null
+}
+
+/** Com acompanhante, o corte vai na frente: o backend usa o índice 0 no pool de acompanhante. */
+function isCompanionCutService(item: BookingServiceOption): boolean {
+  const probe = {
+    category: item.category || '',
+    isDefaultCutAddon: item.isDefaultCutAddon,
+  }
+  if (isCutLikeService({ ...probe, name: item.name })) return true
+  if (item.catalogName && item.catalogName !== item.name) {
+    return isCutLikeService({ ...probe, name: item.catalogName })
+  }
+  return false
+}
+
+function serviceIdsWithCompanionCutFirst(services: BookingServiceOption[], useCompanionCut: boolean): string[] {
+  const ids = services.map((item) => String(item.id)).filter(Boolean)
+  if (!useCompanionCut || services.length < 2) return ids
+  const cutIndex = services.findIndex((item) => isCompanionCutService(item))
+  if (cutIndex <= 0) return ids
+  const ordered = [services[cutIndex], ...services.filter((_, index) => index !== cutIndex)]
+  return ordered.map((item) => String(item.id)).filter(Boolean)
+}
+
+function benefitAvailableCount(row?: {
+  granted?: number
+  reserved?: number
+  consumed?: number
+  forfeited?: number
+}): number {
+  if (!row) return 0
+  return Math.max(
+    0,
+    Number(row.granted || 0) - Number(row.reserved || 0) - Number(row.consumed || 0) - Number(row.forfeited || 0),
+  )
 }
 
 function localDateTimeParts(iso: string): { date: string; time: string } {
@@ -115,21 +215,27 @@ export default function PublicSalonPage() {
     error: null,
   });
   const [plansOpen, setPlansOpen] = useState(false);
-  const [subscriptionQuote, setSubscriptionQuote] = useState<{
-    covered?: boolean;
-    partial?: boolean;
-    reason?: string;
-    subscriptionName?: string;
-    items?: Array<{ serviceId: string; covered?: boolean; reason?: string }>;
-  } | null>(null);
+  const [subscriptionQuote, setSubscriptionQuote] = useState<CoverageQuote | null>(null);
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [subscriptionTick, setSubscriptionTick] = useState(0);
+  const [useCompanionCut, setUseCompanionCut] = useState(false);
+  const [companionName, setCompanionName] = useState('');
   const [mySubscription, setMySubscription] = useState<{
     name: string;
     endsAt: string | null;
     weekdays: number[];
+    allowsCompanionCuts: boolean;
+    companionAvailable: number;
     benefits: Array<{ name: string; available: number }>;
   } | null>(null);
+  const companionAvailable = Math.max(0, mySubscription?.companionAvailable ?? 0);
+  const companionCutActive = Boolean(
+    mySubscription?.allowsCompanionCuts && useCompanionCut && companionAvailable > 0,
+  );
+  const bookingServiceIds = useMemo(
+    () => serviceIdsWithCompanionCutFirst(selectedServices, companionCutActive),
+    [selectedServices, companionCutActive],
+  );
   const [blockedServiceIds, setBlockedServiceIds] = useState<string[]>([]);
   const [selectedProfessional, setSelectedProfessional] = useState<any>(null);
   const [lastProfessionalId, setLastProfessionalId] = useState<string | null>(null);
@@ -406,17 +512,31 @@ export default function PublicSalonPage() {
             new Date(a.startsAt || 0).getTime() - new Date(b.startsAt || 0).getTime(),
         )[0] || cycles[0];
         const items = Array.isArray(subscription.snapshotItems) ? subscription.snapshotItems : [];
+        const cycleBenefits = Array.isArray(cycle?.benefits) ? cycle.benefits : [];
+        const benefits = items
+          .filter((item: { serviceId: string }) => item.serviceId !== '__COMPANION__')
+          .map((item: { serviceId: string; serviceName?: string; quantity?: number }) => {
+            const benefit = cycleBenefits.find((row: { serviceId: string }) => row.serviceId === item.serviceId);
+            const available = benefit ? benefitAvailableCount(benefit) : Number(item.quantity) || 0;
+            return { name: item.serviceName || 'Serviço', available: Math.max(0, available) };
+          });
+        const allowsCompanionCuts = subscription.snapshotAllowsCompanionCuts === true;
+        let companionAvailableCount = 0;
+        if (allowsCompanionCuts) {
+          const companion = cycleBenefits.find(
+            (row: { serviceId?: string; kind?: string }) =>
+              row.serviceId === '__COMPANION__' || row.kind === 'COMPANION',
+          );
+          companionAvailableCount = benefitAvailableCount(companion);
+          benefits.push({ name: 'Acompanhante', available: companionAvailableCount });
+        }
         setMySubscription({
           name: subscription.snapshotName,
           endsAt: cycle?.endsAt || null,
           weekdays: Array.isArray(subscription.snapshotCoveredWeekdays) ? subscription.snapshotCoveredWeekdays : [],
-          benefits: items.map((item: { serviceId: string; serviceName?: string; quantity?: number }) => {
-            const benefit = cycle?.benefits?.find((row: { serviceId: string }) => row.serviceId === item.serviceId);
-            const available = benefit
-              ? Number(benefit.granted) - Number(benefit.reserved) - Number(benefit.consumed) - Number(benefit.forfeited)
-              : Number(item.quantity) || 0;
-            return { name: item.serviceName || 'Serviço', available: Math.max(0, available) };
-          }),
+          allowsCompanionCuts,
+          companionAvailable: companionAvailableCount,
+          benefits,
         });
       })
       .catch(() => {
@@ -437,6 +557,7 @@ export default function PublicSalonPage() {
       .map((ps: any) => ({
         id: ps.service.id,
         name: ps.customName || ps.service.name,
+        catalogName: ps.service.name,
         price: ps.customPrice != null ? ps.customPrice : ps.service.price,
         duration: ps.customDuration != null ? ps.customDuration : ps.service.duration,
         isActive: true,
@@ -450,6 +571,7 @@ export default function PublicSalonPage() {
         addonHostServiceIds: Array.isArray(ps.service.addonHostServiceIds)
           ? ps.service.addonHostServiceIds.map(String)
           : [],
+        category: ps.service.category ?? null,
       }))
       .filter((service: BookingServiceOption) => !blockedServiceIds.includes(service.id))
       .filter((service: BookingServiceOption) => !isUnofferableAddon(service));
@@ -462,6 +584,7 @@ export default function PublicSalonPage() {
         .map((s: any) => ({
           id: s.id,
           name: s.name,
+          catalogName: s.name,
           price: s.price,
           duration: s.duration,
           isActive: true,
@@ -475,6 +598,7 @@ export default function PublicSalonPage() {
           addonHostServiceIds: Array.isArray(s.addonHostServiceIds)
             ? s.addonHostServiceIds.map(String)
             : [],
+          category: s.category ?? null,
         }))
         .filter((service: BookingServiceOption) => !blockedServiceIds.includes(service.id))
         .filter((service: BookingServiceOption) => !isUnofferableAddon(service));
@@ -643,6 +767,7 @@ export default function PublicSalonPage() {
             .map((addon: any) => ({
               id: String(addon.id),
               name: addon.name,
+              catalogName: addon.name,
               price: Number(addon.price || 0),
               duration: Number(addon.duration || 0),
               standaloneAllowed: addon.standaloneAllowed !== false,
@@ -654,6 +779,7 @@ export default function PublicSalonPage() {
               addonHostServiceIds: Array.isArray(addon.addonHostServiceIds)
                 ? addon.addonHostServiceIds.map(String)
                 : [],
+              category: addon.category ?? null,
             }))
             .filter((addon: BookingServiceOption) => !isUnofferableAddon(addon)),
         );
@@ -679,10 +805,11 @@ export default function PublicSalonPage() {
     setCoverageLoading(true);
     const params = new URLSearchParams({
       salonId: data.salon.id,
-      serviceIds: selectedServiceIds.join(','),
+      serviceIds: bookingServiceIds.join(','),
       professionalId: selectedProfessional.id,
       startTime,
     });
+    if (companionCutActive) params.set('useCompanionCut', 'true');
     fetch(apiUrl(`/subscriptions/coverage?${params.toString()}`), {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -701,7 +828,7 @@ export default function PublicSalonPage() {
     return () => {
       cancelled = true;
     };
-  }, [data?.salon?.id, selectedProfessional?.id, selectedServiceIds.join(','), selectedDate, selectedTime, timeSlots]);
+  }, [data?.salon?.id, selectedProfessional?.id, bookingServiceIds.join(','), selectedDate, selectedTime, timeSlots, companionCutActive]);
 
   const quotedBookingPrice = (service: { price: number } | null | undefined) =>
     appliedCoupon?.quotedPrice ?? service?.price ?? 0;
@@ -729,6 +856,8 @@ export default function PublicSalonPage() {
     setPaymentMode(null);
     setCouponCode('');
     setAppliedCoupon(null);
+    setUseCompanionCut(false);
+    setCompanionName('');
   };
 
   /** Reabre tela de pagamento a partir de um AWAITING (storage ou API). */
@@ -1069,7 +1198,7 @@ export default function PublicSalonPage() {
       return;
     }
     const coveredNow = Boolean(subscriptionQuote?.covered);
-    const useSubscription = coveredNow || Boolean(subscriptionQuote?.partial);
+    const useSubscription = shouldUseSubscription(subscriptionQuote);
     if (!coveredNow && !paymentMode) {
       setBookingError('Escolha como deseja pagar: Pix, cartão ou na loja.');
       return;
@@ -1109,13 +1238,18 @@ export default function PublicSalonPage() {
     const payload: Record<string, unknown> = {
       salonId: data.salon.id,
       professionalId: selectedProfessional.id,
-      serviceIds: selectedServiceIds,
-      serviceId: selectedServiceIds[0],
+      serviceIds: bookingServiceIds,
+      serviceId: bookingServiceIds[0],
       startTime: start.toISOString(),
       endTime: end.toISOString(),
       paymentMode: coveredNow ? 'STORE' : paymentMode,
       useSubscription,
     };
+    if (companionCutActive) {
+      payload.useCompanionCut = true;
+      const trimmedCompanion = companionName.trim();
+      if (trimmedCompanion) payload.companionName = trimmedCompanion;
+    }
     if (appliedCoupon?.code && !coveredNow) {
       payload.couponCode = appliedCoupon.code;
     }
@@ -1603,6 +1737,44 @@ export default function PublicSalonPage() {
                           ))}
                         </ul>
                       ) : null}
+                      {mySubscription.allowsCompanionCuts ? (
+                        <div className="mt-3 space-y-2 border-t border-emerald-500/20 pt-3">
+                          {companionAvailable > 0 ? (
+                            <>
+                              <label className="flex items-start gap-2 text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                <input
+                                  type="checkbox"
+                                  checked={useCompanionCut}
+                                  onChange={(event) => {
+                                    setUseCompanionCut(event.target.checked);
+                                    setSubscriptionQuote(null);
+                                    setPaymentMode(null);
+                                    setBookingError(null);
+                                  }}
+                                  className="mt-0.5 h-4 w-4 accent-[var(--brand,#d5a85c)]"
+                                />
+                                <span>
+                                  Levar acompanhante (usa 1 corte de acompanhamento)
+                                  {` · ${companionAvailable} disponível${companionAvailable === 1 ? '' : 'eis'}`}
+                                </span>
+                              </label>
+                              {useCompanionCut ? (
+                                <input
+                                  value={companionName}
+                                  onChange={(event) => setCompanionName(event.target.value.slice(0, 80))}
+                                  placeholder="Nome do acompanhante (opcional)"
+                                  maxLength={80}
+                                  className="h-10 w-full rounded-lg border border-emerald-500/30 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[var(--brand,#d5a85c)] dark:border-emerald-500/30 dark:bg-[#0b0d0e] dark:text-white"
+                                />
+                              ) : null}
+                            </>
+                          ) : (
+                            <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-200">
+                              Sem saldo de acompanhamento neste ciclo. Acompanhante só pagando (Pix, cartão ou loja).
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
                       <p className="mt-2 text-[11px] leading-relaxed text-emerald-800 dark:text-emerald-200">
                         No dia e no profissional cobertos, você só confirma o horário. Sem Pix, cartão ou pagamento na loja.
                       </p>
@@ -1893,24 +2065,30 @@ export default function PublicSalonPage() {
                         {selectedServices.length ? (
                           <ul className="space-y-2">
                             {selectedServices.map((item) => {
-                              const coveredItem = Boolean(
-                                subscriptionQuote?.covered ||
-                                  subscriptionQuote?.items?.find((row) => row.serviceId === item.id)?.covered,
-                              );
+                              const quoteItem = subscriptionQuote?.items?.find((row) => row.serviceId === item.id);
+                              const coveredItem = Boolean(subscriptionQuote?.covered || quoteItem?.covered);
+                              const reasonLabel = coveredItem ? null : uncoveredItemLabel(quoteItem?.reason);
                               return (
                                 <li
                                   key={item.id}
                                   className="flex items-start justify-between gap-3 text-xs font-medium leading-snug text-slate-800 dark:text-slate-200"
                                 >
                                   <span className="min-w-0 text-left">{item.name}</span>
-                                  <span
-                                    className={`shrink-0 text-[10px] font-bold uppercase tracking-wide ${
-                                      coveredItem
-                                        ? 'text-emerald-600 dark:text-emerald-400'
-                                        : 'client-accent-text'
-                                    }`}
-                                  >
-                                    {coveredItem ? 'Incluso' : `A pagar R$ ${Number(item.price).toFixed(2)}`}
+                                  <span className="shrink-0 text-right">
+                                    <span
+                                      className={`block text-[10px] font-bold uppercase tracking-wide ${
+                                        coveredItem
+                                          ? 'text-emerald-600 dark:text-emerald-400'
+                                          : 'client-accent-text'
+                                      }`}
+                                    >
+                                      {coveredItem ? 'Incluso' : `A pagar R$ ${Number(item.price).toFixed(2)}`}
+                                    </span>
+                                    {reasonLabel ? (
+                                      <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                                        {reasonLabel}
+                                      </span>
+                                    ) : null}
                                   </span>
                                 </li>
                               );
@@ -1968,6 +2146,11 @@ export default function PublicSalonPage() {
                           <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
                             Assinatura cobre só parte dos itens. Veja acima o que está incluso e o que falta pagar.
                           </p>
+                          {coverageNoticeMessages(subscriptionQuote).map((message) => (
+                            <p key={message} className="text-xs text-amber-600 dark:text-amber-300">
+                              {message}
+                            </p>
+                          ))}
                         </div>
                       ) : coverageLoading && mySubscription ? (
                         <p className="border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
@@ -2054,23 +2237,11 @@ export default function PublicSalonPage() {
                           Como deseja pagar?
                         </p>
                         )}
-                        {subscriptionQuote?.reason === 'WEEKDAY_NOT_COVERED' ? (
-                          <p className="text-xs text-amber-600 dark:text-amber-300">
-                            Nesse dia o plano não cobre. O horário segue no valor normal.
+                        {coverageNoticeMessages(subscriptionQuote).map((message) => (
+                          <p key={message} className="text-xs text-amber-600 dark:text-amber-300">
+                            {message}
                           </p>
-                        ) : subscriptionQuote?.reason === 'NO_BALANCE' ? (
-                          <p className="text-xs text-amber-600 dark:text-amber-300">
-                            O saldo desse serviço acabou neste ciclo. O horário segue no valor normal.
-                          </p>
-                        ) : subscriptionQuote?.reason === 'PROFESSIONAL_NOT_COVERED' ? (
-                          <p className="text-xs text-amber-600 dark:text-amber-300">
-                            Esse profissional não atende pelo plano. O horário segue no valor normal.
-                          </p>
-                        ) : subscriptionQuote?.reason === 'OUTSIDE_CYCLE' ? (
-                          <p className="text-xs text-amber-600 dark:text-amber-300">
-                            Este horário fica fora do ciclo pago. O valor é o normal.
-                          </p>
-                        ) : null}
+                        ))}
 
                         {resumeHint ? (
                           <button

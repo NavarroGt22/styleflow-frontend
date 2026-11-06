@@ -49,6 +49,9 @@ export type BookingServiceOption = {
   isDefaultCutAddon?: boolean
   comboItemServiceIds?: string[]
   addonHostServiceIds?: string[]
+  category?: string | null
+  /** Nome do catálogo, quando o barbeiro usa um nome próprio. */
+  catalogName?: string | null
 }
 
 /** Serviço que o cliente pode escolher sozinho na lista principal. */
