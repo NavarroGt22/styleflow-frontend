@@ -23,7 +23,7 @@ import {
 } from '../ui/AdminUi'
 import { useConfirm, type ConfirmOptions } from '../ui/useConfirm'
 import FinancialDailyChart from '../FinancialDailyChart'
-import { getSessionUser } from '@/lib/auth'
+import { getAdminSessionUser } from '@/lib/support/client'
 import type {
   AdminTabProps,
   FinancialDailySeries,
@@ -152,7 +152,7 @@ function rangeForPreset(preset: PeriodPreset): { from?: string; to?: string } {
 
 export default function AdminFinancialTab({ salonId, lightMode = false }: AdminTabProps) {
   const { confirm, confirmDialog } = useConfirm(lightMode)
-  const sessionUser = getSessionUser()
+  const sessionUser = getAdminSessionUser()
   const isOwner = sessionUser?.role === 'OWNER' || sessionUser?.role === 'SUPER_ADMIN'
 
   // A sub-aba escolhida sobrevive a trocar de aba e a recarregar a página.

@@ -19,6 +19,21 @@ const {
 } = await import('../lib/support/server.ts')
 const { bootstrapSupport, clearSupportContext } = await import('../lib/support/client.ts')
 const { matchesSupportPageOrigin } = await import('../lib/support/origin.ts')
+const { supportApiPath, supportMutationAllowed } = await import('../lib/support/proxy-policy.ts')
+
+test('full owner support allows financial, customers, subscriptions and stock in the selected salon', () => {
+  const salon = '47070000-abcd-4000-8000-000000000002'
+  for (const path of [
+    ['financials', 'salon', salon, 'summary'], ['customers', 'salon', salon],
+    ['subscriptions', 'salon', salon, 'manage'], ['products', 'salon', salon],
+    ['client-groups', 'salon', salon], ['coupons', 'salon', salon],
+  ]) assert.equal(supportApiPath('GET', path, new URLSearchParams(), salon), `/${path.join('/')}`)
+  assert.equal(supportApiPath('GET', ['financials', 'salon', 'another-salon'], new URLSearchParams(), salon), null)
+  assert.equal(supportApiPath('GET', ['admin', 'dashboard'], new URLSearchParams(), salon), null)
+  assert.equal(supportApiPath('GET', ['financials', 'salon', salon], new URLSearchParams('from=2026-11-01&to=2026-11-30'), salon), `/financials/salon/${salon}?from=2026-11-01&to=2026-11-30`)
+  assert.equal(supportMutationAllowed('POST', ['subscriptions', 'salon', salon, 'plans'], { name: 'Mensal', price: 100, items: [] }, salon), true)
+  assert.equal(supportMutationAllowed('PUT', ['professionals', 'profile-id'], { name: 'Nome', phone: '11999999999', password: 'test-only-password' }, salon), true)
+})
 const { authFetch } = await import('../lib/api.ts')
 
 const platform = 'https://admin.example.test'
@@ -183,7 +198,7 @@ test('proxy scopes paths, methods, mutations and stale tabs before contacting th
   })
   const headers = { Cookie: cookie(), 'X-Support-Session-Id': id }
   for (const path of [
-    ['auth', 'refresh'], ['establishments', session.salonId, 'pix-key'], ['admin', 'tenants'],
+    ['auth', 'refresh'], ['establishments', 'another-salon', 'pix-key'], ['admin', 'tenants'],
     ['appointments', 'apt-111', 'mark-paid'], ['services', 'manage', 'another-salon'],
     ['services', 'manage', '..'], ['services', 'manage', '%2es'], ['https:', '', 'evil.example.test'],
   ]) assert.equal((await supportProxy(request('proxy', { headers }), path)).status, 403)
@@ -224,10 +239,10 @@ test('proxy rejects sensitive mutations and payloads for another salon', async t
   const headers = { Cookie: cookie(), 'X-Support-Session-Id': id, Origin: platform,
     'X-Support-CSRF': '1', 'Content-Type': 'application/json' }
   for (const [method, path, body] of [
-    ['PUT', ['establishments', session.salonId], { name: 'A', whatsappGatewayToken: 'secret' }],
-    ['PUT', ['establishments', session.salonId], { tenantName: 'A', slug: 'another-salon' }],
-    ['PUT', ['professionals', 'professional-123'], { workStart: '09:00', password: 'secret' }],
-    ['PATCH', ['appointments', 'appointment-123', 'status'], { status: 'COMPLETED' }],
+    ['PUT', ['establishments', session.salonId], { name: 'A', ownerId: 'another-owner' }],
+    ['PUT', ['establishments', session.salonId], { tenantId: 'another-tenant' }],
+    ['PUT', ['professionals', 'professional-123'], { workStart: '09:00', userId: 'another-user' }],
+    ['PATCH', ['appointments', 'appointment-123', 'status'], { status: 'COMPLETED', salonId: 'another-salon' }],
     ['POST', ['services'], { salonId: 'another-salon' }],
   ]) assert.equal((await supportProxy(request('proxy', { method, headers, body: JSON.stringify(body) }), path)).status, 403)
   assert.equal(upstream.mock.callCount(), 0)

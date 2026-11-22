@@ -28,7 +28,7 @@ import {
   skipQueueEntry,
   startNextInQueue,
 } from '@/lib/admin/api'
-import { getSessionUser } from '@/lib/auth'
+import { getAdminSessionUser } from '@/lib/support/client'
 
 function localToday() {
   return new Date().toISOString().slice(0, 10)
@@ -73,7 +73,7 @@ function entryDuration(entry: QueueEntry) {
 
 export default function AdminQueueTab({ salonId, lightMode = false, salonSlug, onNavigateTab }: AdminTabProps) {
   const { confirm, confirmDialog } = useConfirm(lightMode)
-  const isReceptionist = getSessionUser()?.role === 'RECEPTIONIST'
+  const isReceptionist = getAdminSessionUser()?.role === 'RECEPTIONIST'
   const [salon, setSalon] = useState<{
     name?: string
     queueMode?: boolean

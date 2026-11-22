@@ -24,34 +24,56 @@ const routes: Entry[] = [
   { method: 'PATCH', segments: ['appointments', ':id', 'status'] },
 ]
 
-const editableFields: Record<string, readonly string[]> = {
-  establishments: [
-    'name', 'phone', 'address', 'cep', 'latitude', 'longitude', 'queueRadiusMeters', 'dayHours',
-    'openTime', 'closeTime', 'openWeekdays', 'closedDayMessage', 'bookingCalendarMode', 'instagramUrl',
-    'queueMode', 'queueAutoAdvance', 'queueAllowClientView', 'queueAllowSkip', 'productCommissionEnabled',
-    'productCommissionRate', 'primaryColor', 'customBrandName', 'historyText', 'lpSinceYear', 'logoUrl',
-    'heroImageUrl', 'faviconUrl', 'loyaltyResetMode', 'bookingSlotIntervalMinutes',
-  ],
-  professionals: ['commissionRate', 'workStart', 'workEnd', 'prepMinutes'],
-  services: [
-    'salonId', 'name', 'price', 'duration', 'category', 'description', 'professionalId', 'isActive',
-    'standaloneAllowed', 'addonAllowed', 'comboItemServiceIds', 'addonHostServiceIds', 'isDefaultCutAddon',
-  ],
+// Bodies are validated by the ordinary owner schemas upstream; reject identity/scope overrides here too.
+function add(methods: string, segments: string[], query?: readonly string[]) {
+  for (const method of methods.split(' ')) routes.push({ method, segments, query })
 }
+add('GET', ['establishments', ':salon', 'pix-key'])
+for (const action of ['test', 'send', 'broadcast']) add('POST', ['establishments', ':salon', 'whatsapp', action])
+add('GET', ['establishments', ':salon', 'whatsapp', 'evolution', 'status'])
+for (const action of ['connect', 'disconnect']) add('POST', ['establishments', ':salon', 'whatsapp', 'evolution', action])
+add('POST', ['professionals']); add('DELETE', ['professionals', ':id'])
+add('POST', ['appointments', 'walk-in']); add('PUT', ['appointments', ':id', 'complete']); add('POST', ['appointments', ':id', 'mark-paid'])
+for (const tail of [[], ['summary'], ['daily'], ['services']]) add('GET', ['financials', 'salon', ':salon', ...tail], ['from', 'to', 'month', 'professionalId'])
+for (const action of ['close', 'ai-advisor']) add('POST', ['financials', 'salon', ':salon', action])
+add('GET', ['customers', 'salon', ':salon'], ['q', 'groupId', 'professionalId', 'month']); add('PATCH', ['customers', ':id'])
+for (const prefix of ['products', 'client-groups', 'coupons']) {
+  add('GET', [prefix, 'salon', ':salon']); add('POST', [prefix]); add('PUT DELETE', [prefix, ':id'])
+}
+add('POST', ['products', ':id', 'restock']); add('POST', ['products', 'sell'])
+add('GET', ['loyalty', 'rewards', 'salon', ':salon']); add('POST', ['loyalty', 'rewards']); add('PUT DELETE', ['loyalty', 'rewards', ':id']); add('POST', ['loyalty', 'earns', ':id', 'redeem'])
+add('POST', ['queue', 'session']); add('GET', ['queue', ':id']);
+for (const action of ['start', 'complete', 'reorder', 'walkin']) add('POST', ['queue', ':id', action])
+add('POST', ['queue', 'entries', ':id', 'skip'])
+// Public queue is addressed by slug, and checked against the current session by the API.
+add('GET', ['queue', 'public', ':id'])
+add('GET', ['timecards', 'salon', ':salon'], ['from', 'to', 'professionalId'])
+add('GET', ['subscriptions', 'salon', ':salon', 'manage'])
+add('POST', ['subscriptions', 'salon', ':salon', 'plans'])
+add('PUT', ['subscriptions', 'salon', ':salon', 'plans', ':id'])
+add('POST', ['subscriptions', 'salon', ':salon', 'plans', ':id', 'availability'])
+add('POST', ['subscriptions', 'salon', ':salon', 'customers', ':id', 'subscribe'])
+add('POST', ['subscriptions', 'salon', ':salon', 'charges', ':id', 'sync'])
+add('GET', ['subscriptions', 'salon', ':salon', 'subscribers', ':id'])
+add('POST', ['subscriptions', 'salon', ':salon', 'subscribers', ':id', 'adjust'])
+add('PUT', ['subscriptions', 'salon', ':salon', 'no-show'])
 
 export function supportMutationAllowed(method: string, segments: string[], payload: unknown, salonId: string): boolean {
   const body = asRecord(payload)
   if (!body) return false
-  const [resource] = segments
-  const fields = Object.keys(body)
-  if (resource === 'appointments') {
-    if (method === 'POST') {
-      return body.salonId === salonId && fields.every(key => ['salonId', 'professionalId', 'startTime', 'endTime'].includes(key))
-    }
-    return fields.length === 1 && ['CONFIRMED', 'CANCELED_BY_SALON', 'NO_SHOW'].some(status => status === body.status)
+  function scoped(value: unknown, depth = 0): boolean {
+    if (depth > 12) return false
+    if (Array.isArray(value)) return value.length <= 500 && value.every(item => scoped(item, depth + 1))
+    const record = asRecord(value)
+    if (!record) return true
+    return Object.entries(record).every(([key, item]) => {
+      if (item == null) return true
+      if (key === 'salonId') return item === salonId
+      if (['tenantId', 'ownerId', 'userId', 'actorId', 'subjectId'].includes(key)) return false
+      return scoped(item, depth + 1)
+    })
   }
-  if (resource === 'services' && (method === 'POST' || body.salonId !== undefined) && body.salonId !== salonId) return false
-  return fields.every(key => editableFields[resource]?.includes(key))
+  return scoped(body)
 }
 
 export function supportApiPath(method: string, segments: string[], query: URLSearchParams, salonId: string): string | null {
@@ -67,7 +89,7 @@ export function supportApiPath(method: string, segments: string[], query: URLSea
   const safeQuery = new URLSearchParams()
   for (const [key, value] of query) {
     if (!route.query?.includes(key) || safeQuery.has(key)) return null
-    if (key === 'date' ? !/^\d{4}-\d{2}-\d{2}$/.test(value) : !isSupportId(value)) return null
+    if (['date', 'from', 'to'].includes(key) ? !/^\d{4}-\d{2}-\d{2}$/.test(value) : key === 'month' ? !/^\d{4}-\d{2}$/.test(value) : key === 'q' ? value.length > 200 : !isSupportId(value)) return null
     safeQuery.set(key, value)
   }
   const search = safeQuery.toString()

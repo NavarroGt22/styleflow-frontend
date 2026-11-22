@@ -15,7 +15,7 @@ import {
 import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, Professional } from '@/lib/admin/types'
 import { createProfessional, deleteProfessional, fetchSalonStaff, updateProfessional } from '@/lib/admin/api'
-import { getAdminSessionUser, supportAdminMarker } from '@/lib/support/client'
+import { getAdminSessionUser } from '@/lib/support/client'
 
 function formatPhone(phone?: string | null) {
   if (!phone) return '—'
@@ -28,7 +28,6 @@ function formatPhone(phone?: string | null) {
 export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }: AdminTabProps) {
   const { confirm, confirmDialog } = useConfirm(lightMode)
   const sessionUser = getAdminSessionUser()
-  const isSupport = supportAdminMarker() !== null
   const resolvedOwnerId = ownerUserId ?? sessionUser?.id
 
   const [team, setTeam] = useState<Professional[]>([])
@@ -131,7 +130,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
         })
       } else if (editing) {
         await updateProfessional(editing.id, {
-          ...(!isSupport && { name: form.name, phone: form.phone, password: form.password || undefined }),
+          name: form.name, phone: form.phone, password: form.password || undefined,
           commissionRate: form.staffKind === 'RECEPTIONIST' ? 0 : Number(form.commissionRate),
           workStart: form.staffKind === 'BARBER' ? form.workStart : undefined,
           workEnd: form.staffKind === 'BARBER' ? form.workEnd : undefined,
@@ -180,7 +179,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
             Barbeiros e atendimento. Atendimento não aparece no agendamento do cliente.
           </p>
         </div>
-        {!isSupport && (
+        {(
           <AdminButton onClick={openCreate}>
             <Plus className="size-4" /> Adicionar
           </AdminButton>
@@ -265,12 +264,12 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
                     </td>
                     <td className="px-4 py-4 align-top">
                       <div className="flex items-center gap-2">
-                        {(!isSupport || !isReceptionist) && (
+                        {(
                           <AdminButton variant="soft" onClick={() => openEdit(member)} className="h-9 px-3 text-xs">
                             <Pencil className="size-3.5" /> Editar
                           </AdminButton>
                         )}
-                        {!isSupport && (
+                        {(
                           <AdminButton
                             variant="danger"
                             onClick={() => handleDelete(member)}
@@ -303,7 +302,6 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
               <label className={labelClass(lightMode)}>Nome</label>
               <input
                 required
-                readOnly={isSupport}
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className={inputClass(lightMode)}
@@ -356,7 +354,6 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
             <div>
               <label className={labelClass(lightMode)}>Telefone</label>
               <input
-                readOnly={isSupport}
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 className={inputClass(lightMode)}
@@ -422,7 +419,7 @@ export default function AdminTeamTab({ salonId, lightMode = false, ownerUserId }
                 </p>
               </div>
             ) : null}
-            {!isSupport && (
+            {(
               <div>
                 <label className={labelClass(lightMode)}>
                   {modal === 'create' ? 'Senha do funcionário' : 'Nova senha (opcional)'}

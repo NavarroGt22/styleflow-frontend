@@ -17,7 +17,7 @@ import {
   updateAppointmentStatus,
 } from '@/lib/admin/api'
 import { resolveClientLink } from '@/lib/admin/platform-urls'
-import { getAdminSessionUser, supportAdminMarker } from '@/lib/support/client'
+import { getAdminSessionUser } from '@/lib/support/client'
 
 type WalkInPayment = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'
 
@@ -124,10 +124,8 @@ function AppointmentActions({
   onCheckout,
   onUnblock,
   onNoShow,
-  support,
 }: {
   apt: Appointment
-  support: boolean
   onConfirm: () => void
   onCancel: () => void
   onCheckout: () => void
@@ -136,8 +134,6 @@ function AppointmentActions({
 }) {
   const requestCancel = onCancel
   const paid = isClientPaid(apt)
-  if (support && (paid || apt.coveredBySubscription || apt.items?.some(item => item.coveredBySubscription) ||
-      (apt.paymentMode && apt.paymentMode !== 'STORE'))) return null
 
   // Pago online/loja: permanece na agenda; barbeiro marca presença ou falta
   if (paid && (apt.status === 'PENDING' || apt.status === 'CONFIRMED')) {
@@ -193,7 +189,7 @@ function AppointmentActions({
       )}
       {apt.status === 'CONFIRMED' && (
         <>
-          {!support && (
+          {(
             <button
               type="button"
               onClick={onCheckout}
@@ -234,7 +230,6 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   const [salon, setSalon] = useState<SalonSettings | null>(null)
   const { confirm, confirmDialog } = useConfirm(lightMode)
   const sessionUser = getAdminSessionUser()
-  const isSupport = supportAdminMarker() !== null
   /** Dono/admin/atendimento: visão do salão (escolhe barbeiro no avulso / bloqueio). */
   const isSalonOperator =
     sessionUser?.role === 'OWNER' ||
@@ -266,7 +261,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   async function requestCancel(apt: Appointment) {
     const ok = await confirm({
       message:
-        apt.status === 'CONFIRMED' && !isSupport
+        apt.status === 'CONFIRMED'
           ? 'Tem certeza que gostaria de cancelar essa confirmação / finalizar a cobrança?'
           : `Cancelar o agendamento de ${apt.customer?.user?.name || 'cliente'}? O horário ficará vago.`,
       confirmLabel: 'Sim, cancelar',
@@ -555,7 +550,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
           >
             <Plus className="size-4" /> Bloquear Horário
           </button>
-          {!isSupport && (
+          {(
             <button
               type="button"
               onClick={() => void openWalkInModal()}
@@ -712,7 +707,6 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
 
                   <AppointmentActions
                     apt={apt}
-                    support={isSupport}
                     onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
                     onCancel={() => requestCancel(apt)}
                     onCheckout={() => setCheckoutApt(apt)}
@@ -812,7 +806,6 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                         <div className="flex justify-end">
                           <AppointmentActions
                             apt={apt}
-                            support={isSupport}
                             onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
                             onCancel={() => requestCancel(apt)}
                             onCheckout={() => setCheckoutApt(apt)}

@@ -305,7 +305,7 @@ export async function supportProxy(request: Request, segments: string[]): Promis
   const path = supportApiPath(request.method, segments, new URL(request.url).searchParams, credential.salonId)
   if (!path) return blockedOperation()
 
-  const expectsBody = mutation && request.method !== 'DELETE'
+  const expectsBody = mutation && request.method !== 'DELETE' && request.body !== null
   const contentType = request.headers.get('content-type') ?? undefined
   if ((expectsBody && !contentType?.match(/^application\/json(?:\s*;|$)/i)) || (!expectsBody && request.body)) {
     return jsonError(415, 'Formato da solicitação não permitido no suporte.')

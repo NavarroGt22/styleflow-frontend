@@ -43,3 +43,16 @@ O checkout original `6749e4f` tinha quatro erros de nulabilidade em `PublicSalon
 Em 17/11/2026, os 12 testes de handlers e transporte passaram, incluindo entradas entregues fora de ordem e encerramento tardio de uma sessão anterior. O TypeScript terminou sem diagnósticos e o build Next.js 16.3.3 com webpack concluiu. O Edge validou a revogação após falha de bootstrap e, em um segundo cenário no servidor de desenvolvimento local com API simulada, o POST entre origens, a faixa móvel, a recarga, o CSRF, a recusa da aba revogada, a retentativa de encerramento e a restauração da sessão normal. Nenhuma API de produção participou dessas verificações.
 
 O teste de navegador aceita outra porta local via `SUPPORT_TEST_PORT`. A revisão automática de comandos bloqueou a tentativa adicional de iniciar `next start` em `127.0.0.1:5312`. A verificação do bundle neste checkout se limitou ao build.
+# Ampliação em 22/11/2026
+
+A sessão do SUPER_ADMIN agora oferece as áreas e operações do dono: financeiro, clientes, assinaturas, estoque, fila, CRM/WhatsApp e configurações, além de serviços, agenda e equipe. Não há nova migration ou variável de ambiente. Permanecem as configurações SUPPORT_* documentadas abaixo e o acesso por sessão temporária auditada.
+
+As allowlists do BFF e da API são explícitas. A API valida os recursos nos parâmetros, filtros e referências aninhadas antes de executar a autorização normal do OWNER. A unidade selecionada e a conta continuam isoladas; autenticação normal, administração global e outras unidades não são admitidas por esse token. Operações sem corpo (fechar caixa, marcar pagamento, resgatar benefício) também passam pelo BFF. As abas usam o OWNER da sessão verificada, sem depender de token comum no sessionStorage.
+
+As transações de assinatura, venda, fidelidade e criação de cliente avulso preservam o contexto RLS de suporte e suas opções de isolamento/timeout. A consulta de plano para estoque usa esse contexto. Cancelamento/falta de agendamento usa a mesma liquidação de benefícios do dono, e a agenda não remove os detalhes financeiros disponíveis ao dono.
+
+Cadastro de funcionário, checkout e confirmação manual de pagamento também mantêm o contexto transacional. Status e movimentação de benefício são atômicos; cancelamento, falta e conclusão serializam o agendamento antes de ler a reserva. Ao encerrar o suporte, a validação da sessão independente do Master aguarda até 12 segundos, evitando retorno indevido ao login em uma resposta lenta.
+
+Em contas com várias unidades, a política rejeita alterações de marca global feitas pela sessão de uma unidade, antes de qualquer gravação parcial. Valores globais inalterados podem acompanhar uma edição local. Expiração, revogação, CSRF, cookie HttpOnly e auditoria permanecem.
+
+---

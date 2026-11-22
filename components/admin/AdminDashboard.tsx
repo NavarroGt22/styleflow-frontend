@@ -75,7 +75,6 @@ const tabs: { id: AdminTab; label: string; icon: typeof Scissors; ownerOnly?: bo
 ]
 
 const RECEPTIONIST_TAB_IDS = new Set<AdminTab>(['agenda', 'fila'])
-const SUPPORT_TAB_IDS = new Set<AdminTab>(['services', 'agenda', 'cancelados', 'equipe', 'salao'])
 
 function resolveBrandColor(options: {
   prop?: string
@@ -126,7 +125,6 @@ export default function AdminDashboard({
   const isOwner = sessionUser?.role === 'OWNER' || sessionUser?.role === 'SUPER_ADMIN'
   const isReceptionist = sessionUser?.role === 'RECEPTIONIST'
   const visibleTabs = tabs.filter((tab) => {
-    if (isSupport && !SUPPORT_TAB_IDS.has(tab.id)) return false
     if (tab.id === 'estoque' && !canUseInventory) return false
     if (isReceptionist) return RECEPTIONIST_TAB_IDS.has(tab.id)
     if (tab.ownerOnly && !isOwner) return false
@@ -347,7 +345,7 @@ export default function AdminDashboard({
                 Adicionar unidade
               </button>
             )}
-            {isOwner && !isSupport ? (
+            {isOwner ? (
               <button
                 type="button"
                 onClick={() => setMyLinkOpen(true)}
@@ -361,7 +359,7 @@ export default function AdminDashboard({
                 Meu link
               </button>
             ) : null}
-            {isOwner && !isSupport ? (
+            {isOwner ? (
               <button
                 type="button"
                 onClick={() => handleNavigateTab('crm')}
@@ -463,7 +461,7 @@ export default function AdminDashboard({
                   </button>
                 </div>
                 <nav aria-label="Navegação administrativa mobile" className="flex-1 space-y-1 overflow-y-auto p-3">
-                  {isOwner && !isSupport ? (
+                  {isOwner ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -599,7 +597,7 @@ export default function AdminDashboard({
         </div>
       </main>
 
-      {!isSupport && myLinkOpen && resolvedSalonId ? (
+      {myLinkOpen && resolvedSalonId ? (
         <AdminMyLinkPanel
           salonId={resolvedSalonId}
           salonSlug={salonSlug}

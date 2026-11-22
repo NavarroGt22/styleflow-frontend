@@ -24,7 +24,7 @@ async function returnSessionPath(): Promise<string> {
   const normal = normalSessionPath()
   if (normal !== '/login') return normal
   try {
-    const response = await fetch('/api/platform/session', { cache: 'no-store', signal: AbortSignal.timeout(3000) })
+    const response = await fetch('/api/platform/session', { cache: 'no-store', signal: AbortSignal.timeout(12000) })
     if (response.ok) return '/platform/super/barbearias'
   } catch { /* The independent normal session keeps its original fallback. */ }
   return normal

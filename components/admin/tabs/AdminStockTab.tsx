@@ -6,7 +6,7 @@ import { AdminButton, AdminEmpty, AdminError, AdminLoading, AdminStat, inputClas
 import { useConfirm } from '../ui/useConfirm'
 import type { AdminTabProps, Product } from '@/lib/admin/types'
 import { createProduct, fetchProducts, restockProduct, sellProduct, softDeleteProduct, updateProduct } from '@/lib/admin/api'
-import { getSessionUser } from '@/lib/auth'
+import { getAdminSessionUser } from '@/lib/support/client'
 
 type StockSubTab = 'estoque' | 'financeiro'
 
@@ -21,7 +21,7 @@ function isArchived(product: Product) {
 export default function AdminStockTab({ salonId, lightMode = false }: AdminTabProps) {
   const { confirm, confirmDialog } = useConfirm(lightMode)
   // Cadastrar, reestocar, marcar prêmio e remover são do dono (PRODUCT_MANAGE na API).
-  const sessionRole = getSessionUser()?.role
+  const sessionRole = getAdminSessionUser()?.role
   const canManage = sessionRole === 'OWNER' || sessionRole === 'SUPER_ADMIN'
   const [subTab, setSubTab] = useState<StockSubTab>('estoque')
   const [items, setItems] = useState<Product[]>([])
