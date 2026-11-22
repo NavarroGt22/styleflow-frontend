@@ -27,6 +27,7 @@ import {
 import { PRODUCT_NAME, PRODUCT_NAME_UPPER } from '@/lib/brand'
 import { useTenantFavicon } from '@/lib/client/useTenant'
 import { apiUrl } from '@/lib/config'
+import type { SupportContext } from '@/lib/support/contract'
 import {
   clearSession,
   getSessionToken,
@@ -74,6 +75,7 @@ const tabs: { id: AdminTab; label: string; icon: typeof Scissors; ownerOnly?: bo
 ]
 
 const RECEPTIONIST_TAB_IDS = new Set<AdminTab>(['agenda', 'fila'])
+const SUPPORT_TAB_IDS = new Set<AdminTab>(['services', 'agenda', 'cancelados', 'equipe', 'salao'])
 
 function resolveBrandColor(options: {
   prop?: string
@@ -98,9 +100,11 @@ export default function AdminDashboard({
   ownerName,
   salonId,
   primaryColor,
-}: AdminDashboardProps) {
+  support,
+}: AdminDashboardProps & { support?: { context: SupportContext; ending: boolean; onEnd: () => void } }) {
   const router = useRouter()
-  const sessionUser = getSessionUser()
+  const isSupport = Boolean(support)
+  const sessionUser = support ? support.context.user : getSessionUser()
   const salonFromSession = sessionUser ? resolveSalonForSlug(sessionUser, salonSlug) : null
 
   // Sem dado do salão, cai na marca do produto — nunca no nome de outra barbearia.
@@ -122,6 +126,7 @@ export default function AdminDashboard({
   const isOwner = sessionUser?.role === 'OWNER' || sessionUser?.role === 'SUPER_ADMIN'
   const isReceptionist = sessionUser?.role === 'RECEPTIONIST'
   const visibleTabs = tabs.filter((tab) => {
+    if (isSupport && !SUPPORT_TAB_IDS.has(tab.id)) return false
     if (tab.id === 'estoque' && !canUseInventory) return false
     if (isReceptionist) return RECEPTIONIST_TAB_IDS.has(tab.id)
     if (tab.ownerOnly && !isOwner) return false
@@ -150,6 +155,7 @@ export default function AdminDashboard({
 
   // Atualiza plano da sessão (Super Admin pode ter mudado BASIC → PRO sem novo login)
   useEffect(() => {
+    if (isSupport) return
     let cancelled = false
     async function refreshPlan() {
       const token = getSessionToken()
@@ -184,7 +190,7 @@ export default function AdminDashboard({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [isSupport])
 
   const handleNavigateTab = (
     tab: AdminTab,
@@ -238,11 +244,11 @@ export default function AdminDashboard({
       }
     }
 
-    resolveSalon()
+    if (!isSupport) void resolveSalon()
     return () => {
       cancelled = true
     }
-  }, [salonSlug, primaryColor, resolvedSalonId])
+  }, [salonSlug, primaryColor, resolvedSalonId, isSupport])
 
   useEffect(() => {
     if (!mobileNavOpen) return
@@ -254,6 +260,10 @@ export default function AdminDashboard({
   }, [mobileNavOpen])
 
   const handleLogout = () => {
+    if (support) {
+      support.onEnd()
+      return
+    }
     clearSession()
     router.push('/login')
   }
@@ -299,6 +309,7 @@ export default function AdminDashboard({
               <button
                 type="button"
                 onClick={handleLogout}
+                disabled={support?.ending}
                 className="shrink-0 uppercase tracking-wide text-rose-400 transition-colors hover:text-rose-300"
               >
                 Sair
@@ -323,18 +334,20 @@ export default function AdminDashboard({
           </section>
 
           <div className="mb-6 flex flex-wrap items-center justify-center gap-2">
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition ${
-                lightMode
-                  ? 'border-slate-300 text-slate-600 hover:bg-slate-50'
-                  : 'border-slate-600 text-slate-300 hover:bg-slate-800/80'
-              }`}
-            >
-              <Plus className="size-3.5" />
-              Adicionar unidade
-            </button>
-            {isOwner ? (
+            {!isSupport && (
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition ${
+                  lightMode
+                    ? 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                    : 'border-slate-600 text-slate-300 hover:bg-slate-800/80'
+                }`}
+              >
+                <Plus className="size-3.5" />
+                Adicionar unidade
+              </button>
+            )}
+            {isOwner && !isSupport ? (
               <button
                 type="button"
                 onClick={() => setMyLinkOpen(true)}
@@ -348,7 +361,7 @@ export default function AdminDashboard({
                 Meu link
               </button>
             ) : null}
-            {isOwner ? (
+            {isOwner && !isSupport ? (
               <button
                 type="button"
                 onClick={() => handleNavigateTab('crm')}
@@ -381,15 +394,17 @@ export default function AdminDashboard({
             >
               {lightMode ? <Moon className="size-4" /> : <Sun className="size-4" />}
             </button>
-            <button
-              type="button"
-              aria-label="Alterar senha"
-              className={`grid size-9 place-items-center rounded-full transition ${
-                lightMode ? 'bg-slate-200 text-slate-700' : 'bg-[#1d2a3e] text-slate-300 hover:bg-[#142035]'
-              }`}
-            >
-              <Lock className="size-4" />
-            </button>
+            {!isSupport && (
+              <button
+                type="button"
+                aria-label="Alterar senha"
+                className={`grid size-9 place-items-center rounded-full transition ${
+                  lightMode ? 'bg-slate-200 text-slate-700' : 'bg-[#1d2a3e] text-slate-300 hover:bg-[#142035]'
+                }`}
+              >
+                <Lock className="size-4" />
+              </button>
+            )}
           </div>
 
           <div className="mb-4 text-center">
@@ -448,7 +463,7 @@ export default function AdminDashboard({
                   </button>
                 </div>
                 <nav aria-label="Navegação administrativa mobile" className="flex-1 space-y-1 overflow-y-auto p-3">
-                  {isOwner ? (
+                  {isOwner && !isSupport ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -584,7 +599,7 @@ export default function AdminDashboard({
         </div>
       </main>
 
-      {myLinkOpen && resolvedSalonId ? (
+      {!isSupport && myLinkOpen && resolvedSalonId ? (
         <AdminMyLinkPanel
           salonId={resolvedSalonId}
           salonSlug={salonSlug}

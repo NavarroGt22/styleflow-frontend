@@ -22,6 +22,7 @@ import {
   sectionClass,
 } from '../ui/AdminUi'
 import type { AdminTabProps, SalonSettings } from '@/lib/admin/types'
+import { supportAdminMarker } from '@/lib/support/client'
 import { fetchProfessionals, fetchSalon, normalizeInstagram, updateProfessional, updateSalon } from '@/lib/admin/api'
 import { resolveAdminLink, resolveClientLink } from '@/lib/admin/platform-urls'
 import { externalMarketingLpUrl } from '@/lib/client/marketing-lp'
@@ -74,6 +75,7 @@ export default function AdminSalonTab({
   lightMode = false,
   initialSalonSubTab,
 }: AdminTabProps) {
+  const isSupport = supportAdminMarker() !== null
   const [salon, setSalon] = useState<SalonSettings | null>(null)
   const [subTab, setSubTab] = useState<SubTab>(initialSalonSubTab ?? 'general')
 
@@ -311,7 +313,7 @@ export default function AdminSalonTab({
         closedDayMessage: form.closedDayMessage.trim() || DEFAULT_CLOSED_DAY_MESSAGE,
         bookingCalendarMode: form.bookingCalendarMode,
         instagramUrl: normalizeInstagram(form.instagramUrl) || null,
-        slug: form.slug,
+        ...(!isSupport && { slug: form.slug, tenantName: form.tenantName }),
         queueMode: form.queueMode,
         queueAutoAdvance: form.queueAutoAdvance,
         queueAllowClientView: form.queueAllowClientView,
@@ -321,7 +323,6 @@ export default function AdminSalonTab({
         primaryColor: form.primaryColor,
         customBrandName: form.customBrandName.trim() || null,
         historyText: form.historyText.slice(0, 800),
-        tenantName: form.tenantName,
         lpSinceYear: form.lpSinceYear?.trim() || null,
         logoUrl: form.logoUrl || null,
         heroImageUrl: form.heroImageUrl || null,
@@ -534,7 +535,7 @@ export default function AdminSalonTab({
               <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                 <div>
                   <label className={labelClass(lightMode)}>Nome da Conta / Marca</label>
-                  <input value={form.tenantName} onChange={(e) => setForm({ ...form, tenantName: e.target.value })} className={inputClass(lightMode)} />
+                  <input readOnly={isSupport} value={form.tenantName} onChange={(e) => setForm({ ...form, tenantName: e.target.value })} className={inputClass(lightMode)} />
                 </div>
                 <div>
                   <label className={labelClass(lightMode)}>Nome Exibido (opcional)</label>
@@ -542,7 +543,7 @@ export default function AdminSalonTab({
                 </div>
                 <div>
                   <label className={labelClass(lightMode)}>Slug da página do cliente</label>
-                  <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className={inputClass(lightMode)} />
+                  <input readOnly={isSupport} value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className={inputClass(lightMode)} />
                   <p className="mt-1 text-xs text-slate-500">Path no app: /app/{form.slug || '...'}</p>
                 </div>
                 <div>

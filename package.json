@@ -6,6 +6,9 @@
     "dev": "next dev --webpack",
     "build": "npm run icons && next build --webpack",
     "start": "next start",
+    "test:support": "node --test tests/support-access.test.mjs",
+    "test:platform": "node --test tests/platform-*.test.mjs",
+    "test:support:browser": "node --test tests/support-browser.test.mjs",
     "icons": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {

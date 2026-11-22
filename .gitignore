@@ -7,7 +7,9 @@ __v0_jsx-dev-runtime.ts
 .vercel/
 
 # Environment variables
-.env*.local
+.env
+.env.*
+!.env.example
 
 # Common ignores
 node_modules
@@ -21,3 +23,9 @@ public/workbox-*.js
 public/workbox-*.js.map
 public/swe-worker-*.js
 public/fallback-*.js
+
+# Evidências locais de verificação e anexos da conversa
+.platform-*.log
+.support-tests.log
+.codex-attachments/
+artifacts/

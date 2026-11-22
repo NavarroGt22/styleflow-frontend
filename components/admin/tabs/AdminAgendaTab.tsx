@@ -17,7 +17,7 @@ import {
   updateAppointmentStatus,
 } from '@/lib/admin/api'
 import { resolveClientLink } from '@/lib/admin/platform-urls'
-import { getSessionUser } from '@/lib/auth'
+import { getAdminSessionUser, supportAdminMarker } from '@/lib/support/client'
 
 type WalkInPayment = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'
 
@@ -124,8 +124,10 @@ function AppointmentActions({
   onCheckout,
   onUnblock,
   onNoShow,
+  support,
 }: {
   apt: Appointment
+  support: boolean
   onConfirm: () => void
   onCancel: () => void
   onCheckout: () => void
@@ -134,6 +136,8 @@ function AppointmentActions({
 }) {
   const requestCancel = onCancel
   const paid = isClientPaid(apt)
+  if (support && (paid || apt.coveredBySubscription || apt.items?.some(item => item.coveredBySubscription) ||
+      (apt.paymentMode && apt.paymentMode !== 'STORE'))) return null
 
   // Pago online/loja: permanece na agenda; barbeiro marca presença ou falta
   if (paid && (apt.status === 'PENDING' || apt.status === 'CONFIRMED')) {
@@ -189,13 +193,15 @@ function AppointmentActions({
       )}
       {apt.status === 'CONFIRMED' && (
         <>
-          <button
-            type="button"
-            onClick={onCheckout}
-            className="min-h-11 flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
-          >
-            Finalizar & Cobrar
-          </button>
+          {!support && (
+            <button
+              type="button"
+              onClick={onCheckout}
+              className="min-h-11 flex-1 rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 sm:min-h-0 sm:flex-none sm:rounded-lg sm:py-1.5 sm:text-xs"
+            >
+              Finalizar & Cobrar
+            </button>
+          )}
           <button
             type="button"
             onClick={requestCancel}
@@ -227,7 +233,8 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   const [checkoutApt, setCheckoutApt] = useState<Appointment | null>(null)
   const [salon, setSalon] = useState<SalonSettings | null>(null)
   const { confirm, confirmDialog } = useConfirm(lightMode)
-  const sessionUser = getSessionUser()
+  const sessionUser = getAdminSessionUser()
+  const isSupport = supportAdminMarker() !== null
   /** Dono/admin/atendimento: visão do salão (escolhe barbeiro no avulso / bloqueio). */
   const isSalonOperator =
     sessionUser?.role === 'OWNER' ||
@@ -259,7 +266,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
   async function requestCancel(apt: Appointment) {
     const ok = await confirm({
       message:
-        apt.status === 'CONFIRMED'
+        apt.status === 'CONFIRMED' && !isSupport
           ? 'Tem certeza que gostaria de cancelar essa confirmação / finalizar a cobrança?'
           : `Cancelar o agendamento de ${apt.customer?.user?.name || 'cliente'}? O horário ficará vago.`,
       confirmLabel: 'Sim, cancelar',
@@ -548,17 +555,19 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
           >
             <Plus className="size-4" /> Bloquear Horário
           </button>
-          <button
-            type="button"
-            onClick={() => void openWalkInModal()}
-            className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-bold shadow-sm sm:min-h-0 sm:w-auto sm:py-2 ${
-              lightMode
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-            }`}
-          >
-            <UserPlus className="size-4" /> Cliente avulso
-          </button>
+          {!isSupport && (
+            <button
+              type="button"
+              onClick={() => void openWalkInModal()}
+              className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-bold shadow-sm sm:min-h-0 sm:w-auto sm:py-2 ${
+                lightMode
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+              }`}
+            >
+              <UserPlus className="size-4" /> Cliente avulso
+            </button>
+          )}
           <div
             className={`grid grid-cols-2 gap-1 rounded-xl border p-1.5 ${
               lightMode ? 'border-gray-200 bg-gray-100' : 'border-slate-700 bg-slate-800'
@@ -703,6 +712,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
 
                   <AppointmentActions
                     apt={apt}
+                    support={isSupport}
                     onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
                     onCancel={() => requestCancel(apt)}
                     onCheckout={() => setCheckoutApt(apt)}
@@ -802,6 +812,7 @@ export default function AdminAgendaTab({ salonId, lightMode = false }: AdminTabP
                         <div className="flex justify-end">
                           <AppointmentActions
                             apt={apt}
+                            support={isSupport}
                             onConfirm={() => handleStatus(apt.id, 'CONFIRMED')}
                             onCancel={() => requestCancel(apt)}
                             onCheckout={() => setCheckoutApt(apt)}

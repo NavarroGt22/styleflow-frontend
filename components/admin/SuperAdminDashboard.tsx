@@ -18,6 +18,8 @@ import {
   Users,
 } from 'lucide-react'
 import { authFetch } from '@/lib/api'
+import { platformFetch, endPlatformSession } from '@/lib/platform/client'
+import { PlatformSupportButton } from '@/components/admin/platform/PlatformSupportButton'
 import { clearSession, getSessionUser } from '@/lib/auth'
 import { PRODUCT_NAME } from '@/lib/brand'
 import {
@@ -42,6 +44,7 @@ type TenantRow = {
   slug: string
   level: keyof typeof TENANT_LEVEL_LABELS
   monthlyFee: number
+  billingDueDay: number | null
   customDomain: string | null
   clientDomain: string | null
   adminDomain: string | null
@@ -142,6 +145,7 @@ function formatDateBr(iso: string | null | undefined) {
 }
 
 function billingStatusBadge(status: string, locked?: boolean) {
+  if (status === 'EXEMPT') return 'bg-emerald-500/20 text-emerald-400'
   if (locked || status === 'OVERDUE') return 'bg-red-500/20 text-red-400'
   if (status === 'PAID') return 'bg-emerald-500/20 text-emerald-400'
   if (status === 'PARTIAL') return 'bg-amber-500/20 text-amber-400'
@@ -149,13 +153,15 @@ function billingStatusBadge(status: string, locked?: boolean) {
 }
 
 function billingStatusLabel(status: string, locked?: boolean) {
+  if (status === 'EXEMPT') return 'ISENTO'
   if (locked || status === 'OVERDUE') return 'ATRASADO'
   if (status === 'PAID') return 'PAGO'
   if (status === 'PARTIAL') return 'PARCIAL'
   return 'PENDENTE'
 }
 
-export default function SuperAdminDashboard() {
+export default function SuperAdminDashboard({ unified = false }: { unified?: boolean }) {
+  const api = unified ? platformFetch : authFetch
   const router = useRouter()
   const { confirm, confirmDialog } = useConfirm(false)
   const [ready, setReady] = useState(false)
@@ -176,6 +182,8 @@ export default function SuperAdminDashboard() {
   const [planLevel, setPlanLevel] = useState<TenantLevel>('BASIC')
   const [planMonthlyFee, setPlanMonthlyFee] = useState('')
   const [planDueDate, setPlanDueDate] = useState(defaultDueDateInput())
+  const [planDueDay, setPlanDueDay] = useState('')
+  const [preservePrepaid, setPreservePrepaid] = useState(false)
   const [planInventoryEnabled, setPlanInventoryEnabled] = useState(false)
   const [savingPlan, setSavingPlan] = useState(false)
   const [showDeleted, setShowDeleted] = useState(false)
@@ -190,6 +198,14 @@ export default function SuperAdminDashboard() {
       router.replace('/login')
       return
     }
+    if (unified) {
+      fetch('/api/platform/session', { cache: 'no-store' }).then(async response => {
+        if (response.status === 401) { router.replace('/login?next=/platform/super'); return }
+        if (!response.ok) throw new Error('Não foi possível validar o acesso ao Master.')
+        const session = await response.json(); setUserName(session.user.name); setReady(true)
+      }).catch(cause => setError(cause.message))
+      return
+    }
     const user = getSessionUser()
     if (!user || user.role !== 'SUPER_ADMIN') {
       router.replace('/login?next=/platform/super')
@@ -197,13 +213,13 @@ export default function SuperAdminDashboard() {
     }
     setUserName(user.name || '')
     setReady(true)
-  }, [router])
+  }, [router, unified])
 
   async function loadDashboard() {
     setLoading(true)
     setError('')
     try {
-      const res = await authFetch('/admin/dashboard')
+      const res = await api('/admin/dashboard')
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Falha ao carregar dashboard')
       setData(json)
@@ -215,7 +231,7 @@ export default function SuperAdminDashboard() {
   }
 
   async function loadCopySources() {
-    const res = await authFetch('/admin/tenants/copy-sources')
+    const res = await api('/admin/tenants/copy-sources')
     if (res.ok) setCopySources(await res.json())
   }
 
@@ -225,7 +241,11 @@ export default function SuperAdminDashboard() {
     loadCopySources()
   }, [ready])
 
-  function handleLogout() {
+  async function handleLogout() {
+    if (unified) {
+      try { await endPlatformSession(); window.location.replace('/login?next=/platform/super') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao sair.') }
+      return
+    }
     clearSession()
     router.replace('/login')
   }
@@ -263,7 +283,7 @@ export default function SuperAdminDashboard() {
         ownerPhone: form.ownerPhone.replace(/\D/g, '') || undefined,
       }
 
-      const res = await authFetch('/admin/tenants', {
+      const res = await api('/admin/tenants', {
         method: 'POST',
         body: JSON.stringify(payload),
       })
@@ -295,7 +315,7 @@ export default function SuperAdminDashboard() {
     setProvisioningDnsId(tenant.id)
     setError('')
     try {
-      const res = await authFetch(`/admin/tenants/${tenant.id}/provision-dns`, {
+      const res = await api(`/admin/tenants/${tenant.id}/provision-dns`, {
         method: 'POST',
         body: JSON.stringify({}),
       })
@@ -321,7 +341,7 @@ export default function SuperAdminDashboard() {
     if (!amount || amount <= 0) return
 
     try {
-      const res = await authFetch(`/admin/tenants/${paymentModal.id}/payments`, {
+      const res = await api(`/admin/tenants/${paymentModal.id}/payments`, {
         method: 'POST',
         body: JSON.stringify({
           amountPaid: amount,
@@ -344,7 +364,7 @@ export default function SuperAdminDashboard() {
 
   async function handleConfirmPaid(tenant: TenantRow) {
     try {
-      const res = await authFetch(`/admin/tenants/${tenant.id}/confirm-payment`, {
+      const res = await api(`/admin/tenants/${tenant.id}/confirm-payment`, {
         method: 'POST',
         body: JSON.stringify({
           dueDate: tenant.billing.dueDate || undefined,
@@ -361,7 +381,7 @@ export default function SuperAdminDashboard() {
   }
 
   async function toggleActive(tenant: TenantRow) {
-    const res = await authFetch(`/admin/tenants/${tenant.id}`, {
+    const res = await api(`/admin/tenants/${tenant.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ isActive: !tenant.isActive }),
     })
@@ -383,7 +403,7 @@ export default function SuperAdminDashboard() {
     })
     if (!ok) return
     try {
-      const res = await authFetch(`/admin/tenants/${tenant.id}`, { method: 'DELETE' })
+      const res = await api(`/admin/tenants/${tenant.id}`, { method: 'DELETE' })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Erro ao excluir')
       setNotice('Barbearia excluída (soft delete).')
@@ -395,7 +415,7 @@ export default function SuperAdminDashboard() {
 
   async function handleRestore(tenant: TenantRow) {
     try {
-      const res = await authFetch(`/admin/tenants/${tenant.id}/restore`, {
+      const res = await api(`/admin/tenants/${tenant.id}/restore`, {
         method: 'POST',
         body: JSON.stringify({}),
       })
@@ -410,9 +430,11 @@ export default function SuperAdminDashboard() {
 
   function openPlanModal(tenant: TenantRow) {
     setPlanModal(tenant)
+    setPreservePrepaid(false)
     setPlanLevel(tenant.level as TenantLevel)
     setPlanMonthlyFee(String(tenant.monthlyFee))
     setPlanDueDate(tenant.billing.dueDate || defaultDueDateInput())
+    setPlanDueDay(tenant.billingDueDay ? String(tenant.billingDueDay) : '')
     setPlanInventoryEnabled(Boolean(tenant.inventoryEnabled))
   }
 
@@ -421,12 +443,13 @@ export default function SuperAdminDashboard() {
     if (!planModal) return
     setSavingPlan(true)
     try {
-      const res = await authFetch(`/admin/tenants/${planModal.id}`, {
+      const res = await api(`/admin/tenants/${planModal.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           level: planLevel,
           monthlyFee: Number(planMonthlyFee.replace(',', '.')),
-          dueDate: planDueDate || undefined,
+          ...(unified ? { preservePrepaidAllocations: preservePrepaid } : {}),
+          ...(unified ? (planDueDay ? { billingDueDay: Number(planDueDay) } : {}) : { dueDate: planDueDate || undefined }),
           inventoryEnabled: planInventoryEnabled,
         }),
       })
@@ -445,7 +468,7 @@ export default function SuperAdminDashboard() {
   if (!ready || (loading && !data)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-400">
-        Carregando painel master...
+        {error ? <div role="alert"><p>{error}</p><button onClick={() => window.location.reload()}>Tentar novamente</button></div> : 'Carregando painel master...'}
       </div>
     )
   }
@@ -453,13 +476,13 @@ export default function SuperAdminDashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-indigo-600 p-2">
               <Shield size={22} />
             </div>
             <div>
-              <h1 className="text-lg font-bold">{PRODUCT_NAME} Master</h1>
+              <h1 className="text-lg font-bold">{unified ? 'Barbearias e assinaturas' : `${PRODUCT_NAME} Master`}</h1>
               <p className="text-xs text-slate-400">SUPER_ADMIN — {userName}</p>
             </div>
           </div>
@@ -518,20 +541,21 @@ export default function SuperAdminDashboard() {
                   <DollarSign size={14} /> A receber (total)
                 </div>
                 <p className="text-3xl font-black text-amber-400">{formatMoney(data.summary.totalBalance)}</p>
-                <p className="mt-1 text-xs text-slate-500">período {data.periodMonth} · só contas ativas</p>
+                <p className="mt-1 text-xs text-slate-500">{unified ? 'saldo acumulado · contas ativas' : `período ${data.periodMonth} · só contas ativas`}</p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
                 <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
-                  <DollarSign size={14} /> Faturado
+                  <DollarSign size={14} /> {unified ? 'Pagos acumulados' : 'Faturado'}
                 </div>
                 <p className="text-3xl font-black text-emerald-400">{formatMoney(data.summary.totalPaidAll)}</p>
+                {unified && <p className="mt-1 text-xs text-slate-500">agregado de cobranças; recebimentos por data no Financeiro</p>}
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
                 <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
-                  <Users size={14} /> Contratos
+                  <Users size={14} /> {unified ? 'Cobranças acumuladas' : 'Contratos'}
                 </div>
                 <p className="text-3xl font-black">{formatMoney(data.summary.totalDueAll)}</p>
-                <p className="mt-1 text-xs text-slate-500">valor total contratado</p>
+                <p className="mt-1 text-xs text-slate-500">{unified ? 'competências registradas' : 'valor total contratado'}</p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
                 <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
@@ -661,9 +685,9 @@ export default function SuperAdminDashboard() {
                           <td className="whitespace-nowrap px-5 py-4">{formatDateBr(t.billing.dueDate)}</td>
                           <td className="px-5 py-4">
                             <span
-                              className={`rounded px-2 py-0.5 text-[10px] font-bold ${billingStatusBadge(t.billing.currentStatus, t.billing.adminLocked)}`}
+                              className={`rounded px-2 py-0.5 text-[10px] font-bold ${billingStatusBadge(unified && t.monthlyFee === 0 ? 'EXEMPT' : t.billing.currentStatus, t.billing.adminLocked)}`}
                             >
-                              {billingStatusLabel(t.billing.currentStatus, t.billing.adminLocked)}
+                              {billingStatusLabel(unified && t.monthlyFee === 0 ? 'EXEMPT' : t.billing.currentStatus, t.billing.adminLocked)}
                             </span>
                           </td>
                           <td className="px-5 py-4">
@@ -715,6 +739,7 @@ export default function SuperAdminDashboard() {
                                 </button>
                               ) : (
                                 <>
+                                  {unified && <PlatformSupportButton tenant={t} />}
                                   {t.monthlyFee > 0 && t.billing.currentStatus !== 'PAID' ? (
                                     <button
                                       type="button"
@@ -1021,15 +1046,18 @@ export default function SuperAdminDashboard() {
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6">
             <h2 className="mb-1 text-lg font-bold">Alterar plano</h2>
             <p className="mb-4 text-sm text-slate-400">{planModal.name}</p>
+            {unified && <p className="mb-4 text-xs leading-relaxed text-slate-400">O valor altera a condição vigente e as próximas competências ainda não registradas. Mensalidade zero isenta a conta. Recebimentos e cobranças anteriores são preservados. Se houver adiantamentos futuros, confirme abaixo que deseja mantê-los registrados. O vencimento altera o dia recorrente e a cobrança atual ainda não quitada.</p>}
             <form onSubmit={handleSavePlan} className="space-y-4">
+              {unified && <label className="flex items-start gap-2 text-xs leading-relaxed text-slate-300"><input type="checkbox" checked={preservePrepaid} onChange={event => setPreservePrepaid(event.target.checked)} />Manter os adiantamentos já registrados, sem redistribuir ou estornar valores, caso haja competências futuras pagas.</label>}
               <div>
-                <label className="text-xs text-slate-400">Plano</label>
+                <label htmlFor="plan-level" className="text-xs text-slate-400">Plano</label>
                 <select
+                  id="plan-level"
                   value={planLevel}
                   onChange={(e) => {
                     const level = e.target.value as TenantLevel
                     setPlanLevel(level)
-                    setPlanMonthlyFee(String(TENANT_LEVEL_FEES[level]))
+                    if (!unified) setPlanMonthlyFee(String(TENANT_LEVEL_FEES[level]))
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2"
                 >
@@ -1041,15 +1069,20 @@ export default function SuperAdminDashboard() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-slate-400">Mensalidade (R$)</label>
+                <label htmlFor="plan-monthly-fee" className="text-xs text-slate-400">Mensalidade (R$)</label>
                 <input
+                  id="plan-monthly-fee"
                   required
                   value={planMonthlyFee}
                   onChange={(e) => setPlanMonthlyFee(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2"
                 />
               </div>
-              <div>
+              {unified ? <div>
+                <label htmlFor="plan-due-day" className="text-xs text-slate-400">Dia de vencimento recorrente</label>
+                <input id="plan-due-day" type="number" min={1} max={31} step={1} required={Number(planMonthlyFee.replace(',', '.')) > 0} value={planDueDay} onChange={event => setPlanDueDay(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" />
+                <p className="mt-1 text-xs text-slate-400">Dias 29 a 31 usam o último dia válido em meses curtos. O dia recorrente é preservado. Vencimento da cobrança atual: {formatDateBr(planModal.billing.dueDate)}.</p>
+              </div> : <div>
                 <label className="text-xs text-slate-400">Vencimento (mês atual)</label>
                 <input
                   type="date"
@@ -1057,7 +1090,7 @@ export default function SuperAdminDashboard() {
                   onChange={(e) => setPlanDueDate(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2"
                 />
-              </div>
+              </div>}
               {planLevel !== 'PRO' && planLevel !== 'ENTERPRISE' ? (
                 <label className="flex items-start gap-2 text-sm text-slate-300">
                   <input

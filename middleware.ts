@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isPlatformHost, platformBaseDomain } from '@/lib/client/domains'
+import { matchesSupportPageOrigin } from '@/lib/support/origin'
 
 function requestHost(req: NextRequest): string {
   const raw =
@@ -126,7 +127,11 @@ const RESERVED_SHORT = new Set([
 
 export async function middleware(req: NextRequest) {
   const host = requestHost(req)
-  const { pathname } = req.nextUrl
+  const { pathname, searchParams } = req.nextUrl
+
+  if (matchesSupportPageOrigin(req.headers.get('host'), pathname, searchParams, process.env.SUPPORT_ADMIN_ORIGIN)) {
+    return NextResponse.next()
+  }
 
   if (isPassthroughPath(pathname)) {
     return NextResponse.next()

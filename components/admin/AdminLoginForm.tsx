@@ -37,10 +37,10 @@ async function parseLoginResponse(response: Response) {
     )
   }
 
-  return response.json() as Promise<{ error?: string; token?: string; refreshToken?: string; user?: unknown }>
+  return response.json() as Promise<{ error?: string; token?: string; refreshToken?: string; user?: unknown; platformManagementRequired?: boolean }>
 }
 
-export default function AdminLoginForm() {
+export default function AdminLoginForm({ managementEnabled = false }: { managementEnabled?: boolean }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
@@ -208,6 +208,13 @@ export default function AdminLoginForm() {
     setLoading(true)
 
     try {
+      const masterPath = searchParams.get('next') ?? ''
+      if (managementEnabled && /^\/platform\/super(?:\/|$)/.test(masterPath)) {
+        const response = await fetch('/api/platform/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-platform-csrf': '1' }, body: JSON.stringify({ email, password }) })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || 'Não foi possível entrar no Master.')
+        clearSession(); clearLoginLockout(email); router.replace(masterPath); return
+      }
       const response = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
         // X-Custom-Host: o backend amarra o login ao endereço do painel.
@@ -252,6 +259,12 @@ export default function AdminLoginForm() {
         throw new Error(data.error || 'Não foi possível entrar.')
       }
 
+      if (managementEnabled && data.platformManagementRequired) {
+        const response = await fetch('/api/platform/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-platform-csrf': '1' }, body: JSON.stringify({ email, password }) })
+        const session = await response.json()
+        if (!response.ok) throw new Error(session.error || 'Não foi possível entrar no Master.')
+        clearSession(); clearLoginLockout(email); router.replace('/platform/super'); return
+      }
       if (!data.token || !data.refreshToken || !data.user) {
         throw new Error('Resposta de login inválida.')
       }
@@ -267,6 +280,12 @@ export default function AdminLoginForm() {
       }
 
       clearLoginLockout(email)
+      if (managementEnabled && user.role === 'SUPER_ADMIN') {
+        const response = await fetch('/api/platform/session', { method: 'POST', headers: { 'content-type': 'application/json', 'x-platform-csrf': '1' }, body: JSON.stringify({ email, password }) })
+        const session = await response.json()
+        if (!response.ok) throw new Error(session.error || 'Não foi possível entrar no Master.')
+        clearSession(); router.replace('/platform/super'); return
+      }
       setSession(data.token, data.refreshToken, user as Parameters<typeof setSession>[2])
 
       const next = searchParams.get('next')

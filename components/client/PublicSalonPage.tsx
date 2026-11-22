@@ -1111,6 +1111,7 @@ export default function PublicSalonPage() {
         ? localDateTimeParts(p.startTime)
         : { date: cached?.date || '', time: cached?.time || '' };
 
+      const cachedPayment = cached && cached.appointmentId === p.id ? cached : null;
       const ok = await openPendingFromAppointment({
         appointmentId: p.id,
         method: mode,
@@ -1125,9 +1126,9 @@ export default function PublicSalonPage() {
         date,
         time,
         price: p.amount ?? p.quotedPrice ?? p.service?.price ?? cached?.price ?? 0,
-        qrCode: cached?.appointmentId === p.id ? cached.qrCode : null,
-        copiaECola: cached?.appointmentId === p.id ? cached.copiaECola : undefined,
-        paymentUrl: cached?.appointmentId === p.id ? cached.paymentUrl : undefined,
+        qrCode: cachedPayment?.qrCode ?? null,
+        copiaECola: cachedPayment?.copiaECola,
+        paymentUrl: cachedPayment?.paymentUrl,
       });
       if (!ok) throw new Error('O tempo do pagamento esgotou. Escolha o horário de novo.');
     } catch (err) {
@@ -1297,6 +1298,7 @@ export default function PublicSalonPage() {
         return;
       }
 
+      if (!paymentMode) return;
       // Pix / cartão: gera cobrança e abre tela de pagamento
       const payRes = await fetch(apiUrl(`/appointments/${appointment.id}/pay`), {
         method: 'POST',
